@@ -123,6 +123,11 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .ptile .pq{position:absolute;top:-8px;right:-8px;background:var(--ink);color:#fff;border-radius:99px;min-width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;padding:0 8px}
 .cart{position:sticky;top:calc(84px + var(--sat));background:var(--card);border:2px solid var(--green);border-radius:22px;display:flex;flex-direction:column;max-height:calc(100vh - 110px - var(--sat) - var(--sab));overflow:hidden}
 .clines{flex:1;overflow:auto;padding:8px 14px;min-height:80px}
+/* landscape: items on top, total and payment at the bottom; the grab handle is for the sliding panel only */
+.cart .corr{order:0} .cart .clines{order:1} .cart .ctot{order:2} .cart .pay{order:3}
+.grab{display:none}
+.qb.rm{background:#fbe4e1;color:var(--danger);font-size:18px;margin-left:4px}
+.modal.big .clines{padding:0;overflow:visible}
 .cempty{text-align:center;padding:24px 0}
 .cl{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
 .cl small{display:block;color:var(--muted);font-size:14px}
@@ -152,16 +157,26 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .tlock{background:rgba(255,255,255,.18);border-radius:14px;padding:10px 14px;font-weight:700;min-height:52px}
 @media (max-width:1000px) and (orientation:portrait),(max-width:860px){
   .till{grid-template-columns:1fr}
-  .tgrid{padding-bottom:calc(330px + var(--sab))}
-  .cart{position:fixed;left:0;right:0;bottom:0;top:auto;border-radius:22px 22px 0 0;border-width:2px 0 0;max-height:46vh;z-index:15;padding-bottom:var(--sab);box-shadow:0 -8px 30px rgba(0,0,0,.12)}
-  .clines{max-height:20vh}
+  .tgrid{padding-bottom:calc(var(--peek) + 20px + var(--sab))}
+  /* the sale slides up from the bottom: closed shows the total and payment buttons, open shows every item */
+  :root{--peek:200px}
+  .cart{--peek:200px;position:fixed;left:0;right:0;bottom:0;top:auto;height:calc(100% - 84px - var(--sat));max-height:none;border-radius:22px 22px 0 0;border-width:2px 0 0;z-index:15;padding-bottom:var(--sab);box-shadow:0 -8px 30px rgba(0,0,0,.14);
+    transform:translateY(calc(100% - var(--peek) - var(--sab)));transition:transform .25s ease;touch-action:none}
+  .cart.open{transform:translateY(0)}
+  .cart .grab{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 4px;cursor:grab;order:0;touch-action:none}
+  .cart .grab i{width:56px;height:6px;border-radius:3px;background:#cfc8b6}
+  .cart .grab span{font-size:15px;font-weight:700;color:var(--green2)}
+  .cart .ctot{order:1;border-top:0;padding:6px 16px} .cart .pay{order:2;padding:4px 12px 10px} .cart .corr{order:3} .cart .clines{order:4;touch-action:pan-y}
+  .tbar,.filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:-4px;padding:0 4px}
+  .tbar::-webkit-scrollbar,.filters::-webkit-scrollbar{display:none}
+  .tbar .btn,.fchip{flex:none}
 }
 @media (max-width:640px){
   .tgrid{grid-template-columns:repeat(2,1fr);gap:10px}
   .ptile{min-height:112px;padding:12px} .ptile .pn{font-size:16px} .ptile .pp{font-size:21px}
   .ctot b{font-size:30px} .pb{min-height:60px;font-size:17px} .bigseg{grid-template-columns:1fr 1fr}
+  .cart,:root{--peek:182px} .modal.big{padding:16px} .paybig .btn{min-height:60px;font-size:17px}
   .tbar{gap:8px} .tbar .btn{min-height:48px;padding:8px 12px;font-size:15px}
-  .clines{max-height:16vh}
 }
 
 /* ---------- pop-ups ---------- */
@@ -183,6 +198,25 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 #toast:not(.show){visibility:hidden;transition:transform .25s,visibility 0s .25s}
 .tiles.one{grid-template-columns:1fr!important}
 .tiles.one .tile{min-height:260px}
+
+/* ---------- full-height panels (payment) and the exit screen ---------- */
+.bigscrim{padding:calc(10px + var(--sat)) 10px calc(10px + var(--sab))}
+.modal.big{width:min(640px,100%);height:100%;max-height:100%;display:flex;flex-direction:column;padding:20px}
+.modal.big .pbody{flex:1;overflow:auto;margin:0 -4px;padding:0 4px}
+.modal.big .pfoot{padding-top:12px;border-top:2px solid var(--line);margin-top:8px}
+.paybig{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.paybig .btn{min-height:68px;font-size:19px}
+.approved{position:fixed;inset:0;z-index:90;background:var(--ok);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}
+.approved .tick{font-size:110px;line-height:1}
+.approved h1{font-size:40px;margin:10px 0;font-family:var(--brand-font)}
+.approved p{font-size:22px;margin:6px 0}
+.approved .btn{background:#fff;color:var(--ok);margin-top:26px;min-width:240px;min-height:64px;font-size:20px}
+#exitScr{position:fixed;inset:0;z-index:95;background:linear-gradient(170deg,#ebe7da 0%,#f7f5ee 55%,#e4e6d6 100%);display:flex;align-items:center;justify-content:center;padding:24px}
+.exitcard{background:var(--card);border-radius:28px;padding:34px 28px;width:min(480px,100%);text-align:center;box-shadow:0 20px 60px rgba(47,59,31,.16)}
+.exitcard .brandlogo{max-width:100%;max-height:150px;mix-blend-mode:multiply}
+.exitcard .exiticon{width:120px;height:120px;border-radius:26px}
+.exitcard h1{font-family:var(--brand-font);color:var(--green);margin:14px 0 2px;font-size:32px}
+.exitsub{color:var(--green2);font-family:var(--brand-font);letter-spacing:.08em;margin:0 0 22px}
 
 /* ---------- install card ---------- */
 .inst{position:fixed;left:calc(16px + var(--sal));right:calc(16px + var(--sar));bottom:calc(16px + var(--sab));z-index:40;background:#fff;border:2px solid var(--green2);border-radius:22px;padding:16px 18px;display:flex;gap:14px;align-items:center;box-shadow:0 10px 40px rgba(0,0,0,.18);max-width:640px;margin:0 auto}
@@ -223,6 +257,7 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 <div id="layer"></div>
 <div id="toast"></div>
 <div id="gate"></div>
+<div id="exitScr" hidden></div>
 
 <script>/*@SYNC@*/</script>
 <script>
@@ -251,16 +286,20 @@ const canManage=()=>['owner','manager'].includes(role());
 
 /* ================= pop-ups ================= */
 let modalStack=[];
-function modal(build){
-  const L=$('#layer'); const scrim=document.createElement('div'); scrim.className='scrim';
-  const m=document.createElement('div'); m.className='modal'; scrim.appendChild(m); L.appendChild(scrim);
+// opts.big: a full-height panel (payment); opts.sticky: tapping outside doesn't close it.
+// A pop-up with several steps sets close.onBack; the back button then goes back one step (returns true)
+// instead of closing the whole pop-up.
+function modal(build,opts){
+  opts=opts||{};
+  const L=$('#layer'); const scrim=document.createElement('div'); scrim.className='scrim'+(opts.big?' bigscrim':'');
+  const m=document.createElement('div'); m.className='modal'+(opts.big?' big':''); scrim.appendChild(m); L.appendChild(scrim);
   const close=()=>{ scrim.remove(); modalStack=modalStack.filter(x=>x!==close); };
   modalStack.push(close);
-  scrim.addEventListener('click',e=>{ if(e.target===scrim) close(); });
+  scrim.addEventListener('click',e=>{ if(e.target===scrim&&!opts.sticky) close(); });
   build(m,close);
   return close;
 }
-const closeModal=()=>{ const c=modalStack[modalStack.length-1]; if(c) c(); };
+const closeModal=()=>{ const c=modalStack[modalStack.length-1]; if(!c) return; if(c.onBack&&c.onBack()) return; c(); };
 function confirmBox(title,body,yes,onYes,danger){
   modal((m,close)=>{ m.innerHTML=`<h2>${esc(title)}</h2><p>${body}</p><div class="mact"><button class="btn alt" id="cN">Cancel</button><button class="btn ${danger?'danger':''}" id="cY">${esc(yes)}</button></div>`;
     m.querySelector('#cN').onclick=close; m.querySelector('#cY').onclick=()=>{ close(); onYes(); }; });
@@ -643,14 +682,24 @@ history.replaceState({rs:'base'},''); reguard();
 ['pointerdown','keydown'].forEach(t=>document.addEventListener(t,()=>{ if(!quitAsk&&!backArmed) reguard(); },true));
 addEventListener('popstate',()=>{
   backArmed=false;
-  if(quitAsk){ quitAsk=false; history.back(); return; }
+  if(quitAsk){ quitAsk=false; $('#exitScr').hidden=true; history.back(); return; }
   if(modalStack.length){ closeModal(); reguard(); return; }
+  if(typeof sheetOpen!=='undefined'&&sheetOpen&&cur()==='sell'){ setSheet(false); reguard(); return; }   // open sale panel: close it first
   if(back()){ reguard(); return; }
   if(!$('#gate').hidden){ history.back(); return; }
-  quitAsk=true;
-  modal((m,close)=>{ m.innerHTML=`<h2>Close Rata &amp; Smudge?</h2><p>Press <b>back</b> again to close it.</p><div class="mact"><button class="btn" id="stay">Stay</button></div>`;
-    m.querySelector('#stay').onclick=()=>{ quitAsk=false; close(); reguard(); }; });
+  showExit();
 });
+// At the home screen, back shows a full Rata & Smudge screen instead of closing the app straight away.
+// Only a second back (or "Close the app") leaves.
+function showExit(){
+  quitAsk=true; const e=$('#exitScr');
+  e.innerHTML=`<div class="exitcard"><img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge" onerror="this.src='icon-512.png';this.className='exiticon'">
+    <h1>Rata &amp; Smudge</h1><p class="exitsub">Till · Brew · Orders</p>
+    <button class="btn bigbtn" id="exStay">Stay in the app</button>
+    <p class="note">Press <b>back</b> again to close the app.</p></div>`;
+  e.hidden=false;
+  $('#exStay').onclick=()=>{ quitAsk=false; e.hidden=true; reguard(); };
+}
 
 /* ================= stay up to date ================= */
 // Checks version.json every 5 minutes and reloads itself, but never while a pop-up or form is open.

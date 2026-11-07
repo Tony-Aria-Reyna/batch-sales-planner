@@ -70,7 +70,29 @@ function askName(done){
 }
 
 /* ---------- the till ---------- */
-let tillFilter=lsGet('rs.filter','all');
+let tillFilter=lsGet('rs.filter','all'), sheetOpen=false, payRedraw=null;
+// the items in the sale, with − and ＋ (used in the sale panel and in "Check the order")
+function cartLinesHtml(pc,big){
+  if(!pc.lines.length) return `<p class="note cempty">Tap a product to start a sale.</p>`;
+  return pc.lines.map(l=>`<div class="cl"><div class="grow"><b>${esc(l.name)}</b><small>${esc(l.size)}${l.size?' · ':''}${c2(l.unit)} each${l.custom?' · not on the till':''}</small></div>
+      <button class="qb" data-dec="${l.pid}" aria-label="One less">−</button><b class="qn">${l.qty}</b><button class="qb" data-inc="${l.pid}" aria-label="One more">＋</button><b class="la">${c2(l.amount)}</b>${big?`<button class="qb rm" data-rm="${l.pid}" aria-label="Remove">✕</button>`:''}</div>`).join('')
+    +pc.deals.map(d=>`<div class="cl deal"><div class="grow"><b>🎁 ${esc(d.name)}${d.times>1?' ×'+d.times:''}</b></div><b class="la">−${c2(d.saving)}</b></div>`).join('')
+    +(pc.manual?`<div class="cl deal"><div class="grow"><b>🏷️ Discount ${pc.manual.kind==='pct'?pc.manual.value+'%':c2(pc.manual.value)}</b><small>${esc(pc.manual.reason)} · approved by ${esc(personName(pc.manual.approvedBy))}</small></div><button class="qb" data-discx="1" aria-label="Remove discount">✕</button><b class="la">−${c2(pc.manual.amount)}</b></div>`:'');
+}
+// the sale panel slides on phones and iPad portrait: closed shows the total and payment buttons,
+// open shows every item. It follows the finger and settles open or closed.
+function setSheet(v){ sheetOpen=!!v; const c=$('#cart'); if(c){ c.classList.toggle('open',sheetOpen); c.style.transform=''; const g=c.querySelector('.grab span'); if(g&&cart.length) g.textContent=sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'; } }
+function wireSheet(){
+  const c=$('#cart'), g=$('#cGrab'); if(!c||!g) return;
+  const sliding=()=>getComputedStyle(g).display!=='none';
+  const startDrag=e=>{ if(!sliding()) return; const y0=e.clientY, H=c.offsetHeight, peek=parseFloat(getComputedStyle(c).getPropertyValue('--peek'))||200, base=sheetOpen?0:H-peek; let moved=false;
+    c.style.transition='none';
+    const mv=ev=>{ const dy=ev.clientY-y0; if(Math.abs(dy)>6) moved=true; c.style.transform=`translateY(${Math.max(0,Math.min(H-peek,base+dy))}px)`; };
+    const up=ev=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); removeEventListener('pointercancel',up); c.style.transition='';
+      if(!moved){ setSheet(!sheetOpen); return; } const at=Math.max(0,Math.min(H-peek,base+(ev.clientY-y0))); setSheet(at<(H-peek)/2); };
+    addEventListener('pointermove',mv); addEventListener('pointerup',up); addEventListener('pointercancel',up); };
+  g.addEventListener('pointerdown',startDrag);
+}
 function tillHtml(){
   const pc=priceCart(cart,cartDisc), qty=Object.fromEntries(cart.map(c=>[c.pid,c.qty])), lock=tillLock();
   const undo=lastSale&&Date.now()-lastSale.at<60e3, helper=role()==='helper';
@@ -89,18 +111,16 @@ function tillHtml(){
     <section class="tgrid">${shown.map(p=>{ const k=COLOURS[p.colour]||COLOURS.other; return `<button class="ptile" data-add="${p.id}" style="background:${k[0]};color:${k[1]}">
         ${qty[p.id]?`<span class="pq">${qty[p.id]}</span>`:''}<span class="pc">${esc(k[2])}</span><span class="pn">${esc(p.name)}</span><span class="ps">${esc(p.size||'')}</span><span class="pp">${c2(p.price)}</span></button>`; }).join('')}
       <button class="ptile extra" id="tExtra"><span class="pc">🔒 Needs a PIN</span><span class="pn">＋ Item not on the till</span><span class="ps">One-off, or add it for next time</span></button></section>
-    <aside class="cart" id="cart">
-      ${correcting?`<div class="corr">✏️ Correcting the ${c2(correcting.total)} sale from ${nzTime(correcting.at)}. When you take payment, the old sale is voided and replaced. <button class="linkb" id="cCorrX">Cancel correction</button></div>`:''}
-      <div class="clines">${pc.lines.length?pc.lines.map(l=>`<div class="cl"><div class="grow"><b>${esc(l.name)}</b><small>${esc(l.size)}${l.size?' · ':''}${c2(l.unit)} each${l.custom?' · not on the till':''}</small></div>
-          <button class="qb" data-dec="${l.pid}" aria-label="One less">−</button><b class="qn">${l.qty}</b><button class="qb" data-inc="${l.pid}" aria-label="One more">＋</button><b class="la">${c2(l.amount)}</b></div>`).join('')
-        +pc.deals.map(d=>`<div class="cl deal"><div class="grow"><b>🎁 ${esc(d.name)}${d.times>1?' ×'+d.times:''}</b></div><b class="la">−${c2(d.saving)}</b></div>`).join('')
-        +(pc.manual?`<div class="cl deal"><div class="grow"><b>🏷️ Discount ${pc.manual.kind==='pct'?pc.manual.value+'%':c2(pc.manual.value)}</b><small>${esc(pc.manual.reason)} · approved by ${esc(personName(pc.manual.approvedBy))}</small></div><button class="qb" id="cDiscX" aria-label="Remove discount">✕</button><b class="la">−${c2(pc.manual.amount)}</b></div>`:'')
-        :`<p class="note cempty">Tap a product to start a sale.</p>`}</div>
+    <aside class="cart ${sheetOpen?'open':''}" id="cart">
+      <div class="grab" id="cGrab"><i></i><span>${pc.lines.length?(sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'):'Tap a product to start'}</span></div>
       <div class="ctot"><span>${cartCount()} item${cartCount()===1?'':'s'}${pc.lines.length?` · <button class="linkb" id="cClear">Clear</button>${pc.manual?'':` · <button class="linkb" id="cDisc" style="color:var(--green)">🏷️ Discount 🔒</button>`}`:''}</span><b id="cTotal">${c2(pc.total)}</b></div>
       <div class="pay">${['cash','eftpos','other'].map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
+      ${correcting?`<div class="corr">✏️ Correcting the ${c2(correcting.total)} sale from ${nzTime(correcting.at)}. When you take payment, the old sale is voided and replaced. <button class="linkb" id="cCorrX">Cancel correction</button></div>`:''}
+      <div class="clines">${cartLinesHtml(pc)}</div>
     </aside></div>`;
 }
-function setQty(pid,d){ const c=cart.find(x=>x.pid===pid); if(c) c.qty+=d; else if(d>0) cart.push({pid,qty:d}); cart=cart.filter(x=>x.qty>0); if(!cart.length) cartDisc=null; saveCart(); render(); }
+function changeQty(pid,d){ const c=cart.find(x=>x.pid===pid); if(c) c.qty+=d; else if(d>0) cart.push({pid,qty:d}); cart=cart.filter(x=>x.qty>0); if(!cart.length){ cartDisc=null; sheetOpen=false; } saveCart(); }
+function setQty(pid,d){ changeQty(pid,d); render(); }
 function wireTill(){
   document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>setQty(b.dataset.add,1));
   document.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>setQty(b.dataset.inc,1));
@@ -108,7 +128,8 @@ function wireTill(){
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ tillFilter=b.dataset.f; lsSet('rs.filter',tillFilter); render(); });
   const cl=$('#cClear'); if(cl) cl.onclick=()=>confirmBox('Clear this sale?','The items are taken off. Nothing has been charged.','Clear',()=>{ const c=correcting; cart=[]; cartDisc=null; saveCart(); render(); if(c) toast('Correction still open: add the right items, or cancel the correction'); });
   const cd=$('#cDisc'); if(cd) cd.onclick=giveDiscount;
-  const cx=$('#cDiscX'); if(cx) cx.onclick=()=>{ cartDisc=null; saveCart(); render(); };
+  document.querySelectorAll('[data-discx]').forEach(b=>b.onclick=()=>{ cartDisc=null; saveCart(); render(); });
+  wireSheet();
   const cc=$('#cCorrX'); if(cc) cc.onclick=()=>confirmBox('Cancel the correction?','The original sale stays as it was.','Cancel correction',()=>{ clearCart(); render(); });
   $('#tExtra').onclick=addExtraItem;
   document.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>pay(b.dataset.pay));
@@ -152,7 +173,7 @@ function giveDiscount(){
       m.querySelector('#dC').onclick=close;
       m.querySelector('#dOk').onclick=()=>{ const reason=m.querySelector('#dR').value.trim(); if(!reason){ toast('Give a reason for the discount'); return; } close();
         const label=(kind==='pct'?value+'%':c2(value))+' off '+c2(base)+' ('+reason+')';
-        approve('give a discount',who=>{ cartDisc={kind,value,reason,approvedBy:who,at:Date.now()}; saveCart(); render(); toast('Discount approved by '+personName(who)); },label); };
+        approve('give a discount',who=>{ cartDisc={kind,value,reason,approvedBy:who,at:Date.now()}; saveCart(); render(); if(payRedraw) payRedraw(); toast('Discount approved by '+personName(who)); },label); };
     }; draw(); });
 }
 
@@ -180,33 +201,89 @@ function addExtraItem(){
     }; draw(); setTimeout(()=>m.querySelector('#xN').focus(),50); });
 }
 
-/* ---------- taking payment ---------- */
+/* ---------- taking payment ----------
+   1. Check the order (items can still be changed)  2. take the payment  3. confirm it a second time
+   4. a green "Payment approved" screen. Declined or cancelled: "Are you sure?", then the sale is cleared.
+   The back button steps back through these one at a time. */
 function pay(method){
-  const pc=priceCart(cart,cartDisc); if(pc.total<=0) return;
-  const was=correcting, diff=was?pc.total-was.total:0;
-  const corrNote=was?`<p class="change ${diff>0?'bad':'ok'}" style="font-size:17px">Correcting a ${c2(was.total)} ${PAY_TXT[was.method]?PAY_TXT[was.method].replace(/^\S+ /,''):''} sale. ${diff>0?'The customer owes <b>'+c2(diff)+'</b> more.':diff<0?'Give the customer back <b>'+c2(-diff)+'</b>.':'Same total as before.'}${was.method==='eftpos'&&method!=='eftpos'||(was.method!=='eftpos'&&method==='eftpos')?' The payment method has changed: refund or charge on the terminal as needed.':''}</p>`:'';
-  modal((m,close)=>{ let tendered=0;
-    if(method==='cash'){
-      const draw=()=>{ const change=tendered-pc.total, enough=tendered>=pc.total;
-        m.innerHTML=`<h2>💵 Cash · ${c2(pc.total)}</h2>${corrNote}<p class="note">Tap the notes and coins you were handed.</p>
-          <div class="notes">${[500,1000,2000,5000,10000].map(v=>`<button data-v="${v}">${c2(v).replace('.00','')}</button>`).join('')}<button data-v="exact" class="exact">Exact</button></div>
-          <div class="change ${enough?'ok':''}">${tendered?`Handed <b>${c2(tendered)}</b> · `:''}${!tendered?'Nothing tapped yet':enough?`Change <b class="big">${c2(change)}</b>`:`Still to pay <b>${c2(-change)}</b>`}</div>
-          <div class="mact">${tendered?'<button class="btn alt" id="pR">Start again</button>':''}<button class="btn alt" id="pC">Cancel</button><button class="btn" id="pOk" ${enough?'':'disabled'}>Done</button></div>`;
-        m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{ tendered=b.dataset.v==='exact'?pc.total:tendered+(+b.dataset.v); draw(); });
-        const r=m.querySelector('#pR'); if(r) r.onclick=()=>{ tendered=0; draw(); };
-        m.querySelector('#pC').onclick=close;
-        m.querySelector('#pOk').onclick=()=>{ close(); recordSale('cash',pc,{tendered,change:tendered-pc.total}); };
-      }; draw();
-    } else if(method==='eftpos'){
-      m.innerHTML=`<h2>💳 EFTPOS · ${c2(pc.total)}</h2>${corrNote}<p style="font-size:21px">Put <b>${c2(was?Math.max(0,diff):pc.total)}</b> through the EFTPOS terminal${was&&diff<=0?' (nothing more to charge)':''}.</p><p class="note">Only tap Approved once the terminal says it went through.</p>
-        <div class="mact"><button class="btn alt" id="pC">Declined / cancel</button><button class="btn" id="pOk">✓ Approved</button></div>`;
-      m.querySelector('#pC').onclick=close; m.querySelector('#pOk').onclick=()=>{ close(); recordSale('eftpos',pc,{}); };
-    } else {
-      m.innerHTML=`<h2>🔖 Other · ${c2(pc.total)}</h2>${corrNote}<label class="note">How was it paid? (e.g. bank transfer, voucher)</label><input class="txt" id="pN">
-        <div class="mact"><button class="btn alt" id="pC">Cancel</button><button class="btn" id="pOk">Record sale</button></div>`;
-      m.querySelector('#pC').onclick=close; m.querySelector('#pOk').onclick=()=>{ const note=m.querySelector('#pN').value.trim(); if(!note){ toast('Say how it was paid'); return; } close(); recordSale('other',pc,{note}); };
-    }
-  });
+  if(priceCart(cart,cartDisc).total<=0) return;
+  modal((m,close)=>{ let step='review', tendered=0, note='', hist=[];
+    const go=st=>{ hist.push(step); step=st; draw(); };
+    close.onBack=()=>{ if(!hist.length){ finish(); return true; } step=hist.pop(); draw(); return true; };
+    const finish=()=>{ payRedraw=null; close(); render(); };
+    const draw=()=>{ const pc=priceCart(cart,cartDisc), was=correcting, diff=was?pc.total-was.total:0;
+      if(!pc.lines.length&&step!=='abandon'){ finish(); return; }
+      const corrNote=was?`<p class="change ${diff>0?'bad':'ok'}" style="font-size:17px">Correcting a ${c2(was.total)} ${PAY_TXT[was.method]?PAY_TXT[was.method].replace(/^\S+ /,''):''} sale. ${diff>0?'The customer owes <b>'+c2(diff)+'</b> more.':diff<0?'Give the customer back <b>'+c2(-diff)+'</b>.':'Same total as before.'}${(was.method==='eftpos')!==(method==='eftpos')?' The payment method has changed: refund or charge on the terminal as needed.':''}</p>`:'';
+      const mname=PAY_TXT[method].replace(/^\S+ /,''), head=`<h2>${PAY_TXT[method]} · ${c2(pc.total)}</h2>`;
+      if(step==='review'){
+        m.innerHTML=`<h2>Check the order</h2><div class="pbody">${corrNote}<div class="clines">${cartLinesHtml(pc,true)}</div>
+            ${pc.manual?'':`<p><button class="linkb" id="rDisc" style="color:var(--green)">🏷️ Add a discount 🔒</button></p>`}</div>
+          <div class="pfoot"><div class="ctot" style="background:none;padding:6px 0"><span>${cartCount()} item${cartCount()===1?'':'s'}</span><b>${c2(pc.total)}</b></div>
+            <p class="note" style="margin:0 0 6px">Paying by</p><div class="seg" style="width:100%;margin-bottom:10px">${['cash','eftpos','other'].map(k=>`<button data-m="${k}" class="${method===k?'on':''}" style="flex:1">${PAY_TXT[k]}</button>`).join('')}</div>
+            <div class="paybig"><button class="btn alt" id="rBack">‹ Back to the till</button><button class="btn" id="rGo">Take payment ›</button></div>
+            <p style="text-align:center;margin:12px 0 0"><button class="linkb" id="rCancel">Cancel this sale</button></p></div>`;
+        m.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>{ changeQty(b.dataset.inc,1); draw(); });
+        m.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>{ changeQty(b.dataset.dec,-1); draw(); });
+        m.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ const c=cart.find(x=>x.pid===b.dataset.rm); if(c) changeQty(c.pid,-c.qty); draw(); });
+        m.querySelectorAll('[data-discx]').forEach(b=>b.onclick=()=>{ cartDisc=null; saveCart(); draw(); });
+        m.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ method=b.dataset.m; draw(); });
+        const rd=m.querySelector('#rDisc'); if(rd) rd.onclick=giveDiscount;
+        m.querySelector('#rBack').onclick=finish;
+        m.querySelector('#rGo').onclick=()=>{ tendered=0; go('pay'); };
+        m.querySelector('#rCancel').onclick=()=>go('abandon');
+        return;
+      }
+      if(step==='pay'){
+        if(method==='cash'){ const change=tendered-pc.total, enough=tendered>=pc.total;
+          m.innerHTML=`${head}<div class="pbody">${corrNote}<p class="note">Tap the notes and coins you were handed.</p>
+              <div class="notes">${[500,1000,2000,5000,10000].map(v=>`<button data-v="${v}">${c2(v).replace('.00','')}</button>`).join('')}<button data-v="exact" class="exact">Exact</button></div>
+              <div class="change ${enough?'ok':''}">${tendered?`Handed <b>${c2(tendered)}</b> · `:''}${!tendered?'Nothing tapped yet':enough?`Change <b class="big">${c2(change)}</b>`:`Still to pay <b>${c2(-change)}</b>`}</div>
+              ${tendered?'<p style="text-align:center"><button class="linkb" id="pR">Start again</button></p>':''}</div>
+            <div class="pfoot"><div class="paybig"><button class="btn danger" id="pCancel">Cancel sale</button><button class="btn" id="pOk" ${enough?'':'disabled'}>Cash received</button></div></div>`;
+          m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{ tendered=b.dataset.v==='exact'?pc.total:tendered+(+b.dataset.v); draw(); });
+          const r=m.querySelector('#pR'); if(r) r.onclick=()=>{ tendered=0; draw(); };
+          m.querySelector('#pOk').onclick=()=>go('confirm');
+        } else if(method==='eftpos'){
+          m.innerHTML=`${head}<div class="pbody">${corrNote}<p style="font-size:24px;text-align:center;margin:30px 0">Put <b>${c2(was?Math.max(0,diff):pc.total)}</b> through the EFTPOS terminal${was&&diff<=0?' (nothing more to charge)':''}.</p>
+              <p class="note" style="text-align:center">Wait until the terminal says <b>approved</b> or <b>declined</b>.</p></div>
+            <div class="pfoot"><div class="paybig"><button class="btn danger" id="pCancel">Declined / cancel</button><button class="btn" id="pOk">✓ Approved</button></div></div>`;
+          m.querySelector('#pOk').onclick=()=>go('confirm');
+        } else {
+          m.innerHTML=`${head}<div class="pbody">${corrNote}<label class="note">How was it paid? (e.g. bank transfer, voucher)</label><input class="txt" id="pN" value="${esc(note)}"></div>
+            <div class="pfoot"><div class="paybig"><button class="btn danger" id="pCancel">Cancel sale</button><button class="btn" id="pOk">Paid</button></div></div>`;
+          m.querySelector('#pOk').onclick=()=>{ note=m.querySelector('#pN').value.trim(); if(!note){ toast('Say how it was paid'); return; } go('confirm'); };
+        }
+        m.querySelector('#pCancel').onclick=()=>go('abandon');
+        return;
+      }
+      if(step==='confirm'){
+        const q=method==='cash'?`<b>${c2(tendered)}</b> cash received${tendered>pc.total?` and <b>${c2(tendered-pc.total)}</b> change given`:''}?`:method==='eftpos'?`Has the EFTPOS terminal <b>approved</b> ${c2(was?Math.max(0,diff):pc.total)}?`:`Paid <b>${c2(pc.total)}</b> by ${esc(note)}?`;
+        m.innerHTML=`<h2>Confirm the payment</h2><div class="pbody"><p style="font-size:26px;text-align:center;margin:40px 0 10px">${q}</p><p class="note" style="text-align:center">Only say yes once the money is really in.</p></div>
+          <div class="pfoot"><div class="paybig"><button class="btn alt" id="cNo">No, go back</button><button class="btn" id="cYes">Yes, approved</button></div></div>`;
+        m.querySelector('#cNo').onclick=()=>close.onBack();
+        m.querySelector('#cYes').onclick=()=>{ const sale=recordSale(method,pc,method==='cash'?{tendered,change:tendered-pc.total}:method==='other'?{note}:{}); payRedraw=null; close(); setSheet(false); showApproved(sale); };
+        return;
+      }
+      if(step==='abandon'){
+        m.innerHTML=`<h2>Cancel this sale?</h2><div class="pbody"><p style="font-size:22px;text-align:center;margin:40px 0 10px">${method==='eftpos'&&hist.includes('pay')?'If the card was declined, ':''}All the items will be cleared and nothing is charged.</p>${was?'<p class="note" style="text-align:center">The sale being corrected stays as it was.</p>':''}</div>
+          <div class="pfoot"><div class="paybig"><button class="btn alt" id="aNo">No, go back</button><button class="btn danger" id="aYes">Yes, clear the sale</button></div></div>`;
+        m.querySelector('#aNo').onclick=()=>close.onBack();
+        m.querySelector('#aYes').onclick=()=>{ clearCart(); sheetOpen=false; finish(); toast('Sale cancelled. Nothing was charged.'); };
+      }
+    };
+    payRedraw=draw; draw();
+  },{big:true,sticky:true});
+}
+// the green "Payment approved" screen; it stays for cash until tapped (so the change isn't missed)
+function showApproved(sale){
+  if(!sale) return;
+  const d=document.createElement('div'); d.className='approved';
+  d.innerHTML=`<div class="tick">✓</div><h1>Payment approved</h1><p><b>${c2(sale.total)}</b> · ${PAY_TXT[sale.method].replace(/^\S+ /,'')}</p>
+    ${sale.method==='cash'&&sale.change>0?`<p style="font-size:30px;margin-top:16px">Give change: <b>${c2(sale.change)}</b></p>`:''}<button class="btn" id="apOk">Next customer</button>`;
+  document.body.appendChild(d);
+  const done=()=>{ d.remove(); modalStack=modalStack.filter(x=>x!==done); }; modalStack.push(done);
+  d.querySelector('#apOk').onclick=done;
+  if(!(sale.method==='cash'&&sale.change>0)) setTimeout(done,3500);
 }
 // Saved at once, even with no signal: Firestore keeps it on the device and sends it when the signal returns.
 function recordSale(method,pc,extra){
@@ -221,7 +298,8 @@ function recordSale(method,pc,extra){
   S.sales.push(sale); save();
   clearCart(); lastSale=wasCorr?null:{id:sale.id,at:sale.at,total:sale.total};
   clearTimeout(undoTimer); undoTimer=setTimeout(()=>{ if(cur()==='sell') render(); },60.5e3);
-  render(); toast((wasCorr?'✓ Corrected sale saved · ':'✓ Sale saved · ')+c2(sale.total)+' '+PAY_TXT[method].replace(/^\S+ /,''));
+  render(); if(wasCorr) toast('✓ Corrected sale saved · '+c2(sale.total));
+  return sale;
 }
 function undoLast(){
   if(!lastSale||Date.now()-lastSale.at>=60e3){ toast('Too late to undo. An owner can correct or void it under Sales.'); render(); return; }

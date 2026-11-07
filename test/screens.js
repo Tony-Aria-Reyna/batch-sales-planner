@@ -16,6 +16,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const page = await ipad.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
   const signIn = (p, email) => p.evaluate(e => SYNC.testSignIn(e), email);
   const text = p => p.evaluate(() => document.body.innerText);
+  // the payment flow: Check the order → take payment → confirm a second time → green "Payment approved"
+  const payEft = async p => { await p.click('[data-pay="eftpos"]'); await p.click('#rGo'); await p.click('#pOk'); await p.click('#cYes'); await p.click('#apOk'); await p.waitForTimeout(100); };
+  const payExact = async p => { await p.click('[data-pay="cash"]'); await p.click('#rGo'); await p.click('[data-v="exact"]'); await p.click('#pOk'); await p.click('#cYes'); await p.click('#apOk'); await p.waitForTimeout(100); };
   const pin = async (p, code) => { for (const k of code) await p.click(`[data-k="${k}"]`); };
 
   console.log('iPad landscape: sign-in and set up');
@@ -108,17 +111,31 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(shots, '12-ipad-till-portrait.png') });
   await page.setViewportSize({ width: 1180, height: 820 });
-  await page.click('[data-pay="cash"]'); await page.click('[data-v="2000"]'); await page.click('[data-v="5000"]');
+  await page.click('[data-pay="cash"]'); await page.waitForSelector('#rGo');
+  ok(/Check the order/.test(await text(page)) && (await page.$$('.modal [data-inc]')).length === 3, 'payment starts with "Check the order", items adjustable');
+  await page.locator('.modal [data-inc]').first().click(); await page.waitForTimeout(50);
+  ok(/\$70\.00/.test(await page.textContent('.modal .ctot')), 'order changed in the check screen: one more Test Balm, $70.00');
+  await page.locator('.modal [data-dec]').first().click(); await page.waitForTimeout(50);
+  await page.click('#rGo'); await page.click('[data-v="2000"]'); await page.click('[data-v="5000"]');
   ok(/Change\s*\$20\.00/.test(await page.textContent('.change')), 'cash: handed $70, change $20.00 shown');
   await page.screenshot({ path: path.join(shots, '13-ipad-cash.png') });
-  await page.click('#pOk'); await page.waitForTimeout(150);
+  await page.click('#pOk'); await page.waitForSelector('#cYes');
+  ok(/\$70\.00 cash received and \$20\.00 change given\?/.test(await text(page)) && await page.evaluate(() => S.sales.length === 0), 'second confirmation asked before anything is saved');
+  await page.click('#cNo'); ok(!!(await page.$('[data-v="exact"]')), 'No, go back returns to the payment screen'); await page.click('#pOk'); await page.click('#cYes'); await page.waitForSelector('.approved');
+  ok(/Payment approved/.test(await text(page)) && /Give change: \$20\.00/.test(await text(page)), 'green "Payment approved" screen, with the change to give');
+  await page.screenshot({ path: path.join(shots, '13b-ipad-payment-approved.png') });
+  await page.click('#apOk'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.sales.length === 1 && S.sales[0].total === 5000 && S.sales[0].change === 2000 && S.sales[0].gst === 652 && S.sales[0].servedBy === 'Sam'), 'sale saved: $50, change $20, GST $6.52, served by Sam');
   ok((await page.textContent('#cTotal')) === '$0.00', 'sale cleared, ready for the next customer');
   await page.click('#tUndo'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.sales.length === 0) && (await page.textContent('#cTotal')) === '$50.00', 'undo removes the sale and puts the items back');
-  await page.click('[data-pay="eftpos"]'); await page.click('#pOk'); await page.waitForTimeout(100);
+  await page.click('[data-pay="eftpos"]'); await page.click('#rGo'); await page.click('#pCancel'); await page.waitForSelector('#aYes');
+  ok(/Cancel this sale\?/.test(await text(page)), 'declined: asks "Are you sure?"'); await page.click('#aNo'); await page.click('#pOk'); await page.click('#cNo'); await page.click('#pCancel'); await page.click('#aYes'); await page.waitForTimeout(100);
+  ok((await page.textContent('#cTotal')) === '$0.00' && await page.evaluate(() => S.sales.length === 0 && !document.querySelector('.modal')), 'declined and confirmed: the sale is cleared and the till is back');
+  await tap('Test Balm'); await tap('Test Oil'); await tap('Test Tea');
+  await payEft(page);
   ok(await page.evaluate(() => S.sales.length === 1 && S.sales[0].method === 'eftpos'), 'EFTPOS sale recorded');
-  await tap('Test Gift Box'); await page.click('[data-pay="cash"]'); await page.click('[data-v="exact"]'); await page.click('#pOk'); await page.waitForTimeout(100);
+  await tap('Test Gift Box'); await payExact(page);
 
   console.log('Category filter, discounts, items not on the till, correcting a sale');
   await page.click('[data-f="balm"]'); await page.waitForTimeout(50);
@@ -128,18 +145,18 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await tap('Test Tea'); await page.click('#cDisc'); await page.fill('#dR', 'regular customer'); await page.click('#dOk'); await page.waitForSelector('.pinpad');
   ok(true, 'a discount asks for a PIN'); await pin(page, '2580'); await page.waitForTimeout(150);
   ok((await page.textContent('#cTotal')) === '$13.50' && /approved by Admin/.test(await text(page)), 'discount 10% approved: $15.00 → $13.50, shows who approved');
-  await page.click('[data-pay="cash"]'); await page.click('[data-v="exact"]'); await page.click('#pOk'); await page.waitForTimeout(150);
+  await payExact(page);
   ok(await page.evaluate(() => S.sales.some(s => s.total === 1350 && s.manualDiscount && s.manualDiscount.amount === 150 && s.manualDiscount.approvedBy === 'admin@example.com')), 'discounted sale stores the discount and the approver');
   await page.click('#tExtra'); await page.fill('#xN', 'Test Special'); await page.fill('#xP', '12'); await page.click('#xOk'); await pin(page, '2580'); await page.waitForTimeout(150);
   ok((await page.textContent('#cTotal')) === '$12.00' && /not on the till/.test(await text(page)), 'item not on the till added after a PIN');
-  await page.click('[data-pay="eftpos"]'); await page.click('#pOk'); await page.waitForTimeout(150);
+  await payEft(page);
   await page.click('#tList'); await pin(page, '2580'); await page.waitForSelector('[data-corr]');
   ok(/Sales so far/.test(await text(page)), 'the sales list needs a PIN');
   await page.screenshot({ path: path.join(shots, '17-ipad-sales-list.png') });
   await page.locator('[data-corr]').first().click(); await pin(page, '2580'); await page.waitForTimeout(150);
   ok(/Correcting the \$12\.00 sale/.test(await text(page)) && (await page.textContent('#cTotal')) === '$12.00', 'correct a sale: it comes back onto the till');
   await tap('Test Tea'); ok((await page.textContent('#cTotal')) === '$27.00', 'correction: an item added');
-  await page.click('[data-pay="eftpos"]'); ok(/owes \$15\.00 more/.test(await text(page)), 'correction: the difference to collect is shown'); await page.click('#pOk'); await page.waitForTimeout(150);
+  await page.click('[data-pay="eftpos"]'); ok(/owes \$15\.00 more/.test(await text(page)), 'correction: the difference to collect is shown'); await page.click('#rGo'); await page.click('#pOk'); await page.click('#cYes'); await page.click('#apOk'); await page.waitForTimeout(150);
   ok(await page.evaluate(() => { const o = S.sales.find(s => s.total === 1200); const n = S.sales.find(s => s.total === 2700); return o.voided && o.voidReason === 'corrected' && o.replacedBy === n.id && n.replaces === o.id && n.correctedBy === 'admin@example.com'; }), 'correction saved: old sale voided as corrected and linked to the new one');
   await page.screenshot({ path: path.join(shots, '18-ipad-till-bold-colours.png') });
 
@@ -201,6 +218,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/That is a picture/.test(await text(page)), 'a picture is refused with a clear reason');
   await page.click('#lC'); await page.click('#bk'); await page.click('#bk');
 
+  console.log('Back button');
+  await page.click('[data-go="sell"]'); await page.waitForTimeout(100); await page.mouse.click(5, 300);
+  await page.goBack(); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => !!document.querySelector('.tiles') && document.querySelector('#exitScr').hidden), 'back from the till goes to the home screen, not out of the app');
+  await page.mouse.click(5, 300); await page.goBack(); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => !document.querySelector('#exitScr').hidden) && /Stay in the app/.test(await text(page)), 'back at the home screen shows the Rata & Smudge screen');
+  await page.screenshot({ path: path.join(shots, '20-exit-screen.png') });
+  await page.click('#exStay'); ok(await page.evaluate(() => document.querySelector('#exitScr').hidden && !!document.querySelector('.tiles')), '"Stay in the app" returns to the home screen');
+
   console.log('Android phone: helper, stranger, and a second business');
   const phone = await browser.newContext({ ...devices['Pixel 7'] });
   // share the fake database between the iPad and the phone (it lives in localStorage)
@@ -215,7 +241,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(!(await hp.$('#tLock')), 'helper on own phone: no till-mode button needed');
   await hp.locator('.ptile', { hasText: 'Test Gift Box' }).click(); await hp.waitForTimeout(50);
   await hp.screenshot({ path: path.join(shots, '09-android-till.png') });
-  await hp.click('[data-pay="eftpos"]'); await hp.click('#pOk'); await hp.waitForTimeout(150);
+  ok(await hp.evaluate(() => { const c = document.querySelector('#cart'); const r = c.getBoundingClientRect(); return !c.classList.contains('open') && r.top > innerHeight * 0.6; }), 'phone: the sale panel sits closed at the bottom');
+  await hp.click('#cGrab'); await hp.waitForTimeout(350);
+  ok(await hp.evaluate(() => document.querySelector('#cart').classList.contains('open') && document.querySelector('#cart').getBoundingClientRect().top < innerHeight * 0.3), 'phone: tapping the handle slides the panel fully open');
+  await hp.screenshot({ path: path.join(shots, '09b-android-sale-open.png') });
+  await hp.goBack(); await hp.waitForTimeout(350);
+  ok(await hp.evaluate(() => !document.querySelector('#cart').classList.contains('open')), 'phone: the back button closes the panel first');
+  await payEft(hp);
   ok(await hp.evaluate(() => S.sales.some(s => s.by === 'helper@example.com' && s.total === 9000 && s.channel === 'farmgate')), 'helper sale saved as the helper ($90, farm gate)');
   ok(!(await hp.$('#tList')) && !(await hp.$('#tEnd')), 'helper sees no sales list and cannot end the day');
   await hp.click('#bk'); ok(/Today's takings\s*—/.test(await text(hp)), 'helper sees no takings on the home screen'); await hp.click('[data-go="sell"]');
