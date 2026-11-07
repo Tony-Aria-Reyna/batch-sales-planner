@@ -1,8 +1,8 @@
 {
   "apiKey": "PASTE FROM FIREBASE → Project settings → Your apps → Web app",
-  "authDomain": "rata-smudge-app.firebaseapp.com",
-  "projectId": "rata-smudge-app",
-  "storageBucket": "rata-smudge-app.firebasestorage.app",
+  "authDomain": "batch-sales-planner.firebaseapp.com",
+  "projectId": "batch-sales-planner",
+  "storageBucket": "batch-sales-planner.firebasestorage.app",
   "messagingSenderId": "000000000000",
   "appId": "1:000000000000:web:0000000000000000"
 }

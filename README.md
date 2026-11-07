@@ -46,17 +46,18 @@ A market till, brew planner and order tracker for Rata & Smudge, built as one we
 
 1. **Admin account.** Choose the Google account that will run the app (it can invite new businesses) and make sure 2-Step Verification is on for it.
 2. **GitHub.** Create a new **private** repository, e.g. `tony-aria-reyna/rata-smudge`, and upload this folder to it (or give Claude push access to it).
-3. **Firebase project** (free Spark plan; no card needed). At console.firebase.google.com → Add project → `rata-smudge-app` (Google Analytics off). Then:
+3. **Firebase project: `batch-sales-planner`** (already created; free Spark plan, no card needed). Check its **Project ID** in ⚙️ Project settings → General. If it isn't exactly `batch-sales-planner` (Firebase sometimes adds a suffix), replace that name in `.firebaserc`, `firebase-config.json` and the addresses below. Then:
+   - ⚠️ **If this project already holds data for another app**, publishing these rules will lock that app out. These rules allow only `admins`, `invites` and `businesses`. Tell Claude first, so the rules can be merged.
    1. Project settings → Your apps → **Web** (`</>`) → nickname "Rata & Smudge" → leave "Firebase Hosting" unticked → Register. Copy the `firebaseConfig` values into `firebase-config.json` (use `firebase-config.example.json` as the template).
    2. Build → **Authentication** → Get started → Sign-in method → **Google** → Enable → support email → Save.
    3. Build → **Firestore Database** → Create database → location **australia-southeast1 (Sydney)** → **Production mode**.
    4. Firestore → **Rules** → replace everything with the contents of `firestore.rules` → **Publish**.
    5. **Make yourself the admin.** Firestore → Data → **Start collection** → Collection ID `admins` → Document ID = your Google email address, in lower case → add any field (e.g. `note` = `admin`) → Save. This is the only place the admin's address is stored; it is never in the code.
    6. Build → **Hosting** → Get started (just click through; the deploy comes from GitHub).
-4. **Allow sign-in through the app's own address (needed for the iPad).** Google Cloud Console (console.cloud.google.com, same project) → APIs & Services → Credentials → OAuth 2.0 Client IDs → "Web client (auto created by Google Service)" → **Authorized redirect URIs** → add `https://rata-smudge-app.web.app/__/auth/handler` → Save.
-5. **Automatic deploys.** On your PC, in this folder: `npm install`, then `npx firebase login`, then `npx firebase init hosting:github`. Answers: your repo name; build script before deploy **Yes**, `npm ci && npm run build`; deploy on merge **Yes**, branch `main`. It adds the workflow files and a secret to GitHub. Push, and the app appears at `https://rata-smudge-app.web.app`.
+4. **Allow sign-in through the app's own address (needed for the iPad).** Google Cloud Console (console.cloud.google.com, same project) → APIs & Services → Credentials → OAuth 2.0 Client IDs → "Web client (auto created by Google Service)" → **Authorized redirect URIs** → add `https://batch-sales-planner.web.app/__/auth/handler` → Save.
+5. **Automatic deploys.** On your PC, in this folder: `npm install`, then `npx firebase login`, then `npx firebase init hosting:github`. Answers: repository `tony-aria-reyna/batch-sales-planner`; build script before deploy **Yes**, `npm ci && npm run build`; deploy on merge **Yes**, branch `main`. It adds the workflow files and a secret to GitHub. Push, and the app appears at `https://batch-sales-planner.web.app`.
 6. **First sign-in on the iPad** (the most important test): Safari → the address → Sign in → set up "Rata & Smudge" → Share → Add to Home Screen → open from the icon → sign in again.
-7. **Lock the key** (only after step 6 works): Google Cloud Console → Credentials → Browser key → Website restrictions → `https://rata-smudge-app.web.app/*` and `https://rata-smudge-app.firebaseapp.com/*`. A typo here blocks everything with "permission-denied".
+7. **Lock the key** (only after step 6 works): Google Cloud Console → Credentials → Browser key → Website restrictions → `https://batch-sales-planner.web.app/*` and `https://batch-sales-planner.firebaseapp.com/*`. A typo here blocks everything with "permission-denied".
 8. **Invite your mum.** In the app: Setup → Invites → her Google email if she is to own her own business, or Setup → People → add her as a manager on the one you set up. To make her the owner, set the business up while signed in as her.
 
 ## Testing
