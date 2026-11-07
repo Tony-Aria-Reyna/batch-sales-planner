@@ -3,7 +3,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium, devices } = require(process.env.PW || 'playwright');
 const root = path.join(__dirname, '..', 'dist-test'), shots = path.join(__dirname, 'shots'); fs.mkdirSync(shots, { recursive: true });
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const server = http.createServer((q, r) => { const f = path.join(root, decodeURIComponent(q.url.split('?')[0]).replace(/\/$/, '/index.html')); if (!fs.existsSync(f)) { r.writeHead(404); return r.end(); } r.writeHead(200, { 'content-type': types[path.extname(f)] || 'text/plain' }); fs.createReadStream(f).pipe(r); });
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fails++; };
 const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
@@ -76,10 +76,11 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   // made-up products: never real business data in test code
   await page.click('[data-go="setup"]'); for (const k of '1234') await page.click(`[data-k="${k}"]`);
   await page.click('#goProd'); await page.click('#pPaste');
-  await page.fill('#tP', 'PRODUCT  SIZE  PRICE\nTest Balm\t30g\t$20\nTest Oil, 50ml, 30\nTest Tea  Tea  $15\nTest Gift Box  Gift set  $90');
-  await page.waitForTimeout(100);
-  ok(/4 found/.test(await text(page)), 'pasted price list read (header line skipped)');
-  await page.click('#tA'); await page.waitForTimeout(200);
+  await page.click('details summary');
+  await page.fill('#lT', 'PRODUCT  SIZE  PRICE\nTest Balm\t30g\t$20\nTest Oil, 50ml, 30\nTest Tea  Tea  $15\nTest Gift Box  Gift set  $90');
+  await page.click('#lP'); await page.waitForTimeout(100);
+  ok(/New products \(4\)/.test(await text(page)), 'pasted price list read (header line skipped)');
+  await page.click('#lGo'); await page.waitForTimeout(200);
   ok(await page.evaluate(() => S.products.length === 4 && S.products.find(p => p.name === 'Test Oil').price === 3000), 'products saved with prices in cents');
   ok(await page.evaluate(() => S.products.find(p => p.name === 'Test Balm').colour === 'balm'), 'button colour guessed from the product');
   await page.click('#bk'); await page.click('#goDeals'); await page.click('#dAdd');
@@ -136,6 +137,33 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.fill('#eC', '100'); await page.click('#eX'); await page.waitForSelector('.tiles');
   ok(await page.evaluate(() => S.sessions[0].status === 'closed' && S.sessions[0].totals.eftpos === 5000 && !(localStorage.getItem('rs.tillMode')||'').includes('Sam')), 'day closed, totals stored, till mode off');
 
+  console.log('Load a price list from a PDF and an Excel file');
+  // made-up test products: one price change, one unchanged, one new, two missing from the list
+  const pdfPage = await ipad.newPage();
+  await pdfPage.setContent(`<h1>TEST SHOP</h1><p>PRICE LIST</p><table style="width:100%;font:14px Arial"><tr><th align=left>PRODUCT</th><th align=left>SIZE</th><th align=right>PRICE</th></tr>
+    <tr><td>Test Balm</td><td>30g</td><td align=right>$22</td></tr><tr><td>Test Oil (pump)</td><td>100ml</td><td align=right>$40</td></tr>
+    <tr><td>Test Oil</td><td>50 ml</td><td align=right>$30</td></tr><tr><td>Test New Roll-On</td><td>10ml</td><td align=right>$12.50</td></tr></table><p>Prices in NZD. Check before use.</p>`);
+  const pdfFile = path.join(shots, 'test-price-list.pdf'); await pdfPage.pdf({ path: pdfFile, format: 'A4' }); await pdfPage.close();
+  await page.click('[data-go="setup"]'); for (const k of '1234') await page.click(`[data-k="${k}"]`);
+  await page.click('#goProd'); await page.click('#pPaste'); await page.setInputFiles('#lF', pdfFile); await page.waitForSelector('#lB', { timeout: 15000 });
+  const rv = await text(page);
+  ok(/New products \(2\)/.test(rv) && /Price changes \(1\)/.test(rv) && /not in this list \(2\)/.test(rv) && /1 product already on the till/.test(rv), 'PDF read: 2 new, 1 price change, 1 unchanged ("50 ml" matches "50ml"), 2 missing');
+  ok(/\$20\.00\s*→\s*\$22\.00/.test(rv), 'price change shown as old → new');
+  await page.screenshot({ path: path.join(shots, '16-ipad-load-price-list.png') });
+  await page.locator('label.row', { hasText: 'Test Tea' }).locator('input').check(); await page.waitForTimeout(50);
+  await page.click('#lGo'); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => S.products.find(p => p.name === 'Test Balm').price === 2200 && S.products.find(p => p.name === 'Test New Roll-On').price === 1250
+    && S.products.find(p => p.name === 'Test Tea').active === false && S.products.find(p => p.name === 'Test Gift Box').active !== false && S.products.filter(p => p.name === 'Test Balm').length === 1),
+    'till updated: price changed in place, new added, ticked one hidden, unticked one left alone, no duplicates');
+  // Excel: same list again, nothing should change
+  const XLSX = require('xlsx'); const xf = path.join(shots, 'test-price-list.xlsx'); const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Product', 'Size', 'Price'], ['Test Balm', '30g', 22], ['Test Oil', '50ml', 30], ['Test New Roll-On', '10ml', '$12.50']]), 'Prices'); XLSX.writeFile(wb, xf);
+  await page.click('#pPaste'); await page.setInputFiles('#lF', xf); await page.waitForSelector('#lB', { timeout: 15000 });
+  ok(/3 products already on the till/.test(await text(page)) && !/New products/.test(await text(page)), 'Excel read: matching list makes no changes');
+  await page.click('#lB'); await page.setInputFiles('#lF', path.join(__dirname, '..', 'src', 'icon-192.png')); await page.waitForTimeout(300);
+  ok(/That is a picture/.test(await text(page)), 'a picture is refused with a clear reason');
+  await page.click('#lC'); await page.click('#bk'); await page.click('#bk');
+
   console.log('Android phone: helper, stranger, and a second business');
   const phone = await browser.newContext({ ...devices['Pixel 7'] });
   // share the fake database between the iPad and the phone (it lives in localStorage)
@@ -148,10 +176,10 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.click('[data-go="sell"]'); await hp.waitForSelector('#sGo'); await hp.click('[data-t="farmgate"]');
   await hp.click('[data-who="Sam"]'); await hp.click('#sGo'); await hp.waitForSelector('.ptile');
   ok(!(await hp.$('#tLock')), 'helper on own phone: no till-mode button needed');
-  await hp.locator('.ptile', { hasText: 'Test Tea' }).click(); await hp.locator('.ptile', { hasText: 'Test Tea' }).click();
+  await hp.locator('.ptile', { hasText: 'Test Gift Box' }).click(); await hp.waitForTimeout(50);
   await hp.screenshot({ path: path.join(shots, '09-android-till.png') });
   await hp.click('[data-pay="eftpos"]'); await hp.click('#pOk'); await hp.waitForTimeout(150);
-  ok(await hp.evaluate(() => S.sales.some(s => s.by === 'helper@example.com' && s.total === 3000 && s.channel === 'farmgate')), 'helper sale saved as the helper ($30, farm gate)');
+  ok(await hp.evaluate(() => S.sales.some(s => s.by === 'helper@example.com' && s.total === 9000 && s.channel === 'farmgate')), 'helper sale saved as the helper ($90, farm gate)');
   await hp.click('#tList'); await hp.locator('[data-void]').first().click(); await hp.waitForTimeout(100);
   ok(!(await hp.$('.pinpad')), 'helper cannot void a sale'); await hp.click('#dOk');
 

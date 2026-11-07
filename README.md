@@ -21,7 +21,7 @@ A market till, brew planner and order tracker for Rata & Smudge, built as one we
 
 ## The market till
 
-- **Products and prices** (Setup → What you sell): only the owner or a manager can set a price, and prices include GST. Paste a whole price list ("Name, size, price" per line) to load it in one go.
+- **Products and prices** (Setup → What you sell): only an owner or manager can set a price, and prices include GST. **Load a price list** reads a PDF, Excel or CSV file on the device (nothing is uploaded), then shows new products, price changes (old → new), unchanged ones and products missing from the list, each with a tick box, before anything changes. Re-loading an updated list updates prices in place, matched by name and size. Photos are refused: not reliable enough for prices.
 - **Deals**: "any N of these for $X", set up once and applied by the till itself, best price to the customer.
 - **Selling day**: Market, Farm gate, Garden tour or Shop, with market name, cash float and who is serving.
 - **Taking a sale**: tap products (tap again for more, − and ＋ to adjust), then Cash, EFTPOS or Other. Cash: tap the notes handed over and the change is shown. Saved at once, even offline. "Undo last sale" for one minute.

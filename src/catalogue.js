@@ -24,7 +24,7 @@ SCREENS.products={
   html(){
     const all=S.products.slice().sort((a,b)=>(a.name+' '+a.size).localeCompare(b.name+' '+b.size,'en',{numeric:true}));
     return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0">
-        <button class="btn" id="pAdd">＋ Add a product</button><button class="btn alt" id="pPaste">📋 Paste a price list</button></div>
+        <button class="btn" id="pAdd">＋ Add a product</button><button class="btn alt" id="pPaste">📄 Load a price list</button></div>
       <p class="note">Only you can change these. Helpers see them as till buttons and can't change a price.</p></div>
       <div class="card">${all.length?all.map(p=>`<div class="row" data-edit="${p.id}" style="cursor:pointer${p.active===false?';opacity:.5':''}">
           <span class="chip" style="${swatch(p.colour)}">${esc((COLOURS[p.colour]||COLOURS.other)[2])}</span>
@@ -34,7 +34,7 @@ SCREENS.products={
   },
   wire(){
     $('#pAdd').onclick=()=>editProduct(null);
-    $('#pPaste').onclick=pasteProducts;
+    $('#pPaste').onclick=loadPriceList;
     document.querySelectorAll('[data-edit]').forEach(r=>r.onclick=()=>editProduct(S.products.find(p=>p.id===r.dataset.edit)));
   }
 };
@@ -73,24 +73,97 @@ function parsePriceList(text){
     let parts=rest.split(/\t|\s*[,;|]\s*|\s{2,}|\s[–—]\s/).map(s=>s.trim()).filter(Boolean);
     let name=parts[0], size=parts.slice(1).join(' ');
     if(parts.length===1){ const s=rest.match(/^(.*?)\s+(\d+\s?(?:ml|g|kg|l)|Balm|Tea|Tincture|Blend|Gift set)$/i); if(s){ name=s[1]; size=s[2]; } }
-    if(/^product$/i.test(name)) continue;
+    if(/^(product|item|name)s?$/i.test(name)||/^(total|subtotal|gst)\b/i.test(name)) continue;
     out.push({name,size,price:Math.round(parseFloat(m[1])*100)});
   }
   return out;
 }
-function pasteProducts(){
-  modal((m,close)=>{ let rows=[];
-    const key=r=>(r.name+'|'+r.size).toLowerCase();
-    const draw=txt=>{ const have=new Set(S.products.map(key));
-      m.innerHTML=`<h2>📋 Paste a price list</h2><p class="note">One product per line: name, size, price including GST. For example:<br><b>Calendula Infused Oil, 50ml, 20</b></p>
-        <textarea class="txt" id="tP" rows="7" style="min-height:160px">${esc(txt||'')}</textarea>
-        ${rows.length?`<p class="note"><b>${rows.length}</b> found. Check every price before adding:</p><div style="max-height:260px;overflow:auto">${rows.map(r=>`<div class="row"><div class="grow">${esc(r.name)}<small>${esc(r.size)}${have.has(key(r))?' · already on the list, will be skipped':''}</small></div><b>${money(r.price/100)}</b></div>`).join('')}</div>`:''}
-        <div class="mact"><button class="btn alt" id="tC">Cancel</button>${rows.length?`<button class="btn" id="tA">Add ${rows.filter(r=>!have.has(key(r))).length} products</button>`:''}</div>`;
-      const ta=m.querySelector('#tP'); ta.oninput=()=>{ rows=parsePriceList(ta.value); const pos=ta.selectionStart; draw(ta.value); const t2=m.querySelector('#tP'); t2.focus(); t2.setSelectionRange(pos,pos); };
-      m.querySelector('#tC').onclick=close;
-      const a=m.querySelector('#tA'); if(a) a.onclick=()=>{ let n=0; for(const r of rows){ if(have.has(key(r))) continue; have.add(key(r)); S.products.push({id:SYNC.newId('products'),name:r.name,size:r.size,price:r.price,colour:guessColour(r.name,r.size),active:true,updated:Date.now()}); n++; }
-        save(); close(); render(); toast('Added '+n+' products'); };
-    }; draw(''); });
+/* ---------- Load a price list: PDF, Excel, CSV or pasted text ----------
+   The file is read on this device and never uploaded. Nothing changes until the owner has checked every
+   line: new products, price changes (old → new), unchanged, and products missing from the list. */
+const normKey=(name,size)=>(String(name).trim()+'|'+String(size||'').trim()).toLowerCase().replace(/\s+/g,' ').replace(/(\d)\s+(ml|g|kg|l)\b/g,'$1$2');
+const productKey=p=>normKey(p.name,p.size);
+function loadScript(src){ return new Promise((ok,bad)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>bad(new Error('Could not load '+src+'. Are you online?')); document.head.appendChild(s); }); }
+// PDF → lines of text, columns separated by tabs (from the gaps between words on each line)
+async function pdfToText(file){
+  const pdfjs=await import('./lib/pdf.min.mjs'); pdfjs.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.mjs';
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise; const out=[];
+  for(let n=1;n<=doc.numPages;n++){
+    const items=(await (await doc.getPage(n)).getTextContent()).items.filter(i=>i.str&&i.str.trim());
+    const rows=[];
+    for(const it of items){ const y=it.transform[5], x=it.transform[4]; let r=rows.find(r=>Math.abs(r.y-y)<3); if(!r){ r={y,items:[]}; rows.push(r); } r.items.push({x,w:it.width,s:it.str,h:Math.abs(it.transform[3])||10}); }
+    rows.sort((a,b)=>b.y-a.y);
+    for(const r of rows){ r.items.sort((a,b)=>a.x-b.x); let line='', end=null;
+      for(const it of r.items){ if(end!==null){ const gap=it.x-end; line+=gap>it.h*1.2?'\t':(gap>it.h*0.15?' ':''); } line+=it.s; end=it.x+it.w; }
+      out.push(line.trim()); }
+  }
+  return out.join('\n');
+}
+async function sheetToText(file){
+  if(!window.XLSX) await loadScript('lib/xlsx.js');
+  const wb=XLSX.read(new Uint8Array(await file.arrayBuffer()),{type:'array'}), out=[];
+  for(const name of wb.SheetNames){ for(const row of XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:false,blankrows:false})){ const cells=row.map(c=>String(c==null?'':c).trim()).filter(Boolean); if(cells.length) out.push(cells.join('\t')); } }
+  return out.join('\n');
+}
+async function fileToText(file){
+  const n=file.name.toLowerCase();
+  if(/\.pdf$/.test(n)||file.type==='application/pdf') return pdfToText(file);
+  if(/\.(xlsx|xlsm|xls|ods)$/.test(n)) return sheetToText(file);
+  if(/\.(csv|txt|tsv)$/.test(n)||/^text\//.test(file.type)) return file.text();
+  if(/^image\//.test(file.type)||/\.(png|jpe?g|heic|webp)$/.test(n)) throw new Error('That is a picture. Reading prices from a photo isn\'t reliable enough for a till: please choose the PDF or spreadsheet instead.');
+  throw new Error('That type of file can\'t be read. Choose a PDF, Excel or CSV file.');
+}
+// Compare a parsed list with the products already on the till.
+function comparePriceList(rows){
+  const byKey=new Map(S.products.map(p=>[productKey(p),p])), seen=new Map(), dupes=[];
+  for(const r of rows){ const k=normKey(r.name,r.size); if(seen.has(k)){ if(seen.get(k).price!==r.price) dupes.push(r); continue; } seen.set(k,r); }
+  const add=[], change=[], same=[];
+  for(const [k,r] of seen){ const p=byKey.get(k); if(!p) add.push(r); else if(p.price!==r.price||p.active===false) change.push({r,p}); else same.push({r,p}); }
+  const missing=S.products.filter(p=>p.active!==false&&!seen.has(productKey(p)));
+  const odd=[...seen.values()].filter(r=>r.price<100||r.price>50000);
+  return {add,change,same,missing,dupes,odd};
+}
+function loadPriceList(){
+  modal((m,close)=>{ let text='', source='', cmp=null, pick={add:new Set(),change:new Set(),hide:new Set()};
+    const rowsHtml=(list,kind,fn)=>list.map((x,i)=>`<label class="row" style="cursor:pointer"><input type="checkbox" data-k="${kind}" data-i="${i}" ${pick[kind].has(i)?'checked':''} style="width:26px;height:26px;flex:none">${fn(x)}</label>`).join('');
+    const draw=()=>{
+      if(!cmp){ m.innerHTML=`<h2>📄 Load a price list</h2>
+        <p class="note">Choose your price list: a <b>PDF</b>, an <b>Excel</b> sheet or a <b>CSV</b> file. It's read on this device and isn't uploaded anywhere. Every price must <b>include GST</b>.</p>
+        <label class="btn bigbtn" style="display:flex;align-items:center;justify-content:center;cursor:pointer">📂 Choose a file<input type="file" id="lF" accept=".pdf,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.txt,application/pdf" hidden></label>
+        <p class="note" id="lMsg" style="min-height:24px"></p>
+        <details><summary class="note">Or paste the list as text</summary><p class="note">One product per line: name, size, price. For example: <b>Calendula Infused Oil, 50ml, 20</b></p>
+          <textarea class="txt" id="lT" rows="6" style="min-height:140px"></textarea><div class="mact"><button class="btn alt" id="lP">Read this text</button></div></details>
+        <div class="mact"><button class="btn alt" id="lC">Cancel</button></div>`;
+        m.querySelector('#lC').onclick=close;
+        m.querySelector('#lF').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; const msg=m.querySelector('#lMsg'); msg.textContent='Reading '+f.name+'…';
+          try{ text=await fileToText(f); source=f.name; read(); }catch(x){ msg.innerHTML='<b style="color:var(--danger)">'+esc(x.message||x)+'</b>'; } };
+        m.querySelector('#lP').onclick=()=>{ text=m.querySelector('#lT').value; source='pasted text'; read(); };
+        return; }
+      const {add,change,same,missing,dupes,odd}=cmp, nA=pick.add.size, nC=pick.change.size, nH=pick.hide.size;
+      m.innerHTML=`<h2>Check before updating the till</h2><p class="note">From <b>${esc(source)}</b>. Untick anything that's wrong; fix it afterwards in Products and prices. Prices include GST.</p>
+        ${odd.length?`<p class="change bad" style="font-size:16px;text-align:left">⚠️ Check these prices, they look unusual: ${odd.map(r=>esc(r.name)+' '+c2(r.price)).join(', ')}</p>`:''}
+        ${dupes.length?`<p class="change bad" style="font-size:16px;text-align:left">⚠️ Listed twice with different prices (the first one is used): ${dupes.map(r=>esc(r.name)+' '+esc(r.size)).join(', ')}</p>`:''}
+        <div style="max-height:55vh;overflow:auto">
+        ${add.length?`<h3 style="margin:14px 0 4px">🆕 New products (${add.length})</h3>`+rowsHtml(add,'add',r=>`<div class="grow"><b>${esc(r.name)}</b><small>${esc(r.size)}</small></div><b>${c2(r.price)}</b>`):''}
+        ${change.length?`<h3 style="margin:14px 0 4px">✏️ Price changes (${change.length})</h3>`+rowsHtml(change,'change',x=>`<div class="grow"><b>${esc(x.r.name)}</b><small>${esc(x.r.size)}${x.p.active===false?' · will be shown on the till again':''}</small></div><span style="white-space:nowrap"><s style="color:var(--muted)">${c2(x.p.price)}</s> → <b>${c2(x.r.price)}</b></span>`):''}
+        ${missing.length?`<h3 style="margin:14px 0 4px">❓ On the till but not in this list (${missing.length})</h3><p class="note">Tick any to <b>hide</b> from the till. Past sales are kept.</p>`+rowsHtml(missing,'hide',p=>`<div class="grow">${esc(p.name)}<small>${esc(p.size||'')}</small></div><span>${c2(p.price)}</span>`):''}
+        ${same.length?`<p class="note" style="margin-top:14px">✓ ${same.length} product${same.length===1?'':'s'} already on the till at the same price.</p>`:''}
+        ${!add.length&&!change.length&&!missing.length?'<p>Everything already matches the till. Nothing to change.</p>':''}
+        </div>
+        <div class="mact"><button class="btn alt" id="lB">Choose another file</button>${nA+nC+nH?`<button class="btn" id="lGo">Update the till: ${[nA&&'add '+nA,nC&&'change '+nC,nH&&'hide '+nH].filter(Boolean).join(', ')}</button>`:'<button class="btn" id="lX">Close</button>'}</div>`;
+      m.querySelectorAll('[data-k]').forEach(c=>c.onchange=()=>{ const set=pick[c.dataset.k], i=+c.dataset.i; c.checked?set.add(i):set.delete(i); draw(); });
+      m.querySelector('#lB').onclick=()=>{ cmp=null; draw(); };
+      const x=m.querySelector('#lX'); if(x) x.onclick=close;
+      const go=m.querySelector('#lGo'); if(go) go.onclick=()=>{ const now=Date.now();
+        add.forEach((r,i)=>{ if(pick.add.has(i)) S.products.push({id:SYNC.newId('products'),name:r.name,size:r.size,price:r.price,colour:guessColour(r.name,r.size),active:true,updated:now}); });
+        change.forEach((x,i)=>{ if(pick.change.has(i)) Object.assign(x.p,{price:x.r.price,active:true,updated:now}); });
+        missing.forEach((p,i)=>{ if(pick.hide.has(i)) Object.assign(p,{active:false,updated:now}); });
+        save(); close(); render(); toast('Till updated: '+[nA&&nA+' added',nC&&nC+' changed',nH&&nH+' hidden'].filter(Boolean).join(', ')); };
+    };
+    const read=()=>{ const rows=parsePriceList(text);
+      if(!rows.length){ const msg=m.querySelector('#lMsg'); if(msg) msg.innerHTML='<b style="color:var(--danger)">No products with prices were found in '+esc(source)+'. Each line needs a name and a price.</b>'; else toast('No products found'); return; }
+      cmp=comparePriceList(rows); pick={add:new Set(cmp.add.map((_,i)=>i)),change:new Set(cmp.change.map((_,i)=>i)),hide:new Set()}; draw(); };
+    draw(); });
 }
 
 /* ---------- deals: set up once, applied by the till by itself ---------- */

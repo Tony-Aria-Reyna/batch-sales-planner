@@ -17,6 +17,10 @@ fs.writeFileSync(path.join(out, 'index.html'), html);
 fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ version }));
 fs.writeFileSync(path.join(out, 'sw.js'), fs.readFileSync('src/sw.js', 'utf8').replace('__VERSION__', version));
 for (const f of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'privacy.html']) fs.copyFileSync(path.join('src', f), path.join(out, f));
+// readers for "Load a price list": loaded only when someone picks a PDF or spreadsheet
+fs.mkdirSync(path.join(out, 'lib'), { recursive: true });
+for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) fs.copyFileSync(path.join(__dirname, 'node_modules/pdfjs-dist/build', f), path.join(out, 'lib', f));
+esbuild.buildSync({ entryPoints: ['src/xlsx-entry.js'], bundle: true, minify: true, format: 'iife', outfile: path.join(out, 'lib', 'xlsx.js'), target: 'es2019' });
 fs.mkdirSync(path.join(out, 'fonts'), { recursive: true });
 fs.copyFileSync('src/fonts/cinzel-600.woff2', path.join(out, 'fonts', 'cinzel-600.woff2'));
 // her logo is fetched from her website by GitHub at build time (scripts/fetch-logo.py); without it the app shows its icon

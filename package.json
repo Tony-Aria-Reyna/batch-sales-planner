@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "esbuild": "^0.28.2",
-    "firebase": "^12.19.0"
+    "firebase": "^12.19.0",
+    "pdfjs-dist": "^4.10.38",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
