@@ -13,7 +13,7 @@ const HELPER_COLS = ['products', 'deals', 'sessions', 'sales'];
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
 let app, auth, db, bid = null, unsub = [], S = null, onChange = () => {}, synced = null, user = null;
-let members = [], owners = [], roles = {}, redirectError = null, redirectP = Promise.resolve(), pending = {}, onPending = () => {};
+let members = [], owners = [], mainOwner = null, roles = {}, redirectError = null, redirectP = Promise.resolve(), pending = {}, onPending = () => {};
 
 const clean = o => JSON.parse(JSON.stringify(o));                 // drops undefined + functions
 
@@ -73,23 +73,24 @@ export async function createBusiness(name) {
     name: String(name || '').trim() || 'My business',
     settings: { tz: 'Pacific/Auckland', gst: true, pricesIncludeGst: true, gstRate: 0.15, payments: ['cash', 'eftpos', 'other'],
       channels: ['market', 'farmgate', 'tour', 'shop', 'online', 'wholesale'], overheads: [], pinHash: '', staff: [] },
-    members: [me()], owners: [me()], roles: {}, created: serverTimestamp()
+    members: [me()], owner: me(), owners: [me()], roles: {}, created: serverTimestamp()
   });
   return d.id;
 }
 export const getMembers = () => members.slice();
 export const getOwners = () => owners.slice();
+export const getMainOwner = () => mainOwner;   // created the business; can never be removed or demoted
 export const roleOf = email => !email ? null : owners.includes(email) ? 'owner' : (roles[email] || 'helper');
 export const myRole = () => roleOf(me());
 // One write sets a person's role: owners go in the "owners" list, everyone else in the roles map.
 // Emails contain dots, so the lists and the map are always written whole rather than by field path.
-// There must always be at least one owner (the rules enforce this too).
+// The main owner can never be changed or removed, and there are at most 2 owners (the rules enforce both).
 function peopleWith(email, role) {
   const e = email.trim().toLowerCase(), r = Object.assign({}, roles); let o = owners.filter(x => x !== e);
+  if (e === mainOwner) { const err = new Error('The main owner can never be changed or removed.'); err.code = 'main-owner'; throw err; }
   delete r[e];
   if (role === 'owner') o.push(e); else if (role) r[e] = role === 'manager' ? 'manager' : 'helper';
-  if (!o.length) { const err = new Error('There must always be at least one owner.'); err.code = 'last-owner'; throw err; }
-  if (o.length > 3) { const err = new Error('A business can have at most 3 owners.'); err.code = 'too-many-owners'; throw err; }
+  if (o.length > 2) { const err = new Error('A business can have at most 2 owners.'); err.code = 'too-many-owners'; throw err; }
   return { owners: o, roles: r };
 }
 export const addMember = (email, role) => { const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
@@ -107,7 +108,7 @@ export function start(businessId, state, changed) {
   unsub.push(onSnapshot(doc(db, 'businesses', bid), { includeMetadataChanges: true }, snap => {
     markPending('biz', snap.metadata.hasPendingWrites);
     if (!snap.exists()) return;
-    const d = snap.data(); members = d.members || []; owners = d.owners || []; roles = d.roles || {};
+    const d = snap.data(); members = d.members || []; owners = d.owners || []; mainOwner = d.owner || null; roles = d.roles || {};
     S.name = d.name || ''; S.settings = Object.assign(S.settings || {}, d.settings || {});
     synced.biz = JSON.stringify(bizOf(S));
     onChange('business');

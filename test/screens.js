@@ -44,14 +44,16 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => !!S.settings.pinHash), 'PIN saved (as a hash)');
   await page.click('#addPerson'); await page.fill('#pE', 'helper@example.com'); await page.click('#pA'); await page.waitForTimeout(300);
   ok(await page.evaluate(() => SYNC.roleOf('helper@example.com') === 'helper'), 'added a helper (helper is the default role)');
-  await page.click('#addPerson'); await page.fill('#pE', 'mum@example.com'); await page.click('[data-r="owner"]'); await page.click('#pA'); await page.waitForTimeout(300);
-  ok(await page.evaluate(() => SYNC.roleOf('mum@example.com') === 'owner' && SYNC.getOwners().length === 2), 'added a second owner');
-  await page.locator('[data-role="mum@example.com"]').click(); await page.click('[data-r="manager"]'); await page.waitForTimeout(250);
-  ok(await page.evaluate(() => SYNC.roleOf('mum@example.com') === 'manager' && SYNC.getOwners().length === 1), 'an owner can be changed to a manager');
-  ok(!(await page.$('[data-role="admin@example.com"]')), 'the only owner cannot be changed or removed');
-  await page.locator('[data-role="mum@example.com"]').click(); await page.click('[data-r="owner"]'); await page.click('#cY'); await page.waitForTimeout(250);
-  ok(await page.evaluate(() => SYNC.getOwners().join() === 'admin@example.com,mum@example.com'), 'made an owner again, after a warning');
-  ok(!!(await page.$('[data-role="admin@example.com"]')), 'with two owners, each can be changed');
+  // the account that set the business up is the main owner; here the test admin plays that part
+  await page.click('#addPerson'); await page.fill('#pE', 'co@example.com'); await page.click('[data-r="owner"]'); await page.click('#pA'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => SYNC.roleOf('co@example.com') === 'owner' && SYNC.getMainOwner() === 'admin@example.com'), 'added a co-owner; the creator stays main owner');
+  ok(!(await page.$('[data-role="admin@example.com"]')), 'the main owner has no Change button (cannot be changed or removed)');
+  await page.click('#addPerson'); ok(!(await page.$('[data-r="owner"]')), 'no third owner offered'); await page.click('#pC');
+  await page.locator('[data-role="co@example.com"]').click(); await page.click('[data-r="manager"]'); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => SYNC.roleOf('co@example.com') === 'manager' && SYNC.getOwners().join() === 'admin@example.com'), 'co-owner can be changed to a manager');
+  await page.locator('[data-role="co@example.com"]').click(); await page.click('[data-r="owner"]'); await page.click('#cY'); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => SYNC.getOwners().join() === 'admin@example.com,co@example.com'), 'made co-owner again, after a warning');
+  ok(await page.evaluate(() => { try { SYNC.setRole('admin@example.com', 'manager'); return false; } catch (e) { return e.code === 'main-owner'; } }), 'the app refuses to change the main owner');
   await page.screenshot({ path: path.join(shots, '04-ipad-setup.png'), fullPage: true });
   await page.click('#bk'); await page.waitForSelector('.tiles');
   await page.click('[data-go="setup"]'); await page.waitForTimeout(150);

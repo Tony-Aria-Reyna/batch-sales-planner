@@ -5,8 +5,11 @@ rules_version = '2';
 // Admins are listed as documents admins/{email}, created by hand in the Firebase console. Nobody can
 // create, change or delete them from the app, and no admin address is written in this code.
 //
-// Roles:  owner   = listed in "owners" (1 to 3 people). Everything, including people, roles and deleting
-//                   the business. There must always be at least one owner.
+// Roles:  main owner = the "owner" field: the person who created the business. Can never be removed,
+//                      demoted or replaced, by anyone. Only the main owner can delete the business.
+//         co-owner   = the one other person in "owners" (at most 2 owners). Everything the main owner can
+//                      do except change or remove the main owner, or delete the business. The main owner
+//                      can remove the co-owner, and the co-owner can step down.
 //         manager = roles[email] == 'manager'. Everything except removing people, changing roles or deleting.
 //         helper  = any other member (the safe default). Can see products and deals, open and close a selling
 //                   day, and record sales as themselves. Cannot change prices, products, settings or past sales.
@@ -38,16 +41,19 @@ service cloud.firestore {
       // a new business starts with just the person creating it, as owner, and nothing else in it
       allow create: if (isAdmin() || invited())
                     && request.resource.data.members == [email()]
+                    && request.resource.data.owner == email()
                     && request.resource.data.owners == [email()]
                     && request.resource.data.get('roles', {}) == {};
 
-      // owners and managers change settings. Always 1 to 3 owners, all of them members.
-      // Only an owner can add or remove owners, remove people or change an existing person's role;
-      // a manager can add people (as manager or helper) but not change or remove anyone.
+      // Owners and managers change settings. The main owner never changes and always stays a member and
+      // an owner; at most 2 owners, all of them members. Owners can change people and roles (but the main
+      // owner is protected above); a manager can add people (as manager or helper) but not change or remove anyone.
       allow update: if signedIn() && email() in resource.data.members
                     && roleIn(resource.data) in ['owner', 'manager']
+                    && request.resource.data.owner == resource.data.owner
+                    && request.resource.data.owner in request.resource.data.owners
                     && request.resource.data.owners is list
-                    && request.resource.data.owners.size() >= 1 && request.resource.data.owners.size() <= 3
+                    && request.resource.data.owners.size() >= 1 && request.resource.data.owners.size() <= 2
                     && request.resource.data.members.hasAll(request.resource.data.owners)
                     && request.resource.data.members.size() <= 20
                     && request.resource.data.get('roles', {}).values().hasOnly(['manager', 'helper'])
@@ -56,12 +62,13 @@ service cloud.firestore {
                             && request.resource.data.members.hasAll(resource.data.members)
                             && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).changedKeys().size() == 0
                             && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).removedKeys().size() == 0));
-      allow delete: if signedIn() && email() in resource.data.owners;
+      allow delete: if signedIn() && email() == resource.data.owner;
 
-      // set-up data: everyone in the business can read it (the till needs products and deals);
-      // only owners and managers can change it, so a helper can never change a price
+      // set-up data: owners and managers can read and change everything; helpers can read only what the
+      // till needs (products, deals, selling days, sales), and can never change a price
       match /{col}/{id} {
-        allow read: if isMember(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
+        allow read: if (canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'])
+                    || (isMember(bid) && col in ['products', 'deals', 'sessions', 'sales']);   // helpers: just what the till needs
         allow write: if canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
       }
       // helpers: open and close a selling day, and record (never edit or delete) their own sales
