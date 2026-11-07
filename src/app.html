@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#3f5a3c">
+<meta name="theme-color" content="#2f3b1f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,11 +14,16 @@
 <title>Rata &amp; Smudge</title>
 <style>
 :root{
-  --green:#3f5a3c; --green2:#5f7f58; --cream:#f6f1e7; --card:#fffdf8; --ink:#2b2a26; --muted:#6d685d; --line:#e4dccb;
-  --rata:#b8322a; --honey:#c98a3b; --ok:#2f7a45; --warn:#a86a12; --danger:#b8322a;
+  /* Rata & Smudge brand, taken from the logo on rataandsmudge.co.nz: deep olive lettering, sage sprig,
+     lavender buds, warm off-white. Cinzel is the closest free match to the logo's classical capitals. */
+  --green:#2f3b1f; --green2:#6b703e; --lav:#806092; --cream:#f7f5ee; --card:#fffefa; --ink:#2b2c22; --muted:#686a5a; --line:#e5e1d2;
+  --rata:#b8322a; --honey:#c98a3b; --ok:#3f6a2a; --warn:#a86a12; --danger:#b8322a;
+  --brand-font:"Cinzel",Georgia,"Times New Roman",serif;
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px); --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
 }
+@font-face{font-family:"Cinzel";src:url("fonts/cinzel-600.woff2") format("woff2");font-weight:400 700;font-display:swap}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.top h1,.gcard h1,.tile h2,.card h3,.modal h2,.coming h2{font-family:var(--brand-font);font-weight:600;letter-spacing:.02em}
 html,body{margin:0;height:100%;background:var(--cream);color:var(--ink);font:18px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
 body{overscroll-behavior:none;-webkit-user-select:none;user-select:none}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
@@ -41,6 +46,12 @@ a{color:var(--green)}
 .syncpill.wait{background:#ffe2a8;color:#5b3c00}
 .top .cog{font-size:26px;width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.16)}
 main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--sab)) calc(18px + var(--sal));max-width:1180px;margin:0 auto}
+
+/* ---------- brand ---------- */
+.brand{display:flex;flex-direction:column;align-items:center;margin:0 0 14px}
+.brand img{max-width:min(420px,80%);max-height:120px;object-fit:contain;mix-blend-mode:multiply}
+.brand small{font-family:var(--brand-font);color:var(--green2);letter-spacing:.06em;font-size:14px;margin-top:2px}
+.gcard img.brandlogo{max-width:100%;max-height:150px;object-fit:contain;mix-blend-mode:multiply}
 
 /* ---------- home ---------- */
 .today{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
@@ -116,7 +127,7 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .ctot span{color:var(--muted);font-size:16px}
 .pay{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
 .pb{border-radius:16px;min-height:72px;font-weight:800;font-size:19px;color:#fff}
-.pb.cash{background:var(--ok)} .pb.eftpos{background:#24507a} .pb.other{background:#6d685d}
+.pb.cash{background:var(--ok)} .pb.eftpos{background:var(--lav)} .pb.other{background:#6d685d}
 .pb:disabled{opacity:.35}
 .tbar{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 14px}
 .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
@@ -172,8 +183,8 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .shareic{display:inline-block;vertical-align:-4px;width:22px;height:22px}
 
 /* ---------- sign-in gate ---------- */
-#gate{position:fixed;inset:0;z-index:60;background:linear-gradient(170deg,#e9e1cf 0%,#f6f1e7 55%,#dfe8d9 100%);display:flex;align-items:center;justify-content:center;padding:calc(20px + var(--sat)) 20px calc(20px + var(--sab));overflow:auto}
-.gcard{background:var(--card);border-radius:28px;padding:34px 30px;width:min(520px,100%);text-align:center;box-shadow:0 20px 60px rgba(63,90,60,.18)}
+#gate{position:fixed;inset:0;z-index:60;background:linear-gradient(170deg,#ebe7da 0%,#f7f5ee 55%,#e4e6d6 100%);display:flex;align-items:center;justify-content:center;padding:calc(20px + var(--sat)) 20px calc(20px + var(--sab));overflow:auto}
+.gcard{background:var(--card);border-radius:28px;padding:34px 30px;width:min(520px,100%);text-align:center;box-shadow:0 20px 60px rgba(47,59,31,.16)}
 .gcard img.logo{width:96px;height:96px;border-radius:24px}
 .gcard h1{margin:14px 0 6px;font-size:32px;color:var(--green)}
 .gcard p{margin:10px 0}
@@ -184,7 +195,7 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .gerr{background:#fbe4e1;color:#7d1d16;border-radius:14px;padding:12px 14px;font-size:16px;text-align:left;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .gdots{display:flex;gap:10px;justify-content:center;margin:18px 0}
 .gdots i{width:14px;height:14px;border-radius:50%;background:var(--green2);animation:bob 1s infinite}
-.gdots i:nth-child(2){animation-delay:.15s;background:var(--honey)} .gdots i:nth-child(3){animation-delay:.3s;background:var(--rata)}
+.gdots i:nth-child(2){animation-delay:.15s;background:var(--green)} .gdots i:nth-child(3){animation-delay:.3s;background:var(--lav)}
 @keyframes bob{50%{transform:translateY(-8px)}}
 
 /* ---------- iPad portrait and phones ---------- */
@@ -298,7 +309,8 @@ SCREENS.home={
   html(){
     const tiles=TILES.filter(t=>t.all||canManage()), d=openDay();
     const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
-    return `<section class="today" aria-label="Today">
+    return `<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
+      <section class="today" aria-label="Today">
         <div><span>Today's takings</span><b>${c2(taken)}</b></div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
         <div><span>Batches due</span><b>0</b></div>
@@ -525,11 +537,11 @@ function gate(kind,extra){
   const g=$('#gate');
   if(!kind){ g.hidden=true; g.innerHTML=''; setTimeout(offerInstall,2500); return; }
   g.hidden=false;
-  const logo='<img class="logo" src="icon-192.png" alt="">';
+  const logo='<img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.outerHTML=\'<img class=&quot;logo&quot; src=&quot;icon-192.png&quot; alt=&quot;&quot;>\'">';
   let c='';
   if(kind==='loading') c=`${logo}<h1>Rata &amp; Smudge</h1><div class="gdots"><i></i><i></i><i></i></div><p class="gsmall">Getting everything ready…</p>`;
   if(kind==='noconfig') c=`${logo}<h1>Not connected yet</h1><p>This copy of the app has no Firebase project set up, so it cannot sign in.</p><p class="gsmall">For Tony: add <b>firebase-config.json</b> and rebuild.</p>`;
-  if(kind==='signin') c=`${logo}<h1>Rata &amp; Smudge</h1><p>Your till, brew planner and orders, on the iPad and your phone.</p>
+  if(kind==='signin') c=`${logo}<h1>Rata &amp; Smudge</h1><p>Herbal Hugs from Central Otago. Your till, brew planner and orders, on the iPad and your phone.</p>
      <button class="gbtn" id="gIn">${GOOGLE_G}<span>Sign in with Google</span></button>${extra?`<p class="gerr">${esc(extra)}</p>`:''}
      <p class="gsmall">Only the Google accounts added to a business can see it.</p><p class="gsmall"><a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>`;
   if(kind==='nobiz') c=`${logo}<h1>Nearly there</h1><p>You're signed in as <b>${esc(SYNC.me())}</b>, but this account isn't part of a business yet.</p>
