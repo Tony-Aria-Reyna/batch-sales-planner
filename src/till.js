@@ -46,7 +46,7 @@ function startHtml(){
       <input class="txt" id="sName" list="sPast" autocomplete="off" placeholder="${startType==='market'?'e.g. Titirangi Village Market':''}">
       ${past.length?`<div class="pastnames">${past.map(n=>`<button class="chip" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>`:''}
       <label class="note" for="sFloat">Cash float in the tin (optional)</label>
-      <input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 100"></div>
+      <input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):''}"></div>
     <div class="card"><h3>Who is serving?</h3><p class="note">Each sale records who served.</p>
       <div class="pastnames">${staff.map(n=>`<button class="chip big ${servedBy()===n?'on':''}" data-who="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip big" id="sWhoAdd">＋ Someone new</button></div></div>
     ${activeProducts().length?'':`<div class="card" style="border-color:var(--rata)"><b>No products yet.</b><p class="note">${canManage()?'Add them first in Setup → Products and prices.':'Ask the owner to add the products first.'}</p></div>`}
@@ -107,6 +107,7 @@ function tillHtml(){
       ${helper?'':`<button class="btn alt" id="tList">🧾 Sales <span class="lk">🔒</span></button>`}
       ${lock?`<button class="btn alt" id="tUnlock">🔓 Leave till mode <span class="lk">🔒</span></button>`:(helper?'':`<button class="btn alt" id="tLock">🤝 Hand to a helper</button>`)}
       <button class="btn alt" id="tWho">👤 ${esc(servedBy()||'Who is serving?')}</button>
+      ${helper?'':`<button class="btn alt" id="tFloat">💵 Float <span class="lk">🔒</span></button>`}
       ${helper?'':`<button class="btn alt" id="tEnd">🏁 End the day <span class="lk">🔒</span></button>`}</div>
     <div class="filters">${cats.length>1?[['all','All',all.length]].concat(cats.map(k=>[k,COLOURS[k][3],all.filter(p=>(p.colour||'other')===k).length])).map(([k,label,n])=>
       `<button class="fchip ${tillFilter===k?'on':''}" data-f="${k}" style="${k==='all'?'':`--c:${COLOURS[k][0]}`}">${k==='all'?'':'<i></i>'}${esc(label)} <small>${n}</small></button>`).join(''):''}</div>
@@ -141,6 +142,7 @@ function wireTill(){
   const lk=$('#tLock'); if(lk) lk.onclick=handToHelper;
   const ul=$('#tUnlock'); if(ul) ul.onclick=()=>approve('leave till mode',()=>{ lsSet('rs.tillMode',null); render(); toast('Till mode off'); });
   $('#tWho').onclick=()=>{ if(tillLock()){ toast('In till mode. Leave till mode to change who is serving.'); return; } pickServer(()=>render()); };
+  const tf=$('#tFloat'); if(tf) tf.onclick=editFloat;
   const te=$('#tEnd'); if(te) te.onclick=()=>approve('end the day',who=>endDay(who));
   keepAwake(true);
 }
@@ -363,6 +365,33 @@ function showDaySales(approver){
   }; draw(); });
 }
 
+/* ---------- the cash float (with a PIN) ----------
+   The opening float can be corrected, and more float added during the day (e.g. extra change).
+   End of day expects: opening float + float added + cash sales. */
+const floatAdded=d=>(d.floatAdds||[]).reduce((n,a)=>n+(a.amount||0),0);
+function editFloat(){
+  const d=openDay(); if(!d) return;
+  modal((m,close)=>{ const draw=()=>{
+    m.innerHTML=`<h2>💵 Cash float</h2>
+      <div class="row"><div class="grow"><b>Opening float</b><small>What was in the tin at the start</small></div><b style="font-size:22px">${c2(d.float)}</b></div>
+      ${(d.floatAdds||[]).map(a=>`<div class="row"><div class="grow">Float added at ${nzTime(a.at)}<small>${esc(a.note||'')} · approved by ${esc(personName(a.approvedBy))}</small></div><b>${c2(a.amount)}</b></div>`).join('')}
+      <div class="row"><div class="grow"><b>Float in total</b></div><b style="font-size:22px">${c2((d.float||0)+floatAdded(d))}</b></div>
+      <div class="card" style="margin:12px 0 0"><h3 style="font-size:18px">Add more float</h3><p class="note">Extra notes or coins put in the tin during the day.</p>
+        <input class="txt" id="fA" inputmode="decimal" placeholder="e.g. 50"><input class="txt" id="fN" placeholder="Note (optional), e.g. more coins" style="margin-top:8px">
+        <div class="mact"><button class="btn" id="fAdd">Add with PIN</button></div></div>
+      <div class="card" style="margin:12px 0 0"><h3 style="font-size:18px">Correct the opening float</h3>
+        <input class="txt" id="fO" inputmode="decimal" placeholder="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):'200.00'}" value="${d.float?(d.float/100).toFixed(2):''}">
+        <div class="mact"><button class="btn alt" id="fSet">Change with PIN</button></div></div>
+      <div class="mact"><button class="btn" id="fX">Done</button></div>`;
+    m.querySelector('#fX').onclick=close;
+    m.querySelector('#fAdd').onclick=()=>{ const c=toCents(m.querySelector('#fA').value), note=m.querySelector('#fN').value.trim(); if(!(c>0)){ toast('Type the amount added, e.g. 50'); return; }
+      approve('add float',who=>{ d.floatAdds=(d.floatAdds||[]).concat([{amount:c,at:Date.now(),note,approvedBy:who,by:SYNC.me()}]); save(); draw(); toast(c2(c)+' float added'); },c2(c)+(note?' ('+note+')':'')+' to '+(d.name||'the day')); };
+    m.querySelector('#fSet').onclick=()=>{ const v=m.querySelector('#fO').value.trim(), c=toCents(v); if(!(c>=0)||!v){ toast('Type the opening float, e.g. 200'); return; }
+      if(c===(d.float||0)){ toast('That\'s the float already'); return; }
+      approve('change the opening float',who=>{ const was=d.float||0; d.float=c; d.floatChanges=(d.floatChanges||[]).concat([{from:was,to:c,at:Date.now(),approvedBy:who}]); save(); draw(); toast('Opening float now '+c2(c)); },c2(d.float)+' → '+c2(c)+' for '+(d.name||'the day')); };
+  }; draw(); });
+}
+
 /* ---------- end of day (with a PIN) ---------- */
 function dayTotals(d){
   const all=daySales(d), ok=all.filter(s=>!s.voided), by=k=>ok.filter(s=>s.method===k).reduce((n,s)=>n+s.total,0);
@@ -371,13 +400,13 @@ function dayTotals(d){
     discount:ok.reduce((n,s)=>n+(s.discount||0),0),units,voids:all.filter(s=>s.voided&&s.voidReason!=='corrected'),corrections:all.filter(s=>s.voidReason==='corrected').length};
 }
 function endDay(approver){
-  const d=openDay(); if(!d) return; const t=dayTotals(d), expected=(d.float||0)+t.cash;
+  const d=openDay(); if(!d) return; const t=dayTotals(d), added=floatAdded(d), expected=(d.float||0)+added+t.cash;
   modal((m,close)=>{ m.innerHTML=`<h2>🏁 End of the day</h2><p class="note">Opened with ${esc(personName(approver))}'s PIN.</p>
     <div class="eod"><div><span>Sales</span><b>${t.count}</b></div><div><span>Takings</span><b>${c2(t.total)}</b></div><div><span>GST included</span><b>${c2(t.gst)}</b></div><div><span>Deals and discounts</span><b>${c2(t.discount)}</b></div></div>
     <div class="card" style="margin:12px 0"><div class="row"><div class="grow">💳 EFTPOS<small>Check against the terminal's settlement</small></div><b>${c2(t.eftpos)}</b></div>
       ${t.other?`<div class="row"><div class="grow">🔖 Other</div><b>${c2(t.other)}</b></div>`:''}
       <div class="row"><div class="grow">💵 Cash sales</div><b>${c2(t.cash)}</b></div>
-      <div class="row"><div class="grow">Cash expected in the tin<small>Float ${c2(d.float)} + cash sales</small></div><b>${c2(expected)}</b></div>
+      <div class="row"><div class="grow">Cash expected in the tin<small>Float ${c2(d.float)}${added?' + float added '+c2(added):''} + cash sales</small></div><b>${c2(expected)}</b></div>
       <label class="note" for="eC">Count the cash in the tin</label><input class="txt" id="eC" inputmode="decimal" placeholder="e.g. 412.50"><p class="change" id="eDiff">Count the tin, then type the total.</p></div>
     ${t.voids.length?`<p class="note"><b>${t.voids.length} voided sale${t.voids.length>1?'s':''}:</b> ${t.voids.map(s=>c2(s.total)+' at '+nzTime(s.at)+' ('+esc(personName(s.voidedBy))+')').join(', ')}</p>`:''}
     ${t.corrections?`<p class="note"><b>${t.corrections} corrected sale${t.corrections>1?'s':''}</b> (see the approvals log).</p>`:''}
@@ -388,7 +417,7 @@ function endDay(approver){
       out.className='change '+(diff===0?'ok':'bad'); out.innerHTML=diff===0?'✓ The cash is right':(diff>0?'Over by <b>'+c2(diff)+'</b>':'Short by <b>'+c2(-diff)+'</b>'); };
     m.querySelector('#eK').onclick=close;
     m.querySelector('#eX').onclick=()=>{ const c=toCents(inp.value); if(!(c>=0)){ toast('Type the cash you counted first'); inp.focus(); return; }
-      Object.assign(d,{status:'closed',closedAt:Date.now(),closedBy:SYNC.me(),closeApprovedBy:approver,countedCash:c,expectedCash:expected,totals:{count:t.count,total:t.total,gst:t.gst,cash:t.cash,eftpos:t.eftpos,other:t.other}});
+      Object.assign(d,{status:'closed',closedAt:Date.now(),closedBy:SYNC.me(),closeApprovedBy:approver,countedCash:c,expectedCash:expected,floatAdded:added,totals:{count:t.count,total:t.total,gst:t.gst,cash:t.cash,eftpos:t.eftpos,other:t.other}});
       logApproval('close the day',approver,c2(t.total)+' taken; cash counted '+c2(c)+(c===expected?' (right)':(c>expected?' (over '+c2(c-expected)+')':' (short '+c2(expected-c)+')')));
       save(); close(); clearCart(); lsSet('rs.tillMode',null); lastSale=null; keepAwake(false); stack=['home']; render(); toast('Day closed · '+c2(t.total)+' taken'); };
   });

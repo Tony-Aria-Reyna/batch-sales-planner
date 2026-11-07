@@ -30,7 +30,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.fill('#gName', 'Rata & Smudge'); await page.click('#gNew'); await page.waitForSelector('.tiles');
   await page.waitForTimeout(300);
   ok(await page.evaluate(() => ['inputs', 'recipes', 'products', 'sales', 'orders'].every(c => S[c].length === 0)), 'a new business starts empty');
-  ok((await page.$$('.tile')).length === 6, 'owner sees six tiles');
+  ok((await page.$$('.tile')).length === 7, 'owner sees seven tiles (including Calendar)');
   ok(/Rata & Smudge/.test(await page.textContent('.top h1')), 'business name in the top bar');
   await page.screenshot({ path: path.join(shots, '02-ipad-home-landscape.png') });
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(150);
@@ -97,7 +97,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#lGo'); await page.waitForTimeout(200);
   ok(await page.evaluate(() => S.products.length === 4 && S.products.find(p => p.name === 'Test Oil').price === 3000), 'products saved with prices in cents');
   ok(await page.evaluate(() => S.products.find(p => p.name === 'Test Balm').colour === 'balm'), 'button colour guessed from the product');
-  await page.click('#bk'); await page.click('#goDeals'); await page.click('#dAdd');
+  await page.click('#bk'); await page.fill('#defFloat', '200'); await page.press('#defFloat', 'Tab'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.settings.defaultFloat === 20000), 'usual float saved ($200)');
+  await page.click('#goDeals'); await page.click('#dAdd');
   await page.fill('#kN', 'Any 2 for $35'); await page.fill('#kQ', '2'); await page.fill('#kP', '35');
   for (const n of ['Test Balm', 'Test Oil']) await page.locator('label.row', { hasText: n }).locator('input').check();
   await page.click('#kS'); await page.waitForTimeout(150);
@@ -105,6 +107,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#bk'); await page.click('#bk');
 
   await page.click('[data-go="sell"]'); await page.waitForSelector('#sGo');
+  ok((await page.inputValue('#sFloat')) === '200.00', 'starting a day: the usual $200 float is filled in');
   await page.click('[data-t="market"]'); await page.fill('#sName', 'Test Market'); await page.fill('#sFloat', '100');
   await page.click('#sWhoAdd'); await page.fill('#wN', 'Sam'); await page.click('#wOk'); await page.waitForTimeout(100);
   await page.fill('#sName', 'Test Market'); await page.fill('#sFloat', '100');
@@ -170,6 +173,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const o = S.sales.find(s => s.total === 1200); const n = S.sales.find(s => s.total === 2700); return o.voided && o.voidReason === 'corrected' && o.replacedBy === n.id && n.replaces === o.id && n.correctedBy === 'admin@example.com'; }), 'correction saved: old sale voided as corrected and linked to the new one');
   await page.screenshot({ path: path.join(shots, '18-ipad-till-bold-colours.png') });
 
+  console.log('Cash float');
+  await page.click('#tFloat'); await page.fill('#fA', '50'); await page.fill('#fN', 'more coins'); await page.click('#fAdd'); await pin(page, '2580'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => S.sessions[0].floatAdds.length === 1 && S.sessions[0].floatAdds[0].amount === 5000 && S.sessions[0].floatAdds[0].approvedBy === 'admin@example.com'), 'float added mid-market ($50), with who approved it');
+  await page.fill('#fO', '120'); await page.click('#fSet'); await pin(page, '2580'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => S.sessions[0].float === 12000 && S.sessions[0].floatChanges[0].from === 10000), 'opening float corrected ($100 → $120), old value kept');
+  ok(/Float in total\s*\$170\.00/.test(await text(page)), 'float total shown ($120 + $50)'); await page.click('#fX');
+
   console.log('Till mode (helper holding the iPad)');
   await page.click('#tLock'); await page.click('[data-who="Sam"]'); await page.waitForTimeout(150);
   ok(!(await page.$('#bk')) && !!(await page.$('#tlk')), 'till mode: no Back, no way to Setup');
@@ -185,18 +195,26 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#dOk');
   await page.click('#tEnd'); await page.waitForSelector('.pinpad'); await pin(page, '2580');
   await page.waitForSelector('#eC');
-  // left: $50 EFTPOS; cash $90 gift box + $13.50 discounted tea; the $27 corrected sale was voided → expected cash = $100 float + $103.50
-  await page.fill('#eC', '203.50'); await page.waitForTimeout(50);
+  // left: $50 EFTPOS; cash $90 gift box + $13.50 discounted tea; the $27 corrected sale was voided → expected cash = $120 float + $50 added + $103.50
+  ok(/float added \$50\.00/.test(await text(page)), 'end of day: added float shown in the cash expected');
+  await page.fill('#eC', '273.50'); await page.waitForTimeout(50);
   ok(/cash is right/.test(await page.textContent('#eDiff')), 'end of day: counted cash matches float + cash sales');
-  await page.fill('#eC', '198.50'); ok(/Short by \$5\.00/.test(await page.textContent('#eDiff')), 'end of day: a $5 shortfall is shown');
+  await page.fill('#eC', '268.50'); ok(/Short by \$5\.00/.test(await page.textContent('#eDiff')), 'end of day: a $5 shortfall is shown');
   await page.screenshot({ path: path.join(shots, '15-ipad-end-of-day.png') });
-  await page.fill('#eC', '203.50'); await page.click('#eX'); await page.waitForSelector('.tiles');
+  await page.fill('#eC', '273.50'); await page.click('#eX'); await page.waitForSelector('.tiles');
   ok(await page.evaluate(() => S.sessions[0].status === 'closed' && S.sessions[0].totals.eftpos === 5000 && !(localStorage.getItem('rs.tillMode')||'').includes('Sam')), 'day closed, totals stored, till mode off');
   ok(await page.evaluate(() => { const t = document.querySelector('.today').innerText; return /🔒 Show/.test(t) && !/153/.test(t); }), 'home: takings hidden until a PIN');
   await page.click('#showMoney'); await pin(page, '2580'); await page.waitForTimeout(150);
   ok(await page.evaluate(() => /\$153\.50/.test(document.querySelector('.today').innerText)), 'home: takings shown after a PIN ($50 + $90 + $13.50)');
+  await page.click('[data-go="calendar"]'); await page.waitForSelector('.calgrid');
+  ok(await page.evaluate(() => /Test Market/.test(document.querySelector('.cd.istoday').innerText)), 'calendar: today shows the Test Market');
+  ok(/Test Market/.test(await text(page)) && /\$153\.50/.test(await text(page)), 'calendar: tapping a day lists its selling days (takings shown while unlocked)');
+  await page.screenshot({ path: path.join(shots, '22-calendar.png') });
+  await page.click('#calNext'); ok(!(await page.$('.cd.istoday')) && !!(await page.$('#calToday')), 'calendar: next month, with a way back'); await page.click('#calToday');
+  await page.click('#bk');
   await page.click('[data-go="setup"]'); await pin(page, '2580'); await page.click('#goAudit'); await page.waitForTimeout(100);
   const log = await text(page);
+  ok(/Add float/.test(log) && /Change the opening float/.test(log), 'float changes are in the approvals log');
   ok(['Give a discount', 'Add an item not on the till', 'Correct a sale', 'Void a sale', 'End the day', 'Close the day', 'See the sales', 'Leave till mode'].every(a => log.includes(a) || a === 'Leave till mode') && /approved by Admin/.test(log), 'approvals log lists each approval with who and when');
   await page.screenshot({ path: path.join(shots, '19-ipad-approvals-log.png'), fullPage: true });
   await page.click('#bk'); await page.click('#bk');
@@ -246,6 +264,18 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await op2.screenshot({ path: path.join(shots, '21-rules-notice.png') });
   await op2.evaluate(() => localStorage.removeItem('mockdeny')); await op2.close();
 
+  console.log('Each owner sets their own PIN');
+  const cp = await ipad.newPage(); cp.on('pageerror', e => errs.push(e.message));
+  await cp.goto(url); await cp.waitForSelector('#gIn'); await signIn(cp, 'co@example.com'); await cp.waitForSelector('.tiles'); await cp.waitForTimeout(300);
+  ok(/Set your own PIN/.test(await text(cp)), 'a co-owner without a PIN is reminded on the home screen');
+  await cp.click('[data-go="setup"]'); await cp.waitForSelector('#cY');
+  ok(/Set your own PIN first/.test(await text(cp)) && !(await cp.$('.pinpad')), 'approvals ask the co-owner for their OWN PIN first, not someone else\'s');
+  await cp.click('#cY'); await cp.fill('#pnN', 'Co'); await cp.click('#pnOk'); await pin(cp, '2580'); await cp.waitForTimeout(100);
+  ok(/Someone else uses that PIN/.test(await text(cp)), 'the co-owner cannot pick a PIN someone else already uses');
+  await pin(cp, '1470'); await cp.waitForTimeout(100); await pin(cp, '1470'); await cp.waitForTimeout(200); await pin(cp, '1470'); await cp.waitForSelector('#bizName');
+  ok(await cp.evaluate(() => S.pins.filter(p => p.hash).length === 2 && S.audit.some(a => a.action === 'open Setup' && a.approver === 'co@example.com')), 'co-owner\'s own PIN works and is logged as them');
+  await cp.close();
+
   console.log('Android phone: helper, stranger, and a second business');
   const phone = await browser.newContext({ ...devices['Pixel 7'] });
   // share the fake database between the iPad and the phone (it lives in localStorage)
@@ -253,7 +283,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await phone.addInitScript(d => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('mockdb', d); sessionStorage.setItem('seeded', '1'); } }, db);
   const hp = await phone.newPage(); hp.on('pageerror', e => errs.push(e.message));
   await hp.goto(url); await hp.waitForSelector('#gIn'); await signIn(hp, 'helper@example.com'); await hp.waitForSelector('.tiles'); await hp.waitForTimeout(200);
-  ok((await hp.$$('.tile')).length === 1 && !(await hp.$('#cog')), 'helper sees only Sell, and no Setup');
+  ok((await hp.$$('.tile')).length === 2 && !(await hp.$('#cog')), 'helper sees only Sell and Calendar, and no Setup');
   await hp.screenshot({ path: path.join(shots, '06-android-helper.png') });
   await hp.click('[data-go="sell"]'); await hp.waitForSelector('#sGo'); await hp.click('[data-t="farmgate"]');
   await hp.click('[data-who="Sam"]'); await hp.click('#sGo'); await hp.waitForSelector('.ptile');
