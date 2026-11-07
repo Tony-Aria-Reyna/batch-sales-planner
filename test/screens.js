@@ -54,6 +54,11 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.locator('[data-role="co@example.com"]').click(); await page.click('[data-r="owner"]'); await page.click('#cY'); await page.waitForTimeout(250);
   ok(await page.evaluate(() => SYNC.getOwners().join() === 'admin@example.com,co@example.com'), 'made co-owner again, after a warning');
   ok(await page.evaluate(() => { try { SYNC.setRole('admin@example.com', 'manager'); return false; } catch (e) { return e.code === 'main-owner'; } }), 'the app refuses to change the main owner');
+  await page.locator('[data-role="co@example.com"]').click(); await page.click('#hand'); await page.fill('#hIn', 'hand over'); await page.click('#hGo'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => SYNC.getMainOwner() === 'co@example.com' && SYNC.roleOf('admin@example.com') === 'owner'), 'handed over: the co-owner is now main owner, the old one co-owner');
+  ok(!(await page.$('[data-role="co@example.com"]')) && !(await page.$('#del')), 'after handing over: cannot change the new main owner or delete the business');
+  // put it back for the rest of the tests (the fake database has no rules)
+  await page.evaluate(() => { const d = JSON.parse(localStorage.mockdb); const k = Object.keys(d).find(x => /^businesses\/[^/]+$/.test(x)); d[k].owner = 'admin@example.com'; localStorage.mockdb = JSON.stringify(d); window.dispatchEvent(new StorageEvent('storage', { key: 'mockdb' })); }); await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(shots, '04-ipad-setup.png'), fullPage: true });
   await page.click('#bk'); await page.waitForSelector('.tiles');
   await page.click('[data-go="setup"]'); await page.waitForTimeout(150);

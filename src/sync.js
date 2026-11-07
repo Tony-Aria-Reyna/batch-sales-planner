@@ -95,6 +95,13 @@ function peopleWith(email, role) {
 }
 export const addMember = (email, role) => { const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
 export const setRole = (email, role) => updateDoc(doc(db, 'businesses', bid), peopleWith(email, role));
+// Hand the main owner role to the co-owner. Only the main owner can do this (the rules enforce it);
+// afterwards the old main owner is co-owner and the new main owner can never be removed by anyone else.
+export const handOver = email => {
+  if (me() !== mainOwner) { const e = new Error('Only the main owner can hand the business over.'); e.code = 'not-main-owner'; return Promise.reject(e); }
+  if (!owners.includes(email)) { const e = new Error('Make them co-owner first.'); e.code = 'not-co-owner'; return Promise.reject(e); }
+  return updateDoc(doc(db, 'businesses', bid), { owner: email });
+};
 export const removeMember = email => updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayRemove(email) }, peopleWith(email, null)));
 
 /* ---------- live data ---------- */

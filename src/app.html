@@ -425,12 +425,20 @@ function personMenu(e){
     const label=x=>x==='owner'?'co-owner':x, canOwn=SYNC.getOwners().length<2;
     m.innerHTML=`<h2>${esc(e)}</h2><p class="note">Now: ${r==='owner'?'Co-owner':ROLE_TXT[r]}${e===SYNC.me()?' (this is you)':''}</p>
       <div class="mact" style="justify-content:flex-start">${['helper','manager','owner'].filter(x=>x!==r&&(x!=='owner'||canOwn)).map(x=>`<button class="btn alt" data-r="${x}">Make ${x==='owner'?'co-owner':'a '+x}</button>`).join('')}</div>
+      ${r==='owner'&&SYNC.me()===SYNC.getMainOwner()&&e!==SYNC.me()?`<div class="card" style="margin:14px 0 0"><h3>🔑 Hand over the business</h3><p class="note">Make ${esc(e)} the <b>main owner</b>. You become co-owner. After this, nobody (including you) can remove or demote them, and only they could hand it back.</p><button class="btn" id="hand">Make them the main owner…</button></div>`:''}
       <div class="mact"><button class="btn danger" id="rm">Remove from the business</button><button class="btn" id="ok">Done</button></div>`;
     const change=async to=>{ try{ await SYNC.setRole(e,to); close(); toast(e+' is now '+(to==='owner'?'co-owner':'a '+to)); }catch(x){ toast('Could not change: '+(x.message||x.code)); } };
     m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{ const to=b.dataset.r;
       if(e===SYNC.me()&&r==='owner'){ close(); confirmBox('Stop being co-owner?','You will no longer be able to change people or roles. The main owner can make you co-owner again.','Yes, change me',()=>change(to),true); return; }
       if(to==='owner'){ close(); confirmBox('Make '+e+' co-owner?','They will be able to do everything except change you (the main owner) or delete the business. You can remove them at any time.','Make co-owner',()=>change(to)); return; }
       change(to); });
+    const hb=m.querySelector('#hand'); if(hb) hb.onclick=()=>{ close(); modal((m2,close2)=>{
+      m2.innerHTML=`<h2>Hand ${esc(S.name||'the business')} to ${esc(e)}?</h2><p>They become the <b>main owner</b> for good: only they can delete the business, and nobody can remove them. You stay on as <b>co-owner</b>, and they can remove you.</p>
+        <p class="note">Type <b>HAND OVER</b> to confirm.</p><input class="txt" id="hIn" autocapitalize="characters" placeholder="HAND OVER">
+        <div class="mact"><button class="btn alt" id="hC">Cancel</button><button class="btn" id="hGo">Hand over</button></div>`;
+      m2.querySelector('#hC').onclick=close2;
+      m2.querySelector('#hGo').onclick=async()=>{ if(m2.querySelector('#hIn').value.trim().toUpperCase()!=='HAND OVER'){ toast('Type HAND OVER to confirm'); return; }
+        try{ await SYNC.handOver(e); close2(); toast(e+' is now the main owner'); }catch(x){ toast('Could not hand over: '+(x.message||x.code)); } }; }); };
     m.querySelector('#rm').onclick=()=>{ close(); confirmBox('Remove '+e+'?','They will no longer be able to open the business.','Remove',async()=>{ try{ await SYNC.removeMember(e); toast('Removed'); }catch(x){ toast('Could not remove: '+(x.message||x.code)); } },true); };
     m.querySelector('#ok').onclick=close; });
 }

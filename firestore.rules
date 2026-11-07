@@ -6,7 +6,9 @@ rules_version = '2';
 // create, change or delete them from the app, and no admin address is written in this code.
 //
 // Roles:  main owner = the "owner" field: the person who created the business. Can never be removed,
-//                      demoted or replaced, by anyone. Only the main owner can delete the business.
+//                      demoted or replaced by anyone else. Only the main owner can delete the business,
+//                      and only the main owner can hand the role over, to the co-owner (who then
+//                      becomes the protected main owner, and the old main owner becomes co-owner).
 //         co-owner   = the one other person in "owners" (at most 2 owners). Everything the main owner can
 //                      do except change or remove the main owner, or delete the business. The main owner
 //                      can remove the co-owner, and the co-owner can step down.
@@ -50,7 +52,8 @@ service cloud.firestore {
       // owner is protected above); a manager can add people (as manager or helper) but not change or remove anyone.
       allow update: if signedIn() && email() in resource.data.members
                     && roleIn(resource.data) in ['owner', 'manager']
-                    && request.resource.data.owner == resource.data.owner
+                    && (request.resource.data.owner == resource.data.owner
+                        || (email() == resource.data.owner && request.resource.data.owner in resource.data.owners))
                     && request.resource.data.owner in request.resource.data.owners
                     && request.resource.data.owners is list
                     && request.resource.data.owners.size() >= 1 && request.resource.data.owners.size() <= 2

@@ -41,6 +41,11 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('co-owner cannot demote the main owner', assertFails(updateDoc(doc(as(OWNER2), 'businesses/b1'), { owners: [OWNER2], roles: { [OWNER]: 'manager', [HELPER]: 'manager', [MANAGER]: 'manager' } })));
   await t('co-owner cannot take over as main owner', assertFails(updateDoc(doc(as(OWNER2), 'businesses/b1'), { owner: OWNER2 })));
   await t('co-owner cannot delete the business', assertFails(deleteDoc(doc(as(OWNER2), 'businesses/b1'))));
+  await t('main owner cannot hand over to someone who is not co-owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owner: MANAGER })));
+  await t('main owner hands over to the co-owner', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { owner: OWNER2 })));
+  await t('old main owner (now co-owner) cannot take it back', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owner: OWNER })));
+  await t('old main owner cannot remove the new main owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, HELPER, MANAGER], owners: [OWNER] })));
+  await t('new main owner hands it back', assertSucceeds(updateDoc(doc(as(OWNER2), 'businesses/b1'), { owner: OWNER })));
   await t('no third owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owners: [OWNER, OWNER2, MANAGER] })));
   await t('owners cannot be someone outside the business', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owners: [OWNER, STRANGER] })));
   await t('main owner can remove the co-owner', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, HELPER, MANAGER], owners: [OWNER] })));
