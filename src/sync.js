@@ -13,7 +13,7 @@ const HELPER_COLS = ['products', 'deals', 'sessions', 'sales'];
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
 let app, auth, db, bid = null, unsub = [], S = null, onChange = () => {}, synced = null, user = null;
-let members = [], owner = null, roles = {}, redirectError = null, redirectP = Promise.resolve(), pending = {}, onPending = () => {};
+let members = [], owners = [], roles = {}, redirectError = null, redirectP = Promise.resolve(), pending = {}, onPending = () => {};
 
 const clean = o => JSON.parse(JSON.stringify(o));                 // drops undefined + functions
 
@@ -73,18 +73,28 @@ export async function createBusiness(name) {
     name: String(name || '').trim() || 'My business',
     settings: { tz: 'Pacific/Auckland', gst: true, pricesIncludeGst: true, gstRate: 0.15, payments: ['cash', 'eftpos', 'other'],
       channels: ['market', 'farmgate', 'tour', 'shop', 'online', 'wholesale'], overheads: [], pinHash: '', staff: [] },
-    members: [me()], owner: me(), roles: {}, created: serverTimestamp()
+    members: [me()], owners: [me()], roles: {}, created: serverTimestamp()
   });
   return d.id;
 }
 export const getMembers = () => members.slice();
-export const getOwner = () => owner;
-export const roleOf = email => !email ? null : email === owner ? 'owner' : (roles[email] || 'helper');
+export const getOwners = () => owners.slice();
+export const roleOf = email => !email ? null : owners.includes(email) ? 'owner' : (roles[email] || 'helper');
 export const myRole = () => roleOf(me());
-// emails contain dots, so the roles map is always written whole rather than by field path
-export const addMember = (email, role) => { const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), { members: arrayUnion(e), roles: Object.assign({}, roles, { [e]: role === 'manager' ? 'manager' : 'helper' }) }); };
-export const setRole = (email, role) => updateDoc(doc(db, 'businesses', bid), { roles: Object.assign({}, roles, { [email]: role }) });
-export const removeMember = email => { const r = Object.assign({}, roles); delete r[email]; return updateDoc(doc(db, 'businesses', bid), { members: arrayRemove(email), roles: r }); };
+// One write sets a person's role: owners go in the "owners" list, everyone else in the roles map.
+// Emails contain dots, so the lists and the map are always written whole rather than by field path.
+// There must always be at least one owner (the rules enforce this too).
+function peopleWith(email, role) {
+  const e = email.trim().toLowerCase(), r = Object.assign({}, roles); let o = owners.filter(x => x !== e);
+  delete r[e];
+  if (role === 'owner') o.push(e); else if (role) r[e] = role === 'manager' ? 'manager' : 'helper';
+  if (!o.length) { const err = new Error('There must always be at least one owner.'); err.code = 'last-owner'; throw err; }
+  if (o.length > 3) { const err = new Error('A business can have at most 3 owners.'); err.code = 'too-many-owners'; throw err; }
+  return { owners: o, roles: r };
+}
+export const addMember = (email, role) => { const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
+export const setRole = (email, role) => updateDoc(doc(db, 'businesses', bid), peopleWith(email, role));
+export const removeMember = email => updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayRemove(email) }, peopleWith(email, null)));
 
 /* ---------- live data ---------- */
 function markPending(key, v) { if (!!pending[key] === v) return; pending[key] = v; onPending(Object.values(pending).some(Boolean)); }
@@ -97,7 +107,7 @@ export function start(businessId, state, changed) {
   unsub.push(onSnapshot(doc(db, 'businesses', bid), { includeMetadataChanges: true }, snap => {
     markPending('biz', snap.metadata.hasPendingWrites);
     if (!snap.exists()) return;
-    const d = snap.data(); members = d.members || []; owner = d.owner || null; roles = d.roles || {};
+    const d = snap.data(); members = d.members || []; owners = d.owners || []; roles = d.roles || {};
     S.name = d.name || ''; S.settings = Object.assign(S.settings || {}, d.settings || {});
     synced.biz = JSON.stringify(bizOf(S));
     onChange('business');

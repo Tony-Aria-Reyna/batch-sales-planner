@@ -5,7 +5,8 @@ rules_version = '2';
 // Admins are listed as documents admins/{email}, created by hand in the Firebase console. Nobody can
 // create, change or delete them from the app, and no admin address is written in this code.
 //
-// Roles:  owner   = the "owner" field (one person). Everything, plus removing people and deleting the business.
+// Roles:  owner   = listed in "owners" (1 to 3 people). Everything, including people, roles and deleting
+//                   the business. There must always be at least one owner.
 //         manager = roles[email] == 'manager'. Everything except removing people, changing roles or deleting.
 //         helper  = any other member (the safe default). Can see products and deals, open and close a selling
 //                   day, and record sales as themselves. Cannot change prices, products, settings or past sales.
@@ -17,7 +18,7 @@ service cloud.firestore {
     function invited() { return signedIn() && exists(/databases/$(database)/documents/invites/$(email())); }
     function biz(bid) { return get(/databases/$(database)/documents/businesses/$(bid)).data; }
     function isMember(bid) { return signedIn() && email() in biz(bid).members; }
-    function roleIn(b) { return email() == b.owner ? 'owner' : b.get('roles', {}).get(email(), 'helper'); }
+    function roleIn(b) { return email() in b.owners ? 'owner' : b.get('roles', {}).get(email(), 'helper'); }
     function canManage(bid) { return isMember(bid) && roleIn(biz(bid)) in ['owner', 'manager']; }
 
     match /admins/{adminEmail} {
@@ -37,22 +38,25 @@ service cloud.firestore {
       // a new business starts with just the person creating it, as owner, and nothing else in it
       allow create: if (isAdmin() || invited())
                     && request.resource.data.members == [email()]
-                    && request.resource.data.owner == email()
+                    && request.resource.data.owners == [email()]
                     && request.resource.data.get('roles', {}) == {};
 
-      // owners and managers change settings; nobody can change the owner here; only the owner removes
-      // people or changes an existing person's role; roles can only be 'manager' or 'helper'
+      // owners and managers change settings. Always 1 to 3 owners, all of them members.
+      // Only an owner can add or remove owners, remove people or change an existing person's role;
+      // a manager can add people (as manager or helper) but not change or remove anyone.
       allow update: if signedIn() && email() in resource.data.members
                     && roleIn(resource.data) in ['owner', 'manager']
-                    && request.resource.data.owner == resource.data.owner
-                    && request.resource.data.owner in request.resource.data.members
-                    && request.resource.data.members.size() > 0 && request.resource.data.members.size() <= 20
+                    && request.resource.data.owners is list
+                    && request.resource.data.owners.size() >= 1 && request.resource.data.owners.size() <= 3
+                    && request.resource.data.members.hasAll(request.resource.data.owners)
+                    && request.resource.data.members.size() <= 20
                     && request.resource.data.get('roles', {}).values().hasOnly(['manager', 'helper'])
-                    && (email() == resource.data.owner
-                        || (request.resource.data.members.hasAll(resource.data.members)
+                    && (roleIn(resource.data) == 'owner'
+                        || (request.resource.data.owners == resource.data.owners
+                            && request.resource.data.members.hasAll(resource.data.members)
                             && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).changedKeys().size() == 0
                             && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).removedKeys().size() == 0));
-      allow delete: if signedIn() && email() == resource.data.owner;
+      allow delete: if signedIn() && email() in resource.data.owners;
 
       // set-up data: everyone in the business can read it (the till needs products and deals);
       // only owners and managers can change it, so a helper can never change a price

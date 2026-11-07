@@ -3,18 +3,18 @@
 const fs = require('fs');
 const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
 const { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, getDocs } = require('firebase/firestore');
-const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', HELPER = 'helper@example.com', MANAGER = 'manager@example.com', STRANGER = 'stranger@example.com';
+const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2@example.com', HELPER = 'helper@example.com', MANAGER = 'manager@example.com', STRANGER = 'stranger@example.com';
 (async () => {
-  const env = await initializeTestEnvironment({ projectId: 'rata-smudge-test', firestore: { rules: fs.readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 } });
+  const env = await initializeTestEnvironment({ projectId: 'demo-rules-test', firestore: { rules: fs.readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 } });
   const as = e => env.authenticatedContext(e, { email: e, email_verified: true }).firestore();
   let fails = 0; const t = async (name, p) => { try { await p; console.log('  ✓ ' + name); } catch (e) { fails++; console.log('  ✗ ' + name + ' — ' + e.message); } };
 
   await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'admins/' + ADMIN), { note: 'test admin' }));
   await t('nobody can make themselves an admin', assertFails(setDoc(doc(as(STRANGER), 'admins/' + STRANGER), {})));
-  await t('stranger cannot create a business (not invited)', assertFails(setDoc(doc(as(STRANGER), 'businesses/x'), { members: [STRANGER], owner: STRANGER, roles: {} })));
+  await t('stranger cannot create a business (not invited)', assertFails(setDoc(doc(as(STRANGER), 'businesses/x'), { members: [STRANGER], owners: [STRANGER], roles: {} })));
   await t('admin can invite', assertSucceeds(setDoc(doc(as(ADMIN), 'invites/' + OWNER), { at: 1 })));
-  await t('invited account cannot start with someone else in it', assertFails(setDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, STRANGER], owner: OWNER, roles: {} })));
-  await t('invited account can create an empty business', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1'), { name: 'B1', members: [OWNER], owner: OWNER, roles: {} })));
+  await t('invited account cannot start with someone else in it', assertFails(setDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, STRANGER], owners: [OWNER], roles: {} })));
+  await t('invited account can create an empty business', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1'), { name: 'B1', members: [OWNER], owners: [OWNER], roles: {} })));
   await t('owner adds a helper and a manager', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, HELPER, MANAGER], roles: { [HELPER]: 'helper', [MANAGER]: 'manager' } })));
   await t('nobody can make a second owner via roles', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { roles: { [HELPER]: 'owner', [MANAGER]: 'manager' } })));
   await t('stranger cannot read the business', assertFails(getDoc(doc(as(STRANGER), 'businesses/b1'))));
@@ -34,7 +34,13 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', HELPER = 'helper
   await t('unknown collections are refused', assertFails(setDoc(doc(as(OWNER), 'businesses/b1/junk/j1'), { a: 1 })));
   await t('manager cannot remove a person', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { members: [OWNER, MANAGER], roles: { [MANAGER]: 'manager' } })));
   await t('manager cannot promote the helper', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));
-  await t('nobody can change the owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owner: MANAGER })));
+  await t('manager cannot make themselves an owner', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { owners: [OWNER, MANAGER] })));
+  await t('owner adds a second owner', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, HELPER, MANAGER, OWNER2], owners: [OWNER, OWNER2] })));
+  await t('second owner can change roles', assertSucceeds(updateDoc(doc(as(OWNER2), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));
+  await t('owners cannot be someone outside the business', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owners: [OWNER, STRANGER] })));
+  await t('there must always be at least one owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owners: [] })));
+  await t('no more than three owners', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owners: [OWNER, OWNER2, HELPER, MANAGER] })));
+  await t('second owner can step down, leaving one', assertSucceeds(updateDoc(doc(as(OWNER2), 'businesses/b1'), { owners: [OWNER] })));
   await t('manager cannot delete the business', assertFails(deleteDoc(doc(as(MANAGER), 'businesses/b1'))));
   await t('owner can delete the business', assertSucceeds(deleteDoc(doc(as(OWNER), 'businesses/b1'))));
   await env.cleanup();

@@ -343,9 +343,9 @@ SCREENS.setup={
       <p class="note">Recipes, ingredients and the import from your Excel workbook come with the Brew screen.</p></div>
 
     <div class="card"><h3>👥 People</h3>
-      <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. <b>Helpers</b> can only sell. <b>Managers</b> can change everything except people.</p>
+      <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. <b>Owners</b> (up to 3) can do everything, including people and deleting the business. <b>Managers</b> can change everything except people. <b>Helpers</b> can only sell.</p>
       ${mem.map(e=>{ const r=SYNC.roleOf(e); return `<div class="row"><div class="grow"><b>${esc(e)}</b>${e===SYNC.me()?'<small>This is you</small>':''}</div>
-        <span class="chip ${r}">${ROLE_TXT[r]}</span>${own&&r!=='owner'?`<button class="btn alt small" data-role="${esc(e)}">Change</button>`:''}</div>`; }).join('')}
+        <span class="chip ${r}">${ROLE_TXT[r]}</span>${own&&!(r==='owner'&&SYNC.getOwners().length===1)?`<button class="btn alt small" data-role="${esc(e)}">Change</button>`:''}</div>`; }).join('')}
       <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button></div></div>
 
     <div class="card"><h3>🔒 Setup PIN</h3>
@@ -397,23 +397,30 @@ function addPerson(){
     const draw=()=>{ m.innerHTML=`<h2>Add a person</h2><p class="note">They sign in with this Google account.</p>
       <input class="txt" id="pE" type="email" inputmode="email" autocomplete="off" autocapitalize="none" placeholder="name@gmail.com">
       <p class="note" style="margin-top:14px">What can they do?</p>
-      <div class="seg"><button data-r="helper" class="${r==='helper'?'on':''}">Helper: sell only</button><button data-r="manager" class="${r==='manager'?'on':''}">Manager: everything</button></div>
+      <div class="seg" style="flex-wrap:wrap"><button data-r="helper" class="${r==='helper'?'on':''}">Helper: sell only</button><button data-r="manager" class="${r==='manager'?'on':''}">Manager: all but people</button>${role()==='owner'?`<button data-r="owner" class="${r==='owner'?'on':''}">Owner: everything</button>`:''}</div>
+      ${r==='owner'?'<p class="note">An owner has full control, including removing people (you too) and deleting the business.</p>':''}
       <div class="mact"><button class="btn alt" id="pC">Cancel</button><button class="btn" id="pA">Add</button></div>`;
       m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{ const v=m.querySelector('#pE').value; r=b.dataset.r; draw(); m.querySelector('#pE').value=v; });
       m.querySelector('#pC').onclick=close;
       m.querySelector('#pA').onclick=async()=>{ const e=m.querySelector('#pE').value.trim().toLowerCase();
         if(!isEmail(e)){ toast('Type a full Google email address'); return; }
         if(SYNC.getMembers().includes(e)){ toast('They are already in'); return; }
-        try{ await SYNC.addMember(e,r); close(); toast('Added '+e); }catch(x){ toast('Could not add: '+(x.code||x.message)); } };
+        try{ await SYNC.addMember(e,r); close(); toast('Added '+e+' as '+ROLE_TXT[r].toLowerCase()); }catch(x){ toast('Could not add: '+(x.message||x.code)); } };
     }; draw(); });
 }
 function personMenu(e){
   modal((m,close)=>{ const r=SYNC.roleOf(e);
-    m.innerHTML=`<h2>${esc(e)}</h2><p class="note">Now: ${ROLE_TXT[r]}</p>
-      <div class="mact" style="justify-content:flex-start"><button class="btn alt" data-r="helper">Make a helper</button><button class="btn alt" data-r="manager">Make a manager</button></div>
+    const lastOwner=r==='owner'&&SYNC.getOwners().length===1;
+    m.innerHTML=`<h2>${esc(e)}</h2><p class="note">Now: ${ROLE_TXT[r]}${e===SYNC.me()?' (this is you)':''}</p>
+      <div class="mact" style="justify-content:flex-start">${['helper','manager','owner'].filter(x=>x!==r).map(x=>`<button class="btn alt" data-r="${x}">Make ${x==='owner'?'an':'a'} ${x}</button>`).join('')}</div>
+      ${lastOwner?'<p class="note">This is the only owner. Make someone else an owner first.</p>':''}
       <div class="mact"><button class="btn danger" id="rm">Remove from the business</button><button class="btn" id="ok">Done</button></div>`;
-    m.querySelectorAll('[data-r]').forEach(b=>b.onclick=async()=>{ try{ await SYNC.setRole(e,b.dataset.r); close(); toast('Updated'); }catch(x){ toast('Could not change: '+(x.code||x.message)); } });
-    m.querySelector('#rm').onclick=()=>{ close(); confirmBox('Remove '+e+'?','They will no longer be able to open the business.','Remove',async()=>{ try{ await SYNC.removeMember(e); toast('Removed'); }catch(x){ toast('Could not remove: '+(x.code||x.message)); } },true); };
+    const change=async to=>{ try{ await SYNC.setRole(e,to); close(); toast(e+' is now '+(to==='owner'?'an':'a')+' '+to); }catch(x){ toast('Could not change: '+(x.message||x.code)); } };
+    m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{ const to=b.dataset.r;
+      if(e===SYNC.me()&&r==='owner'){ close(); confirmBox('Stop being an owner?','You will lose control of people and deleting the business. Another owner would have to make you an owner again.','Yes, change me',()=>change(to),true); return; }
+      if(to==='owner'){ close(); confirmBox('Make '+e+' an owner?','They will have full control, including removing people (you too) and deleting the business.','Make owner',()=>change(to)); return; }
+      change(to); });
+    m.querySelector('#rm').onclick=()=>{ close(); if(lastOwner){ toast('There must always be at least one owner'); return; } confirmBox('Remove '+e+'?','They will no longer be able to open the business.','Remove',async()=>{ try{ await SYNC.removeMember(e); toast('Removed'); }catch(x){ toast('Could not remove: '+(x.message||x.code)); } },true); };
     m.querySelector('#ok').onclick=close; });
 }
 async function drawInvites(){

@@ -44,6 +44,14 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => !!S.settings.pinHash), 'PIN saved (as a hash)');
   await page.click('#addPerson'); await page.fill('#pE', 'helper@example.com'); await page.click('#pA'); await page.waitForTimeout(300);
   ok(await page.evaluate(() => SYNC.roleOf('helper@example.com') === 'helper'), 'added a helper (helper is the default role)');
+  await page.click('#addPerson'); await page.fill('#pE', 'mum@example.com'); await page.click('[data-r="owner"]'); await page.click('#pA'); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => SYNC.roleOf('mum@example.com') === 'owner' && SYNC.getOwners().length === 2), 'added a second owner');
+  await page.locator('[data-role="mum@example.com"]').click(); await page.click('[data-r="manager"]'); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => SYNC.roleOf('mum@example.com') === 'manager' && SYNC.getOwners().length === 1), 'an owner can be changed to a manager');
+  ok(!(await page.$('[data-role="admin@example.com"]')), 'the only owner cannot be changed or removed');
+  await page.locator('[data-role="mum@example.com"]').click(); await page.click('[data-r="owner"]'); await page.click('#cY'); await page.waitForTimeout(250);
+  ok(await page.evaluate(() => SYNC.getOwners().join() === 'admin@example.com,mum@example.com'), 'made an owner again, after a warning');
+  ok(!!(await page.$('[data-role="admin@example.com"]')), 'with two owners, each can be changed');
   await page.screenshot({ path: path.join(shots, '04-ipad-setup.png'), fullPage: true });
   await page.click('#bk'); await page.waitForSelector('.tiles');
   await page.click('[data-go="setup"]'); await page.waitForTimeout(150);
