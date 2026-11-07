@@ -1,8 +1,12 @@
 /* ================= Products and deals (Setup, owner and managers only) =================
    Prices are set here and only here. The till reads them and never lets anyone type a price.
    All prices include GST. Records link by id, never by name, so renaming can't break a total. */
-const COLOURS={balm:['#f3dfb6','#6b4a0c','Balm'],oil:['#d9e8cf','#2f5225','Oil'],tincture:['#f3d2cf','#7d1d16','Tincture'],tea:['#d4ebe6','#1d5249','Tea'],
-  spray:['#d8e4f3','#24507a','Spray / drops'],cream:['#eadff1','#55306b','Cream'],gift:['#f6d8e6','#7a2350','Gift set'],other:['#ece6d9','#4b463b','Other']};
+// Category colours: bold and far apart from each other, so a category can be spotted at a glance
+// (and each tile is labelled too, for anyone who finds colours hard to tell apart).
+// [background, text, name, plural]
+const COLOURS={balm:['#E8A317','#2a1c00','Balm','Balms'],oil:['#2E7D32','#ffffff','Oil','Oils'],tincture:['#9E1B32','#ffffff','Tincture','Tinctures'],
+  tea:['#00897B','#ffffff','Tea','Teas'],spray:['#1E5BB8','#ffffff','Spray / drops','Sprays & drops'],cream:['#7B3FA6','#ffffff','Cream','Creams'],
+  gift:['#D63384','#ffffff','Gift set','Gift sets'],other:['#5C5F66','#ffffff','Other','Other']};
 function guessColour(name,size){
   const t=(name+' '+size).toLowerCase();
   if(/gift|box|set\b/.test(t)) return 'gift';
@@ -205,9 +209,13 @@ function editDeal(d){
     }; draw(); });
 }
 // Work out a cart's total. cart: [{pid, qty}] → {lines, deals, subtotal, discount, total} in cents.
-function priceCart(cart){
+// cart items are {pid, qty} for till products, or {pid:'x-…', qty, custom:{name,size,price,colour,approvedBy}} for an
+// approved item that isn't on the till. disc is an approved discount {kind:'pct'|'amt', value, reason, approvedBy}.
+function priceCart(cart,disc){
   const lines=[]; let subtotal=0;
-  for(const c of cart){ const p=S.products.find(x=>x.id===c.pid); if(!p||c.qty<1) continue; lines.push({pid:p.id,name:p.name,size:p.size||'',qty:c.qty,unit:p.price,amount:p.price*c.qty}); subtotal+=p.price*c.qty; }
+  for(const c of cart){ if(c.qty<1) continue;
+    if(c.custom){ const u=c.custom; lines.push({pid:c.pid,name:u.name,size:u.size||'',qty:c.qty,unit:u.price,amount:u.price*c.qty,custom:true,approvedBy:u.approvedBy||null}); subtotal+=u.price*c.qty; continue; }
+    const p=S.products.find(x=>x.id===c.pid); if(!p) continue; lines.push({pid:p.id,name:p.name,size:p.size||'',qty:c.qty,unit:p.price,amount:p.price*c.qty}); subtotal+=p.price*c.qty; }
   const units=[]; lines.forEach(l=>{ for(let i=0;i<l.qty;i++) units.push({pid:l.pid,price:l.unit,used:false}); });
   units.sort((a,b)=>b.price-a.price);
   const deals=[]; let discount=0;
@@ -218,5 +226,8 @@ function priceCart(cart){
       grp.forEach(u=>u.used=true); const save=full-d.price; discount+=save;
       const ex=deals.find(x=>x.id===d.id); if(ex){ ex.times++; ex.saving+=save; } else deals.push({id:d.id,name:d.name,times:1,saving:save}); }
   }
-  return {lines,deals,subtotal,discount,total:subtotal-discount};
+  let manual=null;
+  if(disc&&subtotal-discount>0){ const base=subtotal-discount, amt=disc.kind==='pct'?Math.round(base*disc.value/100):Math.min(disc.value,base);
+    manual=Object.assign({},disc,{amount:amt}); discount+=amt; }
+  return {lines,deals,manual,subtotal,discount,total:subtotal-discount};
 }

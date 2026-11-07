@@ -31,6 +31,18 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('helper cannot void a sale', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1/sales/a1'), { voided: true })));
   await t('helper can undo their own sale straight away', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/sales/u1'), { by: HELPER, total: 5, at: Date.now() }).then(() => deleteDoc(doc(as(HELPER), 'businesses/b1/sales/u1')))));
   await t('helper cannot delete an old sale', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/sales/a3'), { by: HELPER, total: 5, at: Date.now() - 3600e3 }).then(() => deleteDoc(doc(as(HELPER), 'businesses/b1/sales/a3')))));
+  await t('owner sets their own PIN', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/pins/' + OWNER), { hash: 'abc', name: 'Owner' })));
+  await t('manager sets their own PIN', assertSucceeds(setDoc(doc(as(MANAGER), 'businesses/b1/pins/' + MANAGER), { hash: 'def' })));
+  await t('nobody sets someone else\'s PIN', assertFails(setDoc(doc(as(MANAGER), 'businesses/b1/pins/' + OWNER), { hash: 'x' })));
+  await t('helper cannot read PINs', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/pins/' + OWNER))));
+  await t('helper cannot set a PIN', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/pins/' + HELPER), { hash: 'x' })));
+  await t('owner can remove a manager\'s PIN', assertSucceeds(deleteDoc(doc(as(OWNER), 'businesses/b1/pins/' + MANAGER))));
+  await t('helper adds an approvals-log entry as themselves', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/audit/a1'), { by: HELPER, at: Date.now(), action: 'discount', approver: OWNER })));
+  await t('helper cannot read the approvals log', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/audit/a1'))));
+  await t('owner reads the approvals log', assertSucceeds(getDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
+  await t('nobody can change the approvals log', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/audit/a1'), { approver: MANAGER })));
+  await t('nobody can delete from the approvals log', assertFails(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
+  await t('log entries must be in your own name', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/audit/a2'), { by: OWNER, at: Date.now() })));
   await t('unknown collections are refused', assertFails(setDoc(doc(as(OWNER), 'businesses/b1/junk/j1'), { a: 1 })));
   await t('manager cannot remove a person', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { members: [OWNER, MANAGER], roles: { [MANAGER]: 'manager' } })));
   await t('manager cannot promote the helper', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));

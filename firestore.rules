@@ -74,6 +74,20 @@ service cloud.firestore {
                     || (isMember(bid) && col in ['products', 'deals', 'sessions', 'sales']);   // helpers: just what the till needs
         allow write: if canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
       }
+      // Personal PINs: one document per owner or manager, holding only a salted hash of their PIN.
+      // Helpers can't read them, so a helper can't try to work a PIN out. You set only your own;
+      // an owner can remove anyone's (e.g. someone who has left).
+      match /pins/{who} {
+        allow read: if canManage(bid);
+        allow create, update: if canManage(bid) && who == email() && request.resource.data.hash is string;
+        allow delete: if canManage(bid) && (who == email() || roleIn(biz(bid)) == 'owner');
+      }
+      // Approvals log: who approved what, and when. Anyone in the business can add an entry for an action
+      // on their device; only owners and managers can read it; nobody can change or delete an entry.
+      match /audit/{id} {
+        allow read: if canManage(bid);
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.at is number;
+      }
       // helpers: open and close a selling day, and record (never edit or delete) their own sales
       match /sessions/{id} {
         allow create, update: if isMember(bid) && request.resource.data.openedBy is string;
