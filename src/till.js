@@ -285,20 +285,32 @@ function pay(method){
    signal at the stall because the request waits on the device until it can sync. */
 const receiptNo=s=>'RS-'+String(s.date||'').replace(/-/g,'')+'-'+String(s.id||'').slice(-5).toUpperCase();
 const receiptsReady=()=>!!(S.settings.gstNumber&&S.settings.receiptEmail);
+// The exact words shown to the customer; stored with every consent record.
+const LOYALTY_TEXT='Would you like to join the Rata & Smudge Loyalty programme? We\'ll email you news, offers and loyalty rewards now and then. You can leave at any time.';
 function emailReceipt(sale){
   if(!sale) return;
   if(!receiptsReady()){ toast(canManage()?'Set up GST receipts in Setup first (GST number and the business Gmail).':'Emailed receipts aren\'t set up yet. Ask the owner.'); return; }
-  modal((m,close)=>{ const big=sale.total>100000;
-    m.innerHTML=`<h2>📧 Email a GST receipt</h2><p class="note">For the ${c2(sale.total)} sale at ${nzTime(sale.at)} (includes ${c2(sale.gst)} GST). It's sent from <b>${esc(S.settings.receiptEmail)}</b> within about 5 minutes, even if there's no signal right now.</p>
-      <label class="note" for="rE">Customer's email</label><input class="txt" id="rE" type="email" inputmode="email" autocomplete="off" autocapitalize="none" placeholder="name@example.com">
-      ${big?'<label class="note" for="rNm">Customer\'s name (needed on receipts over $1,000)</label><input class="txt" id="rNm" autocapitalize="words">':''}
-      <div class="mact"><button class="btn alt" id="rC">Cancel</button><button class="btn" id="rS">Send receipt</button></div>`;
-    m.querySelector('#rC').onclick=close;
-    m.querySelector('#rS').onclick=()=>{ const to=m.querySelector('#rE').value.trim().toLowerCase(), nm=big?m.querySelector('#rNm').value.trim():'';
-      if(!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(to)){ toast('Type the full email address'); return; } if(big&&!nm){ toast('Add the customer\'s name'); return; }
-      S.receipts.push({id:SYNC.newId('receipts'),saleId:sale.id,sessionId:sale.sessionId||'',to,buyerName:nm,by:SYNC.me(),at:Date.now(),status:'queued',receiptNo:receiptNo(sale)}); save(); close();
-      toast('Receipt '+receiptNo(sale)+' will be emailed to '+to); };
-    setTimeout(()=>m.querySelector('#rE').focus(),60); });
+  modal((m,close)=>{ const big=sale.total>100000; let joins=null;
+    const v=id=>{ const e=m.querySelector('#'+id); return e?e.value:''; };
+    const draw=()=>{ const keep={rE:v('rE'),rNm:v('rNm')};
+      m.innerHTML=`<h2>📧 Email a GST receipt</h2><p class="note">For the ${c2(sale.total)} sale at ${nzTime(sale.at)} (includes ${c2(sale.gst)} GST). Sent from <b>${esc(S.settings.receiptEmail)}</b> within about 5 minutes, even if there's no signal right now.</p>
+        <label class="note" for="rE">Customer's email</label><input class="txt" id="rE" type="email" inputmode="email" autocomplete="off" autocapitalize="none" placeholder="name@example.com" value="${esc(keep.rE)}">
+        <label class="note" for="rNm">Customer's name ${big?'(needed on receipts over $1,000)':'(optional)'}</label><input class="txt" id="rNm" autocapitalize="words" value="${esc(keep.rNm)}">
+        <div class="loyal"><b>💚 Loyalty programme</b><p>${esc(LOYALTY_TEXT)}</p><p class="note" style="margin:4px 0 10px">Please ask the customer. Their email is kept to send this receipt either way.</p>
+          <div class="paybig"><button class="btn ${joins===true?'':'alt'}" id="lYes">${joins===true?'✓ ':''}Yes, join</button><button class="btn ${joins===false?'':'alt'}" id="lNo">${joins===false?'✓ ':''}No thanks</button></div></div>
+        <div class="mact"><button class="btn alt" id="rC">Cancel</button><button class="btn" id="rS">Send receipt</button></div>`;
+      m.querySelector('#lYes').onclick=()=>{ joins=true; draw(); };
+      m.querySelector('#lNo').onclick=()=>{ joins=false; draw(); };
+      m.querySelector('#rC').onclick=close;
+      m.querySelector('#rS').onclick=()=>{ const to=v('rE').trim().toLowerCase(), nm=v('rNm').trim();
+        if(!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(to)){ toast('Type the full email address'); return; } if(big&&!nm){ toast('Add the customer\'s name'); return; }
+        if(joins===null){ toast('Ask about the Loyalty programme: Yes or No'); return; }
+        const d=S.sessions.find(x=>x.id===sale.sessionId), where=d?((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')+(d.name?' · '+d.name:'')):'';
+        S.receipts.push({id:SYNC.newId('receipts'),saleId:sale.id,sessionId:sale.sessionId||'',to,buyerName:nm,loyalty:joins,by:SYNC.me(),at:Date.now(),status:'queued',receiptNo:receiptNo(sale)});
+        S.contacts.push({id:SYNC.newId('contacts'),email:to,name:nm,loyalty:joins,consentText:joins?LOYALTY_TEXT:'',kind:joins?'joined':'receipt',source:where,saleId:sale.id,by:SYNC.me(),servedBy:servedBy()||'',at:Date.now()});
+        save(); close(); toast('Receipt '+receiptNo(sale)+' will be emailed to '+to+(joins?' · joined the Loyalty programme 💚':'')); };
+      const f=m.querySelector(keep.rE?'#rNm':'#rE'); if(f&&!keep.rE) setTimeout(()=>f.focus(),60);
+    }; draw(); });
 }
 const receiptNote=s=>S.receipts.filter(r=>r.saleId===s.id).map(r=>r.status==='sent'?'📧 receipt sent to '+r.to:r.status==='failed'?'⚠️ receipt to '+r.to+' failed'+(r.error?': '+r.error:''):'📧 receipt to '+r.to+' waiting to send').join(' · ');
 

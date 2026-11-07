@@ -8,7 +8,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
   onSnapshot, query, where, getDocs, addDoc, writeBatch, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // every sub-collection the rules allow, and which ones a helper may read
-export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts'];
+export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts'];
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales'];
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 

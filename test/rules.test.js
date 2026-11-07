@@ -49,6 +49,12 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('helper cannot read receipt requests', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/receipts/r1'))));
   await t('nobody can mark a receipt sent from the app', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/receipts/r1'), { status: 'sent' })));
   await t('a stranger cannot ask for a receipt', assertFails(setDoc(doc(as(STRANGER), 'businesses/b1/receipts/r4'), { saleId: 'a1', to: 'x@example.com', by: STRANGER, status: 'queued', at: Date.now() })));
+  await t('helper records a customer contact with their loyalty choice', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/contacts/c1'), { email: 'customer@example.com', loyalty: true, by: HELPER, at: Date.now(), consentText: 'Join?' })));
+  await t('a contact needs a yes/no loyalty choice', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/contacts/c2'), { email: 'customer@example.com', by: HELPER, at: Date.now() })));
+  await t('helper cannot read the contact list', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/contacts/c1'))));
+  await t('nobody can change a consent record', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/contacts/c1'), { loyalty: false })));
+  await t('a manager cannot delete a contact', assertFails(deleteDoc(doc(as(MANAGER), 'businesses/b1/contacts/c1'))));
+  await t('an owner can delete a contact (asked to be forgotten)', assertSucceeds(deleteDoc(doc(as(OWNER), 'businesses/b1/contacts/c1'))));
   await t('unknown collections are refused', assertFails(setDoc(doc(as(OWNER), 'businesses/b1/junk/j1'), { a: 1 })));
   await t('manager cannot remove a person', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { members: [OWNER, MANAGER], roles: { [MANAGER]: 'manager' } })));
   await t('manager cannot promote the helper', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));

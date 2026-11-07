@@ -47,6 +47,10 @@ a{color:var(--green)}
 .top .cog{font-size:26px;width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.16)}
 main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--sab)) calc(18px + var(--sal));max-width:1180px;margin:0 auto}
 
+.loyal{background:#eef4e8;border:2px solid #cfe0c2;border-radius:16px;padding:14px;margin-top:14px}
+.loyal p{margin:6px 0}
+.ctabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+
 /* ---------- calendar ---------- */
 .calhead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -301,7 +305,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -413,6 +417,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
+const LATEST_HELPER=2;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -420,6 +425,7 @@ function helperStatus(){
   const mins=Math.round((Date.now()-h.lastRun)/60e3), ago=mins<1?'just now':mins<120?mins+' min ago':Math.round(mins/60)+' hours ago';
   if(h.account&&h.account!==st.receiptEmail) return '⚠️ The helper runs in '+esc(h.account)+', not '+esc(st.receiptEmail)+'. Receipts won\'t send until they match.';
   if(h.error) return '⚠️ Last check '+ago+': '+esc(h.error);
+  if((h.version||0)<LATEST_HELPER) return '⚠️ Last checked '+ago+'. A newer helper is available (version '+LATEST_HELPER+'): paste the latest helper Code.gs into the script in '+esc(st.receiptEmail)+' and save.';
   return (mins>20?'⚠️ ':'✓ ')+'Last checked '+ago+(h.sent?' · '+h.sent+' receipt'+(h.sent===1?'':'s')+' sent in total':'')+(mins>20?'. It should check every 5 minutes; see the setup steps.':'');
 }
 SCREENS.setup={
@@ -445,6 +451,9 @@ SCREENS.setup={
       <label class="note" for="rcEmail">Business Gmail that sends the receipts</label><input class="txt" id="rcEmail" type="email" inputmode="email" autocapitalize="none" value="${esc(st.receiptEmail||'')}" placeholder="rataandsmudge@gmail.com">
       <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><input class="txt" id="rcNote" value="${esc(st.receiptNote||'')}" placeholder="Thank you! rataandsmudge.co.nz">
       <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
+
+    <div class="card"><h3>💌 Customer contacts</h3>
+      <div class="row"><div class="grow"><b>Loyalty programme and receipt-only emails</b><small>${(()=>{ const l=contactList(); return l.filter(c=>c.loyalty).length+' in the Loyalty programme · '+l.filter(c=>!c.loyalty).length+' receipt only'; })()}</small></div><button class="btn small" id="goContacts">Open</button></div></div>
 
     <div class="card"><h3>👥 People</h3>
       <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. The <b>main owner</b> set the business up and can never be removed. A <b>co-owner</b> can do everything except change the main owner or delete the business. <b>Managers</b> can change everything except people. <b>Helpers</b> can only sell.</p>
@@ -480,7 +489,7 @@ SCREENS.setup={
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
-    $('#goProd').onclick=()=>go('products'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
+    $('#goProd').onclick=()=>go('products'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
     document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>personMenu(b.dataset.role));
     $('#setPin').onclick=()=>setPinFlow(()=>render());
     $('#goAudit').onclick=()=>go('audit');
@@ -641,7 +650,7 @@ function checkPinReset(){
 }
 
 /* ================= approvals log ================= */
-const ACTION_ICON={'give a discount':'🏷️','add an item not on the till':'➕','void a sale':'🚫','correct a sale':'✏️','end the day':'🏁','see the sales':'🧾','see the takings':'💰','leave till mode':'🔓','open Setup':'⚙️'};
+const ACTION_ICON={'remove from the Loyalty programme':'💔','delete a customer contact':'🗑️','add float':'💵','change the opening float':'💵','give a discount':'🏷️','add an item not on the till':'➕','void a sale':'🚫','correct a sale':'✏️','end the day':'🏁','see the sales':'🧾','see the takings':'💰','leave till mode':'🔓','open Setup':'⚙️'};
 SCREENS.audit={
   title:()=>({h:'Approvals log',s:'Who approved what, and when'}),
   html(){ const list=S.audit.slice().sort((a,b)=>b.at-a.at).slice(0,400);

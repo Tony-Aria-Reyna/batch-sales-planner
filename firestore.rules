@@ -97,6 +97,17 @@ service cloud.firestore {
                       && request.resource.data.saleId is string && request.resource.data.to is string
                       && request.resource.data.to.size() < 120 && request.resource.data.to.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$');
       }
+      // Customer contacts: one entry each time an email address is collected (with a receipt), recording
+      // whether the customer chose to join the Loyalty programme and the exact wording they agreed to.
+      // Entries are never edited: leaving the programme is a new entry. Owners and managers can read them;
+      // only an owner can delete (a customer asking to be forgotten).
+      match /contacts/{id} {
+        allow read: if canManage(bid);
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.loyalty is bool
+                      && request.resource.data.email is string && request.resource.data.email.size() < 120
+                      && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$') && request.resource.data.at is number;
+        allow delete: if signedIn() && roleIn(biz(bid)) == 'owner' && isMember(bid);
+      }
       // helpers: open and close a selling day, and record (never edit or delete) their own sales
       match /sessions/{id} {
         allow create, update: if isMember(bid) && request.resource.data.openedBy is string;

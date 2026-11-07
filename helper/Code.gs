@@ -12,7 +12,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 1;
+const HELPER_VERSION = 2;   // 2: welcome line for new Loyalty programme members
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -79,6 +79,7 @@ function buildReceipt(b, sale, req) {
   const subject = name + ' receipt ' + no + ' · ' + money(sale.total);
   const text = [name, 'GST receipt ' + no, 'GST number: ' + (st.gstNumber || ''), 'Date: ' + when, req.buyerName ? 'Customer: ' + req.buyerName : '', '',
     rows.map(r => r[0] + '  ' + r[1]).join('\n'), '', 'Total excluding GST: ' + money(excl), 'GST (15%): ' + money(gst), 'Total including GST: ' + money(sale.total), 'Paid by: ' + paid, '',
+    req.loyalty ? 'Thank you for joining the ' + name + ' Loyalty programme. To leave at any time, reply to this email with UNSUBSCRIBE.' : '',
     st.receiptNote || 'Thank you.'].filter(x => x !== '').join('\n');
   const tr = (a, b, bold) => '<tr><td style="padding:6px 0;' + (bold ? 'font-weight:700;' : '') + '">' + esc(a) + '</td><td style="padding:6px 0;text-align:right;' + (bold ? 'font-weight:700;' : '') + '">' + esc(b) + '</td></tr>';
   const html = '<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;color:#2b2c22">' +
@@ -88,6 +89,7 @@ function buildReceipt(b, sale, req) {
     '<p style="margin:0 0 14px"><b>GST receipt ' + esc(no) + '</b><br>GST number: ' + esc(st.gstNumber || '') + '<br>' + esc(when) + (req.buyerName ? '<br>Customer: ' + esc(req.buyerName) : '') + '</p>' +
     '<table style="width:100%;border-collapse:collapse;border-top:2px solid #e5e1d2;border-bottom:2px solid #e5e1d2">' + rows.map(r => tr(r[0], r[1])).join('') + '</table>' +
     '<table style="width:100%;border-collapse:collapse;margin-top:8px">' + tr('Total excluding GST', money(excl)) + tr('GST (15%)', money(gst)) + tr('Total including GST', money(sale.total), true) + tr('Paid by', paid) + '</table>' +
+    (req.loyalty ? '<p style="margin-top:20px;padding:12px;background:#eef4e8;border-radius:10px">💚 Thank you for joining the ' + esc(name) + ' Loyalty programme. To leave at any time, reply to this email with <b>UNSUBSCRIBE</b>.</p>' : '') +
     '<p style="margin-top:20px;color:#686a5a">' + esc(st.receiptNote || 'Thank you.') + '</p></div></div>';
   return { subject, text, html, no };
 }
