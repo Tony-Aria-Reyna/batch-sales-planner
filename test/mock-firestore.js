@@ -11,7 +11,7 @@ export const where=(f,op,v)=>({f,op,v}); export const query=(c,w)=>({t:'q',path:
 export const serverTimestamp=()=>Date.now();
 export const deleteField=()=>({__del:1}); export const arrayUnion=v=>({__u:v}); export const arrayRemove=v=>({__r:v});
 function snapCol(d,path){ const pre=path+'/'; const docs=Object.keys(d).filter(k=>k.startsWith(pre)&&!k.slice(pre.length).includes('/')).map(k=>({id:k.slice(pre.length),data:()=>JSON.parse(JSON.stringify(d[k]))})); return {docs,empty:!docs.length}; }
-export function onSnapshot(ref,a,b,c){ let cb=a,err=b; if(typeof a!=='function'){ cb=b; err=c; }
+export function onSnapshot(ref,a,b,c){ let cb=a,err=b; if(typeof a!=='function'){ cb=b; err=c; } const denied=(localStorage.getItem('mockdeny')||'').split(',').filter(Boolean); if(ref.t!=='doc'&&denied.includes(ref.path.split('/').pop())){ setTimeout(()=>err&&err({code:'permission-denied',message:'Missing or insufficient permissions.'}),0); return ()=>{}; }
   const s={run(){ const d=load(); if(!memberOf(d,ref.path)) return deny(err);
     if(ref.t==='doc'){ const v=d[ref.path]; cb({exists:()=>!!v,data:()=>JSON.parse(JSON.stringify(v)),id:ref.id,metadata:{hasPendingWrites:false}}); } else { const sc=snapCol(d,ref.path); sc.metadata={hasPendingWrites:false}; cb(sc); } }};
   subs.push(s); setTimeout(()=>s.run(),0); return ()=>{ subs=subs.filter(x=>x!==s); };

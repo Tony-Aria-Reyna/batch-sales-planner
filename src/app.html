@@ -360,7 +360,7 @@ SCREENS.home={
   html(){
     const tiles=TILES.filter(t=>t.all||canManage()), d=openDay();
     const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
-    return `<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
+    return rulesNotice()+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
       <section class="today" aria-label="Today">
         <div><span>Today's takings</span>${canManage()&&!tillLock()?(Date.now()<moneyUntil?`<b>${c2(taken)}</b>`:`<b><button class="linkb" id="showMoney" style="font-size:22px;color:var(--green)">🔒 Show</button></b>`):'<b>—</b>'}</div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
@@ -404,7 +404,7 @@ SCREENS.setup={
   title:()=>({h:'Setup',s:'Only you can change these'}),
   html(){
     const st=S.settings, own=role()==='owner', mem=SYNC.getMembers();
-    return `
+    return rulesNotice()+`
     <div class="card"><h3>🏷️ Business</h3>
       <label class="note" for="bizName">Business name</label>
       <input class="txt" id="bizName" value="${esc(S.name)}" autocomplete="organization" enterkeyhint="done">
@@ -687,7 +687,13 @@ async function enterBusiness(){
     gate('error',(pd?'The database refused this account.':off?'This device is offline and has not opened the business before.':'Could not reach the database.')+' Signed in as '+(SYNC.me()||'?')+'. Details: '+errText(e)); }
 }
 let rT=null, firstRender=true;
+// Parts of the business the database refused to share (usually: the Firebase rules haven't been
+// republished after an update). The app keeps working without them and says what's missing.
+const missingCols=new Set();
+const COL_TXT={pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales'};
+function rulesNotice(){ return missingCols.size?`<div class="card" style="border:2px solid var(--warn);background:#fff4d6"><b>⚠️ The database rules need updating.</b><p class="note" style="margin-bottom:0">These parts are switched off until the Firebase rules are republished: ${[...missingCols].map(c=>COL_TXT[c]||c).join(', ')}. ${canManage()?'Copy the latest rules into Firebase → Firestore → Rules → Publish, then reopen the app.':'Ask the owner.'}</p></div>`:''; }
 function syncChanged(what,err){
+  if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
   clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
     const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);

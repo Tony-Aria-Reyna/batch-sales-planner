@@ -132,7 +132,7 @@ function listenCols() {
       mergeArray(S[c], list);
       const m = synced.cols[c]; m.clear(); S[c].forEach(x => m.set(x.id, JSON.stringify(clean(x))));
       onChange(c);
-    }, err => onChange('error', err)));
+    }, err => onChange('colerror', { col: c, err })));   // one collection refused must not lock out the whole business
   }
 }
 export function stop() { unsub.forEach(u => { try { u(); } catch (e) {} }); unsub = []; bid = null; }
@@ -157,10 +157,17 @@ export function push() {
     }
     for (const id of [...m.keys()]) if (!seen.has(id)) { ops.push(['delete', doc(db, 'businesses', bid, c, id)]); m.delete(id); }
   }
-  for (let i = 0; i < ops.length; i += 400) {
-    const b = writeBatch(db);
-    ops.slice(i, i + 400).forEach(([k, ref, data]) => k === 'set' ? b.set(ref, data) : k === 'update' ? b.update(ref, data) : b.delete(ref));
-    b.commit().catch(e => onChange('error', e));
+  // One batch per kind of record: if the database refuses one kind (e.g. the rules haven't been updated
+  // for a new feature), the others, above all the sales, are still saved.
+  const groups = {};
+  for (const op of ops) { const k = op[1].path.split('/').length > 2 ? op[1].path.split('/')[2] : 'business'; (groups[k] = groups[k] || []).push(op); }
+  for (const k of Object.keys(groups)) {
+    const list = groups[k];
+    for (let i = 0; i < list.length; i += 400) {
+      const b = writeBatch(db);
+      list.slice(i, i + 400).forEach(([kind, ref, data]) => kind === 'set' ? b.set(ref, data) : kind === 'update' ? b.update(ref, data) : b.delete(ref));
+      b.commit().catch(e => onChange(e && e.code === 'permission-denied' && k !== 'business' ? 'colerror' : 'error', k !== 'business' && e && e.code === 'permission-denied' ? { col: k, err: e } : e));
+    }
   }
 }
 export const newId = c => doc(collection(db, 'businesses', bid || 'x', c)).id;

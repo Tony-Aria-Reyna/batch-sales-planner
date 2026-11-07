@@ -237,6 +237,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '20-exit-screen.png') });
   await page.click('#exStay'); ok(await page.evaluate(() => document.querySelector('#exitScr').hidden && !!document.querySelector('.tiles')), '"Stay in the app" returns to the home screen');
 
+  console.log('Old database rules (a new feature refused)');
+  const op2 = await ipad.newPage(); op2.on('pageerror', e => errs.push(e.message));
+  await op2.goto(url); await op2.evaluate(() => localStorage.setItem('mockdeny', 'pins,audit,receipts')); await op2.reload(); await op2.waitForSelector('#gIn');
+  await signIn(op2, 'admin@example.com'); await op2.waitForTimeout(800);
+  ok(await op2.evaluate(() => document.querySelector('#gate').hidden && !!document.querySelector('.tiles')), 'the app still opens when the rules refuse PINs, the log and receipts');
+  ok(/database rules need updating/.test(await text(op2)) && /personal PINs, the approvals log, emailed receipts/.test(await text(op2)), 'and it says which parts are waiting for a rules update');
+  await op2.screenshot({ path: path.join(shots, '21-rules-notice.png') });
+  await op2.evaluate(() => localStorage.removeItem('mockdeny')); await op2.close();
+
   console.log('Android phone: helper, stranger, and a second business');
   const phone = await browser.newContext({ ...devices['Pixel 7'] });
   // share the fake database between the iPad and the phone (it lives in localStorage)
