@@ -29,6 +29,24 @@ A market till, brew planner and order tracker for Rata & Smudge, built as one we
 - **Helpers on their own phone**: a Google account with the Helper role can sell and nothing else; the security rules enforce it.
 - **End of the day**: takings, GST, deals given, EFTPOS total to match the terminal, cash expected against cash counted (shows over or short), voids, units by product.
 
+## Emailed GST receipts
+
+After a sale, **📧 Email a GST receipt** (on the green "Payment approved" screen, or 📧 against a sale in Sales) records the customer's address. A free Google helper script running in the **business Gmail** checks every 5 minutes, builds the receipt from the saved sale and sends it from that Gmail as "Rata & Smudge". Requests made with no signal wait on the device and go up when it reconnects.
+
+Receipts show the business name, GST number, date, receipt number (RS-YYYYMMDD-XXXXX), items, total excluding GST, GST and total including GST, and how it was paid. That meets IRD's taxable supply information requirements up to $1,000; over $1,000 the app also asks for the customer's name.
+
+Set-up, once:
+1. **Owner, in the app:** Setup → GST receipts → enter the **GST number** and the **business Gmail** address.
+2. **Tony, Google Cloud console** (console.cloud.google.com, project batch-sales-planner) → IAM & Admin → IAM → **Grant access** → New principals: the business Gmail → roles **Cloud Datastore User** and **Service Usage Consumer** → Save. This lets the helper read sales and mark receipts sent.
+3. **Signed in as the business Gmail**, open **script.google.com** → **New project** → name it "Rata & Smudge receipts".
+4. Replace the contents of `Code.gs` with [`helper/Code.gs`](https://raw.githubusercontent.com/tony-aria-reyna/batch-sales-planner/main/helper/Code.gs).
+5. ⚙️ **Project Settings** → tick **Show "appsscript.json"** → back in the editor, replace `appsscript.json` with [`helper/appsscript.json`](https://raw.githubusercontent.com/tony-aria-reyna/batch-sales-planner/main/helper/appsscript.json) → **Save**.
+6. Choose **setup** in the function list → **Run** → **Review permissions** → choose the business Gmail. Google warns it's unverified (it's your own script): **Advanced → Go to Rata & Smudge receipts → Allow**.
+7. Choose **sendTestReceipt** → **Run**. A sample receipt arrives in the business Gmail.
+8. In the app, Setup → GST receipts should now say **✓ Last checked … min ago**.
+
+Gmail allows about 100 emails a day from a free account, plenty for a market stall.
+
 ## Files
 
 | File | What it is |
@@ -39,6 +57,7 @@ A market till, brew planner and order tracker for Rata & Smudge, built as one we
 | `src/sync.js` | Sign-in and live sync with Firestore (adapted from Family Screen). |
 | `firestore.rules` | Security rules: who can read and change what. |
 | `firebase-config.json` | The project's web config (not a secret). Copy `firebase-config.example.json` and fill it in. |
+| `helper/Code.gs` | The Google helper script that emails GST receipts from the business Gmail. |
 | `test/screens.js` | Screen tests at iPad and Android sizes with a fake Firebase: `npm test`. |
 | `test/rules.test.js` | Security-rule tests against the Firestore emulator (needs Java). |
 

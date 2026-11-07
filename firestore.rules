@@ -88,6 +88,15 @@ service cloud.firestore {
         allow read: if canManage(bid);
         allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.at is number;
       }
+      // Emailed GST receipts: anyone selling can ask for a receipt for a sale to be emailed. The request only
+      // names the sale and the address; the Google helper script builds the receipt itself from the saved
+      // sale, sends it from the business Gmail and marks it sent (the helper works outside these rules).
+      match /receipts/{id} {
+        allow read: if canManage(bid);
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.status == 'queued'
+                      && request.resource.data.saleId is string && request.resource.data.to is string
+                      && request.resource.data.to.size() < 120 && request.resource.data.to.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$');
+      }
       // helpers: open and close a selling day, and record (never edit or delete) their own sales
       match /sessions/{id} {
         allow create, update: if isMember(bid) && request.resource.data.openedBy is string;

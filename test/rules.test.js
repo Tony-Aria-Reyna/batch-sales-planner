@@ -43,6 +43,12 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('nobody can change the approvals log', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/audit/a1'), { approver: MANAGER })));
   await t('nobody can delete from the approvals log', assertFails(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
   await t('log entries must be in your own name', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/audit/a2'), { by: OWNER, at: Date.now() })));
+  await t('helper can ask for a receipt to be emailed', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/receipts/r1'), { saleId: 'a1', to: 'customer@example.com', by: HELPER, status: 'queued', at: Date.now() })));
+  await t('a receipt request cannot claim to be sent already', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/receipts/r2'), { saleId: 'a1', to: 'customer@example.com', by: HELPER, status: 'sent', at: Date.now() })));
+  await t('a receipt needs a proper email address', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/receipts/r3'), { saleId: 'a1', to: 'not an email', by: HELPER, status: 'queued', at: Date.now() })));
+  await t('helper cannot read receipt requests', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/receipts/r1'))));
+  await t('nobody can mark a receipt sent from the app', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/receipts/r1'), { status: 'sent' })));
+  await t('a stranger cannot ask for a receipt', assertFails(setDoc(doc(as(STRANGER), 'businesses/b1/receipts/r4'), { saleId: 'a1', to: 'x@example.com', by: STRANGER, status: 'queued', at: Date.now() })));
   await t('unknown collections are refused', assertFails(setDoc(doc(as(OWNER), 'businesses/b1/junk/j1'), { a: 1 })));
   await t('manager cannot remove a person', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { members: [OWNER, MANAGER], roles: { [MANAGER]: 'manager' } })));
   await t('manager cannot promote the helper', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));

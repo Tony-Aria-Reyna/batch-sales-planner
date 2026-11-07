@@ -8,7 +8,7 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
   onSnapshot, query, where, getDocs, addDoc, writeBatch, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
 // every sub-collection the rules allow, and which ones a helper may read
-export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit'];
+export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts'];
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales'];
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
@@ -117,6 +117,7 @@ export function start(businessId, state, changed) {
     if (!snap.exists()) return;
     const d = snap.data(); members = d.members || []; owners = d.owners || []; mainOwner = d.owner || null; roles = d.roles || {};
     S.name = d.name || ''; S.settings = Object.assign(S.settings || {}, d.settings || {});
+    S.receiptHelper = d.receiptHelper || null;   // written by the Google helper script: last run, account, errors
     synced.biz = JSON.stringify(bizOf(S));
     onChange('business');
     if (first) { first = false; listenCols(); }                   // the role decides which collections we may read

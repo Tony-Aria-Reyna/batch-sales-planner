@@ -8,6 +8,9 @@ const nzTime=t=>new Intl.DateTimeFormat('en-NZ',{timeZone:TZ,hour:'numeric',minu
 const DAY_TYPES={market:'🧺 Market',farmgate:'🚪 Farm gate',tour:'🌿 Garden tour',shop:'🏪 Shop'};
 const PAY_TXT={cash:'💵 Cash',eftpos:'💳 EFTPOS',other:'🔖 Other'};
 const c2=c=>money((c||0)/100);
+// GST included in a GST-inclusive amount (15%): 3/23 of the total, rounded to the cent
+const gstOf=c=>Math.round((c||0)*3/23);
+const gstLine=c=>`<small class="gstl">incl. ${c2(gstOf(c))} GST</small>`;
 // The open sale is kept on the device, so a reload mid-sale loses nothing. Everything kept on the device
 // is tagged with the business, so another account on the same device never inherits it.
 let cart=[], cartDisc=null, correcting=null;
@@ -113,7 +116,7 @@ function tillHtml(){
       <button class="ptile extra" id="tExtra"><span class="pc">🔒 Needs a PIN</span><span class="pn">＋ Item not on the till</span><span class="ps">One-off, or add it for next time</span></button></section>
     <aside class="cart ${sheetOpen?'open':''}" id="cart">
       <div class="grab" id="cGrab"><i></i><span>${pc.lines.length?(sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'):'Tap a product to start'}</span></div>
-      <div class="ctot"><span>${cartCount()} item${cartCount()===1?'':'s'}${pc.lines.length?` · <button class="linkb" id="cClear">Clear</button>${pc.manual?'':` · <button class="linkb" id="cDisc" style="color:var(--green)">🏷️ Discount 🔒</button>`}`:''}</span><b id="cTotal">${c2(pc.total)}</b></div>
+      <div class="ctot"><span>${cartCount()} item${cartCount()===1?'':'s'}${pc.lines.length?` · <button class="linkb" id="cClear">Clear</button>${pc.manual?'':` · <button class="linkb" id="cDisc" style="color:var(--green)">🏷️ Discount 🔒</button>`}`:''}</span><span class="tot"><b id="cTotal">${c2(pc.total)}</b>${gstLine(pc.total)}</span></div>
       <div class="pay">${['cash','eftpos','other'].map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
       ${correcting?`<div class="corr">✏️ Correcting the ${c2(correcting.total)} sale from ${nzTime(correcting.at)}. When you take payment, the old sale is voided and replaced. <button class="linkb" id="cCorrX">Cancel correction</button></div>`:''}
       <div class="clines">${cartLinesHtml(pc)}</div>
@@ -214,11 +217,11 @@ function pay(method){
     const draw=()=>{ const pc=priceCart(cart,cartDisc), was=correcting, diff=was?pc.total-was.total:0;
       if(!pc.lines.length&&step!=='abandon'){ finish(); return; }
       const corrNote=was?`<p class="change ${diff>0?'bad':'ok'}" style="font-size:17px">Correcting a ${c2(was.total)} ${PAY_TXT[was.method]?PAY_TXT[was.method].replace(/^\S+ /,''):''} sale. ${diff>0?'The customer owes <b>'+c2(diff)+'</b> more.':diff<0?'Give the customer back <b>'+c2(-diff)+'</b>.':'Same total as before.'}${(was.method==='eftpos')!==(method==='eftpos')?' The payment method has changed: refund or charge on the terminal as needed.':''}</p>`:'';
-      const mname=PAY_TXT[method].replace(/^\S+ /,''), head=`<h2>${PAY_TXT[method]} · ${c2(pc.total)}</h2>`;
+      const mname=PAY_TXT[method].replace(/^\S+ /,''), head=`<h2>${PAY_TXT[method]} · ${c2(pc.total)}</h2><p class="note" style="margin-top:-6px">Includes ${c2(gstOf(pc.total))} GST</p>`;
       if(step==='review'){
         m.innerHTML=`<h2>Check the order</h2><div class="pbody">${corrNote}<div class="clines">${cartLinesHtml(pc,true)}</div>
             ${pc.manual?'':`<p><button class="linkb" id="rDisc" style="color:var(--green)">🏷️ Add a discount 🔒</button></p>`}</div>
-          <div class="pfoot"><div class="ctot" style="background:none;padding:6px 0"><span>${cartCount()} item${cartCount()===1?'':'s'}</span><b>${c2(pc.total)}</b></div>
+          <div class="pfoot"><div class="ctot" style="background:none;padding:6px 0"><span>${cartCount()} item${cartCount()===1?'':'s'}</span><span class="tot"><b>${c2(pc.total)}</b>${gstLine(pc.total)}</span></div>
             <p class="note" style="margin:0 0 6px">Paying by</p><div class="seg" style="width:100%;margin-bottom:10px">${['cash','eftpos','other'].map(k=>`<button data-m="${k}" class="${method===k?'on':''}" style="flex:1">${PAY_TXT[k]}</button>`).join('')}</div>
             <div class="paybig"><button class="btn alt" id="rBack">‹ Back to the till</button><button class="btn" id="rGo">Take payment ›</button></div>
             <p style="text-align:center;margin:12px 0 0"><button class="linkb" id="rCancel">Cancel this sale</button></p></div>`;
@@ -274,16 +277,43 @@ function pay(method){
     payRedraw=draw; draw();
   },{big:true,sticky:true});
 }
+/* ---------- emailed GST receipts ----------
+   The app only records the request (sale + address). The Google helper script running in the business
+   Gmail builds the receipt from the saved sale and sends it, within about 5 minutes; it works with no
+   signal at the stall because the request waits on the device until it can sync. */
+const receiptNo=s=>'RS-'+String(s.date||'').replace(/-/g,'')+'-'+String(s.id||'').slice(-5).toUpperCase();
+const receiptsReady=()=>!!(S.settings.gstNumber&&S.settings.receiptEmail);
+function emailReceipt(sale){
+  if(!sale) return;
+  if(!receiptsReady()){ toast(canManage()?'Set up GST receipts in Setup first (GST number and the business Gmail).':'Emailed receipts aren\'t set up yet. Ask the owner.'); return; }
+  modal((m,close)=>{ const big=sale.total>100000;
+    m.innerHTML=`<h2>📧 Email a GST receipt</h2><p class="note">For the ${c2(sale.total)} sale at ${nzTime(sale.at)} (includes ${c2(sale.gst)} GST). It's sent from <b>${esc(S.settings.receiptEmail)}</b> within about 5 minutes, even if there's no signal right now.</p>
+      <label class="note" for="rE">Customer's email</label><input class="txt" id="rE" type="email" inputmode="email" autocomplete="off" autocapitalize="none" placeholder="name@example.com">
+      ${big?'<label class="note" for="rNm">Customer\'s name (needed on receipts over $1,000)</label><input class="txt" id="rNm" autocapitalize="words">':''}
+      <div class="mact"><button class="btn alt" id="rC">Cancel</button><button class="btn" id="rS">Send receipt</button></div>`;
+    m.querySelector('#rC').onclick=close;
+    m.querySelector('#rS').onclick=()=>{ const to=m.querySelector('#rE').value.trim().toLowerCase(), nm=big?m.querySelector('#rNm').value.trim():'';
+      if(!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(to)){ toast('Type the full email address'); return; } if(big&&!nm){ toast('Add the customer\'s name'); return; }
+      S.receipts.push({id:SYNC.newId('receipts'),saleId:sale.id,sessionId:sale.sessionId||'',to,buyerName:nm,by:SYNC.me(),at:Date.now(),status:'queued',receiptNo:receiptNo(sale)}); save(); close();
+      toast('Receipt '+receiptNo(sale)+' will be emailed to '+to); };
+    setTimeout(()=>m.querySelector('#rE').focus(),60); });
+}
+const receiptNote=s=>S.receipts.filter(r=>r.saleId===s.id).map(r=>r.status==='sent'?'📧 receipt sent to '+r.to:r.status==='failed'?'⚠️ receipt to '+r.to+' failed'+(r.error?': '+r.error:''):'📧 receipt to '+r.to+' waiting to send').join(' · ');
+
 // the green "Payment approved" screen; it stays for cash until tapped (so the change isn't missed)
 function showApproved(sale){
   if(!sale) return;
   const d=document.createElement('div'); d.className='approved';
-  d.innerHTML=`<div class="tick">✓</div><h1>Payment approved</h1><p><b>${c2(sale.total)}</b> · ${PAY_TXT[sale.method].replace(/^\S+ /,'')}</p>
-    ${sale.method==='cash'&&sale.change>0?`<p style="font-size:30px;margin-top:16px">Give change: <b>${c2(sale.change)}</b></p>`:''}<button class="btn" id="apOk">Next customer</button>`;
+  d.innerHTML=`<div class="tick">✓</div><h1>Payment approved</h1><p><b>${c2(sale.total)}</b> · ${PAY_TXT[sale.method].replace(/^\S+ /,'')}</p><p style="font-size:17px;opacity:.9;margin-top:0">Includes ${c2(sale.gst)} GST</p>
+    ${sale.method==='cash'&&sale.change>0?`<p style="font-size:30px;margin-top:16px">Give change: <b>${c2(sale.change)}</b></p>`:''}
+    <button class="btn" id="apOk">Next customer</button>${receiptsReady()?'<button class="btn mailbtn" id="apMail">📧 Email a GST receipt</button>':''}`;
   document.body.appendChild(d);
-  const done=()=>{ d.remove(); modalStack=modalStack.filter(x=>x!==done); }; modalStack.push(done);
+  let timer=null;
+  const done=()=>{ clearTimeout(timer); d.remove(); modalStack=modalStack.filter(x=>x!==done); }; modalStack.push(done);
   d.querySelector('#apOk').onclick=done;
-  if(!(sale.method==='cash'&&sale.change>0)) setTimeout(done,3500);
+  const mb=d.querySelector('#apMail'); if(mb) mb.onclick=()=>{ done(); emailReceipt(sale); };
+  d.addEventListener('pointerdown',()=>clearTimeout(timer));   // touching it keeps it up
+  if(!(sale.method==='cash'&&sale.change>0)) timer=setTimeout(done,6000);
 }
 // Saved at once, even with no signal: Firestore keeps it on the device and sends it when the signal returns.
 function recordSale(method,pc,extra){
@@ -314,10 +344,11 @@ function showDaySales(approver){
   modal((m,close)=>{ const draw=()=>{ const list=daySales(d), t=dayTotals(d);
     m.innerHTML=`<h2>🧾 Sales so far · ${c2(t.total)}</h2><p class="note">Opened with ${esc(personName(approver))}'s PIN. ${t.count} sale${t.count===1?'':'s'}; cash ${c2(t.cash)}, EFTPOS ${c2(t.eftpos)}${t.other?', other '+c2(t.other):''}.</p>
       ${list.length?list.map(s=>`<div class="row ${s.voided?'voided':''}"><div class="grow"><b>${nzTime(s.at)} · ${c2(s.total)} ${PAY_TXT[s.method]||''}</b>
-        <small>${esc(s.lines.map(l=>l.qty+'× '+l.name+(l.size?' '+l.size:'')).join(', '))}${s.manualDiscount?' · discount '+c2(s.manualDiscount.amount):''}${s.servedBy?' · '+esc(s.servedBy):''}${s.replaces?' · corrected sale':''}${s.voided?' · '+(s.voidReason==='corrected'?'CORRECTED':'VOIDED')+' by '+esc(personName(s.voidedBy)):''}</small></div>
-        ${s.voided?'':`<button class="btn alt small" data-corr="${s.id}">Correct</button><button class="btn danger small" data-void="${s.id}">Void</button>`}</div>`).join(''):'<p class="note">No sales yet.</p>'}
+        <small>${esc(s.lines.map(l=>l.qty+'× '+l.name+(l.size?' '+l.size:'')).join(', '))}${s.manualDiscount?' · discount '+c2(s.manualDiscount.amount):''}${s.servedBy?' · '+esc(s.servedBy):''}${s.replaces?' · corrected sale':''}${s.voided?' · '+(s.voidReason==='corrected'?'CORRECTED':'VOIDED')+' by '+esc(personName(s.voidedBy)):''}${receiptNote(s)?'<br>'+esc(receiptNote(s)):''}</small></div>
+        ${s.voided?'':`<button class="btn alt small" data-mail="${s.id}" aria-label="Email a GST receipt">📧</button><button class="btn alt small" data-corr="${s.id}">Correct</button><button class="btn danger small" data-void="${s.id}">Void</button>`}</div>`).join(''):'<p class="note">No sales yet.</p>'}
       <div class="mact"><button class="btn" id="dOk">Close</button></div>`;
     m.querySelector('#dOk').onclick=close;
+    m.querySelectorAll('[data-mail]').forEach(b=>b.onclick=()=>emailReceipt(S.sales.find(x=>x.id===b.dataset.mail)));
     m.querySelectorAll('[data-void]').forEach(b=>b.onclick=()=>{ const s=S.sales.find(x=>x.id===b.dataset.void);
       confirmBox('Void this '+c2(s.total)+' sale?',(s.method==='cash'?'Give back the cash, then tap Void.':s.method==='eftpos'?'Do the refund on the EFTPOS terminal, then tap Void.':'Refund it, then tap Void.')+' You\'ll be asked for a PIN.','Void',()=>
         approve('void a sale',who=>{ Object.assign(s,{voided:true,voidedBy:who,voidedAt:Date.now(),voidReason:'voided'}); save(); draw(); toast('Voided · approved by '+personName(who)); },

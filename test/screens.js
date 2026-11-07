@@ -50,6 +50,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(!!(await page.$('#bk')), 'Setup has a visible Back button');
   ok(await page.evaluate(() => S.pins.length === 1 && S.pins[0].id === 'admin@example.com' && S.pins[0].hash.length === 64 && !JSON.stringify(S.pins).includes('2580')), 'personal PIN saved (as a hash, never the PIN itself)');
   ok(await page.evaluate(() => S.audit.some(a => a.action === 'open Setup' && a.approver === 'admin@example.com' && a.approverName === 'Admin' && a.at > 0)), 'opening Setup logged with who approved it and when');
+  ok(/Not running yet|Add the GST number/.test(await text(page)), 'receipt helper status shown in Setup');
+  await page.fill('#gstNo', '12345'); await page.press('#gstNo', 'Tab'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => !S.settings.gstNumber), 'a GST number with too few digits is refused');
+  await page.fill('#gstNo', '123456789'); await page.press('#gstNo', 'Tab'); await page.waitForTimeout(80);
+  await page.fill('#rcEmail', 'Shop@Example.com'); await page.press('#rcEmail', 'Tab'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => S.settings.gstNumber === '123-456-789' && S.settings.receiptEmail === 'shop@example.com'), 'GST number and receipt Gmail saved (formatted)');
   await page.click('#addPerson'); await page.fill('#pE', 'helper@example.com'); await page.click('#pA'); await page.waitForTimeout(300);
   ok(await page.evaluate(() => SYNC.roleOf('helper@example.com') === 'helper'), 'added a helper (helper is the default role)');
   // the account that set the business up is the main owner; here the test admin plays that part
@@ -107,6 +113,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const tap = n => page.locator('.ptile', { hasText: n }).click();
   await tap('Test Balm'); await tap('Test Oil'); await tap('Test Tea');
   ok((await page.textContent('#cTotal')) === '$50.00', 'deal applied by itself: $20 + $30 + $15 − $15 = $50.00');
+  ok((await page.textContent('.cart .gstl')) === 'incl. $6.52 GST', 'GST shown small under the total ($50.00 incl. $6.52)');
   await page.screenshot({ path: path.join(shots, '11-ipad-till-landscape.png') });
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(shots, '12-ipad-till-portrait.png') });
@@ -122,9 +129,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#pOk'); await page.waitForSelector('#cYes');
   ok(/\$70\.00 cash received and \$20\.00 change given\?/.test(await text(page)) && await page.evaluate(() => S.sales.length === 0), 'second confirmation asked before anything is saved');
   await page.click('#cNo'); ok(!!(await page.$('[data-v="exact"]')), 'No, go back returns to the payment screen'); await page.click('#pOk'); await page.click('#cYes'); await page.waitForSelector('.approved');
-  ok(/Payment approved/.test(await text(page)) && /Give change: \$20\.00/.test(await text(page)), 'green "Payment approved" screen, with the change to give');
+  ok(/Payment approved/.test(await text(page)) && /Give change: \$20\.00/.test(await text(page)) && /Includes \$6\.52 GST/.test(await text(page)), 'green "Payment approved" screen, with the change to give and the GST');
   await page.screenshot({ path: path.join(shots, '13b-ipad-payment-approved.png') });
-  await page.click('#apOk'); await page.waitForTimeout(100);
+  await page.click('#apMail'); await page.fill('#rE', 'customer@example'); await page.click('#rS'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.receipts.length === 0), 'receipt: an incomplete email address is refused');
+  await page.fill('#rE', 'Customer@Example.com'); await page.click('#rS'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => S.receipts.length === 1 && S.receipts[0].to === 'customer@example.com' && S.receipts[0].status === 'queued' && S.receipts[0].saleId === S.sales[0].id && /^RS-\d{8}-[A-Z0-9]{5}$/.test(S.receipts[0].receiptNo)), 'receipt request queued for the helper, with a receipt number');
   ok(await page.evaluate(() => S.sales.length === 1 && S.sales[0].total === 5000 && S.sales[0].change === 2000 && S.sales[0].gst === 652 && S.sales[0].servedBy === 'Sam'), 'sale saved: $50, change $20, GST $6.52, served by Sam');
   ok((await page.textContent('#cTotal')) === '$0.00', 'sale cleared, ready for the next customer');
   await page.click('#tUndo'); await page.waitForTimeout(100);

@@ -138,6 +138,8 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .la{min-width:76px;text-align:right}
 .ctot{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f3eee3;border-top:2px solid var(--line)}
 .ctot b{font-size:38px}
+.ctot .tot{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
+.gstl{font-size:13px;color:var(--muted);font-weight:600;margin-top:2px}
 .ctot span{color:var(--muted);font-size:16px}
 .pay{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
 .pb{border-radius:16px;min-height:72px;font-weight:800;font-size:19px;color:#fff}
@@ -211,6 +213,7 @@ main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--s
 .approved h1{font-size:40px;margin:10px 0;font-family:var(--brand-font)}
 .approved p{font-size:22px;margin:6px 0}
 .approved .btn{background:#fff;color:var(--ok);margin-top:26px;min-width:240px;min-height:64px;font-size:20px}
+.approved .mailbtn{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.8);margin-top:12px}
 #exitScr{position:fixed;inset:0;z-index:95;background:linear-gradient(170deg,#ebe7da 0%,#f7f5ee 55%,#e4e6d6 100%);display:flex;align-items:center;justify-content:center;padding:24px}
 .exitcard{background:var(--card);border-radius:28px;padding:34px 28px;width:min(480px,100%);text-align:center;box-shadow:0 20px 60px rgba(47,59,31,.16)}
 .exitcard .brandlogo{max-width:100%;max-height:150px;mix-blend-mode:multiply}
@@ -279,7 +282,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[] };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -387,6 +390,16 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
+// what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
+function helperStatus(){
+  const h=S.receiptHelper, st=S.settings;
+  if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
+  if(!h||!h.lastRun) return 'Not running yet: receipts will wait until the helper is set up in '+esc(st.receiptEmail)+'.';
+  const mins=Math.round((Date.now()-h.lastRun)/60e3), ago=mins<1?'just now':mins<120?mins+' min ago':Math.round(mins/60)+' hours ago';
+  if(h.account&&h.account!==st.receiptEmail) return '⚠️ The helper runs in '+esc(h.account)+', not '+esc(st.receiptEmail)+'. Receipts won\'t send until they match.';
+  if(h.error) return '⚠️ Last check '+ago+': '+esc(h.error);
+  return (mins>20?'⚠️ ':'✓ ')+'Last checked '+ago+(h.sent?' · '+h.sent+' receipt'+(h.sent===1?'':'s')+' sent in total':'')+(mins>20?'. It should check every 5 minutes; see the setup steps.':'');
+}
 SCREENS.setup={
   title:()=>({h:'Setup',s:'Only you can change these'}),
   html(){
@@ -402,6 +415,13 @@ SCREENS.setup={
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
       <div class="row"><div class="grow"><b>Helpers' names</b><small>${esc((st.staff||[]).join(', ')||'None yet')} · for "who served"</small></div><button class="btn alt small" id="goStaff">Change</button></div>
       <p class="note">Recipes, ingredients and the import from your Excel workbook come with the Brew screen.</p></div>
+
+    <div class="card"><h3>📧 GST receipts</h3>
+      <p class="note">Customers can be emailed a GST receipt after paying. Receipts show the business name, GST number, date, receipt number, items, the amount excluding GST, the GST and the total, which covers IRD's requirements for sales up to $1,000. For sales over $1,000 the customer's name is asked for too.</p>
+      <label class="note" for="gstNo">GST number</label><input class="txt" id="gstNo" inputmode="numeric" value="${esc(st.gstNumber||'')}" placeholder="123-456-789">
+      <label class="note" for="rcEmail">Business Gmail that sends the receipts</label><input class="txt" id="rcEmail" type="email" inputmode="email" autocapitalize="none" value="${esc(st.receiptEmail||'')}" placeholder="rataandsmudge@gmail.com">
+      <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><input class="txt" id="rcNote" value="${esc(st.receiptNote||'')}" placeholder="Thank you! rataandsmudge.co.nz">
+      <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
 
     <div class="card"><h3>👥 People</h3>
       <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. The <b>main owner</b> set the business up and can never be removed. A <b>co-owner</b> can do everything except change the main owner or delete the business. <b>Managers</b> can change everything except people. <b>Helpers</b> can only sell.</p>
@@ -432,6 +452,10 @@ SCREENS.setup={
     const n=$('#bizName'); n.onchange=()=>{ const v=n.value.trim(); if(!v){ n.value=S.name; return; } S.name=v; save(); toast('Saved'); };
     n.onkeydown=e=>{ if(e.key==='Enter') n.blur(); };
     $('#addPerson').onclick=addPerson;
+    const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
+      S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
+    const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
+    const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
     $('#goProd').onclick=()=>go('products'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
     document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>personMenu(b.dataset.role));
     $('#setPin').onclick=()=>setPinFlow(()=>render());
@@ -673,15 +697,25 @@ let IS_ADMIN=false;
 function startBusiness(id){ firstRender=true; SYNC.start(id,S,syncChanged); SYNC.isAdmin().then(a=>{ IS_ADMIN=a; if(a&&cur()==='setup') render(); }); }
 SYNC.onPendingChange(v=>{ pendingWrites=v; drawSync(); });
 
-/* ================= Android back button ================= */
-// Back closes the pop-up, then the screen, then asks "Close?". Chrome ignores our back step until the
-// screen has been tapped, so the guard is re-armed on the next tap.
-let backArmed=false, quitAsk=false;
-const reguard=()=>{ if(history.state&&history.state.rs==='guard') return; history.pushState({rs:'guard'},''); backArmed=true; };
+/* ================= Android back button =================
+   Back closes the pop-up, then the screen, then shows the Rata & Smudge screen; only then can the app close.
+   How it works: we keep one extra history entry (a "guard") above the page, so the back button lands on
+   our page instead of leaving the app. Chrome on Android SKIPS any history entry that was added while the
+   screen hadn't just been touched (its protection against apps trapping the back button). So a guard
+   added at start-up or straight after a back press can be skipped, and the app closes: that was the bug.
+   Fix: a guard only counts once it was added during a touch. Until then, the very next touch or key
+   press adds a fresh one (an extra history entry is harmless; a skipped one is not). */
+let guardTrusted=false, quitAsk=false;
+function reguard(){
+  // added inside a touch or key press? (navigator.userActivation where available; otherwise we're told)
+  const active=arguments[0]===true||!!(navigator.userActivation&&navigator.userActivation.isActive);
+  if(history.state&&history.state.rs==='guard'&&(guardTrusted||!active)) return;
+  history.pushState({rs:'guard',t:Date.now()},''); guardTrusted=active;
+}
 history.replaceState({rs:'base'},''); reguard();
-['pointerdown','keydown'].forEach(t=>document.addEventListener(t,()=>{ if(!quitAsk&&!backArmed) reguard(); },true));
+['pointerdown','keydown','touchstart'].forEach(t=>document.addEventListener(t,()=>{ if(!quitAsk&&!guardTrusted) reguard(true); },{capture:true,passive:true}));
 addEventListener('popstate',()=>{
-  backArmed=false;
+  guardTrusted=false;   // the guard we were on is gone; whatever we add now (no touch) may be skipped
   if(quitAsk){ quitAsk=false; $('#exitScr').hidden=true; history.back(); return; }
   if(modalStack.length){ closeModal(); reguard(); return; }
   if(typeof sheetOpen!=='undefined'&&sheetOpen&&cur()==='sell'){ setSheet(false); reguard(); return; }   // open sale panel: close it first
@@ -698,7 +732,7 @@ function showExit(){
     <button class="btn bigbtn" id="exStay">Stay in the app</button>
     <p class="note">Press <b>back</b> again to close the app.</p></div>`;
   e.hidden=false;
-  $('#exStay').onclick=()=>{ quitAsk=false; e.hidden=true; reguard(); };
+  $('#exStay').onclick=()=>{ quitAsk=false; e.hidden=true; reguard(true); };
 }
 
 /* ================= stay up to date ================= */
