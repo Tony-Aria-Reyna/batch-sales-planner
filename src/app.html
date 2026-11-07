@@ -585,7 +585,12 @@ const anyPins=()=>S.pins.some(p=>p.hash);
 const personName=e=>{ const p=S.pins.find(x=>x.id===e); return (p&&p.name)||String(e||'?').split('@')[0]; };
 async function pinHashOf(pin,email){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode((SYNC.businessId()||'')+'|'+email+'|rata-smudge|'+pin)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 async function whosePin(pin){ for(const p of S.pins){ if(p.hash&&await pinHashOf(pin,p.id)===p.hash) return p.id; } return null; }
+// The approvals log is about workers: something a manager or helper needed, signed off with a PIN.
+// An owner working on their own (not in till mode) is not logged: opening Setup, seeing the takings and
+// so on are an owner's own business. (Sales, voids, discounts and floats still record who approved them
+// on the record itself, whoever did it.)
 function logApproval(action,approver,details){
+  if(!tillLock()&&role()==='owner') return;
   S.audit.push({id:SYNC.newId('audit'),at:Date.now(),day:nzDay(),action,approver:approver||null,approverName:approver?personName(approver):'',by:SYNC.me(),tillMode:!!tillLock(),details:String(details||'')});
   save();
 }

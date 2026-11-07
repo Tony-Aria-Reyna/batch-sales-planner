@@ -5,6 +5,16 @@
    which is written to the approvals log with who approved it and when. Helpers never see the takings. */
 const nzDay=d=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(d||new Date());   // 2026-11-07
 const nzTime=t=>new Intl.DateTimeFormat('en-NZ',{timeZone:TZ,hour:'numeric',minute:'2-digit'}).format(new Date(t));
+// Date stamp for every sale, in New Zealand time, ready for spotting patterns later
+// (busiest weekday, hour, month, season). e.g. {local:'2026-11-08 10:42', weekday:'Sun', hour:10, month:'2026-11', week:'2026-W45', season:'Spring'}
+function nzStamp(t){
+  const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23',weekday:'short'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));
+  const y=+p.year, mo=+p.month, d=+p.day, dt=new Date(Date.UTC(y,mo-1,d)), dow=(dt.getUTCDay()+6)%7;   // Monday = 0
+  const th=new Date(dt); th.setUTCDate(dt.getUTCDate()-dow+3); const wy=th.getUTCFullYear(), w1=new Date(Date.UTC(wy,0,4));
+  const week=1+Math.round(((th-w1)/864e5-3+((w1.getUTCDay()+6)%7))/7);
+  const season=['Summer','Summer','Autumn','Autumn','Autumn','Winter','Winter','Winter','Spring','Spring','Spring','Summer'][mo-1];   // southern hemisphere
+  return {local:p.year+'-'+p.month+'-'+p.day+' '+p.hour+':'+p.minute,weekday:p.weekday,hour:+p.hour,month:p.year+'-'+p.month,week:wy+'-W'+String(week).padStart(2,'0'),season};
+}
 const DAY_TYPES={market:'🧺 Market',farmgate:'🚪 Farm gate',tour:'🌿 Garden tour',shop:'🏪 Shop'};
 const PAY_TXT={cash:'💵 Cash',eftpos:'💳 EFTPOS',other:'🔖 Other'};
 const c2=c=>money((c||0)/100);
@@ -332,7 +342,8 @@ function showApproved(sale){
 // Saved at once, even with no signal: Firestore keeps it on the device and sends it when the signal returns.
 function recordSale(method,pc,extra){
   const d=openDay(); if(!d) return;
-  const sale=Object.assign({id:SYNC.newId('sales'),sessionId:d.id,channel:d.type,date:nzDay(),at:Date.now(),
+  const now=Date.now();
+  const sale=Object.assign({id:SYNC.newId('sales'),sessionId:d.id,channel:d.type,where:d.name||'',date:nzDay(new Date(now)),at:now,when:nzStamp(now),
     lines:pc.lines,deals:pc.deals,manualDiscount:pc.manual||null,subtotal:pc.subtotal,discount:pc.discount,total:pc.total,gst:Math.round(pc.total*3/23),
     method,by:SYNC.me(),servedBy:servedBy()||'',voided:false},extra);
   if(correcting){ const old=S.sales.find(s=>s.id===correcting.id);

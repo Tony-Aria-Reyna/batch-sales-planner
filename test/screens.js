@@ -49,7 +49,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await pin(page, '2580'); await page.waitForSelector('#bizName');
   ok(!!(await page.$('#bk')), 'Setup has a visible Back button');
   ok(await page.evaluate(() => S.pins.length === 1 && S.pins[0].id === 'admin@example.com' && S.pins[0].hash.length === 64 && !JSON.stringify(S.pins).includes('2580')), 'personal PIN saved (as a hash, never the PIN itself)');
-  ok(await page.evaluate(() => S.audit.some(a => a.action === 'open Setup' && a.approver === 'admin@example.com' && a.approverName === 'Admin' && a.at > 0)), 'opening Setup logged with who approved it and when');
+  ok(await page.evaluate(() => !S.audit.some(a => a.action === 'open Setup')), 'an owner opening Setup on their own is not logged');
   ok(/Not running yet|Add the GST number/.test(await text(page)), 'receipt helper status shown in Setup');
   await page.fill('#gstNo', '12345'); await page.press('#gstNo', 'Tab'); await page.waitForTimeout(80);
   ok(await page.evaluate(() => !S.settings.gstNumber), 'a GST number with too few digits is refused');
@@ -143,6 +143,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => S.contacts.length === 1 && S.contacts[0].email === 'customer@example.com' && S.contacts[0].loyalty === true && S.contacts[0].kind === 'joined' && /Loyalty programme/.test(S.contacts[0].consentText) && S.contacts[0].name === 'Casey' && /Test Market/.test(S.contacts[0].source)), 'joined the Loyalty programme: consent recorded with the wording, name and market');
   ok(await page.evaluate(() => S.receipts.length === 1 && S.receipts[0].to === 'customer@example.com' && S.receipts[0].status === 'queued' && S.receipts[0].saleId === S.sales[0].id && /^RS-\d{8}-[A-Z0-9]{5}$/.test(S.receipts[0].receiptNo)), 'receipt request queued for the helper, with a receipt number');
   ok(await page.evaluate(() => S.sales.length === 1 && S.sales[0].total === 5000 && S.sales[0].change === 2000 && S.sales[0].gst === 652 && S.sales[0].servedBy === 'Sam'), 'sale saved: $50, change $20, GST $6.52, served by Sam');
+  ok(await page.evaluate(() => { const w = S.sales[0].when; return w && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(w.local) && /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(w.weekday) && w.hour >= 0 && /^\d{4}-\d{2}$/.test(w.month) && /^\d{4}-W\d{2}$/.test(w.week) && w.season && S.sales[0].where === 'Test Market'; }), 'sale date-stamped in NZ time (weekday, hour, month, week, season) with the market name');
   ok((await page.textContent('#cTotal')) === '$0.00', 'sale cleared, ready for the next customer');
   await page.click('#tUndo'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.sales.length === 0) && (await page.textContent('#cTotal')) === '$50.00', 'undo removes the sale and puts the items back');
@@ -232,8 +233,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => !S.contacts.some(c => c.email === 'other.buyer@example.com')), 'an owner can delete a contact completely');
   await page.click('#bk'); await page.click('#goAudit'); await page.waitForTimeout(100);
   const log = await text(page);
-  ok(/Add float/.test(log) && /Change the opening float/.test(log), 'float changes are in the approvals log');
-  ok(['Give a discount', 'Add an item not on the till', 'Correct a sale', 'Void a sale', 'End the day', 'Close the day', 'See the sales', 'Leave till mode'].every(a => log.includes(a) || a === 'Leave till mode') && /approved by Admin/.test(log), 'approvals log lists each approval with who and when');
+  ok(!/Add float|Give a discount|Open Setup|See the takings|Correct a sale/.test(log), 'things the owner did on their own are not in the log');
+  ok(['Void a sale', 'End the day', 'Close the day', 'See the sales'].every(a => log.includes(a)) && /approved by Admin/.test(log) && /in till mode/.test(log), 'approvals asked for in till mode (a worker at the till) are logged with who and when');
+  ok(await page.evaluate(() => S.sessions[0].floatAdds[0].approvedBy === 'admin@example.com' && S.sales.some(s => s.manualDiscount && s.manualDiscount.approvedBy)), 'who approved floats and discounts is still kept on the records themselves');
   await page.screenshot({ path: path.join(shots, '19-ipad-approvals-log.png'), fullPage: true });
   await page.click('#bk'); await page.click('#bk');
 
@@ -291,7 +293,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await cp.click('#cY'); await cp.fill('#pnN', 'Co'); await cp.click('#pnOk'); await pin(cp, '2580'); await cp.waitForTimeout(100);
   ok(/Someone else uses that PIN/.test(await text(cp)), 'the co-owner cannot pick a PIN someone else already uses');
   await pin(cp, '1470'); await cp.waitForTimeout(100); await pin(cp, '1470'); await cp.waitForTimeout(200); await pin(cp, '1470'); await cp.waitForSelector('#bizName');
-  ok(await cp.evaluate(() => S.pins.filter(p => p.hash).length === 2 && S.audit.some(a => a.action === 'open Setup' && a.approver === 'co@example.com')), 'co-owner\'s own PIN works and is logged as them');
+  ok(await cp.evaluate(() => S.pins.filter(p => p.hash).length === 2 && S.pins.some(p => p.id === 'co@example.com')), 'co-owner\'s own PIN works');
   await cp.close();
 
   console.log('Android phone: helper, stranger, and a second business');
