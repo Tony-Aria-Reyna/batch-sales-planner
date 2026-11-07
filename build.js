@@ -1,0 +1,20 @@
+// Builds public/ (what Firebase Hosting serves) from src/. Run: npm run build
+// MOCK=1 builds dist-test/ against the fake Firebase in test/ for screen tests.
+const fs = require('fs'), path = require('path'), esbuild = require('esbuild');
+const MOCK = process.env.MOCK === '1';
+const out = path.join(__dirname, MOCK ? 'dist-test' : 'public'); fs.mkdirSync(out, { recursive: true });
+const alias = MOCK ? { 'firebase/app': './test/mock-app.js', 'firebase/auth': './test/mock-auth.js', 'firebase/firestore': './test/mock-firestore.js' } : undefined;
+const sync = esbuild.buildSync({ entryPoints: ['src/sync.js'], bundle: true, minify: true, format: 'iife', globalName: 'SYNC', write: false, target: 'es2019', alias }).outputFiles[0].text;
+const cfgFile = path.join(__dirname, 'firebase-config.json');
+const config = fs.existsSync(cfgFile) ? JSON.stringify(JSON.parse(fs.readFileSync(cfgFile, 'utf8'))) : 'null';
+const version = 'rs-' + Date.now().toString(36);
+const html = fs.readFileSync('src/app.html', 'utf8')
+  .replace('/*@SYNC@*/', () => sync)
+  .replace('/*@MODULES@*/', () => ['catalogue.js', 'till.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
+  .replace('/*@CONFIG@*/null', () => MOCK ? JSON.stringify({ projectId: 'mock', apiKey: 'mock', authDomain: 'mock' }) : config)
+  .replace('/*@VERSION@*/', version);
+fs.writeFileSync(path.join(out, 'index.html'), html);
+fs.writeFileSync(path.join(out, 'version.json'), JSON.stringify({ version }));
+fs.writeFileSync(path.join(out, 'sw.js'), fs.readFileSync('src/sw.js', 'utf8').replace('__VERSION__', version));
+for (const f of ['manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'privacy.html']) fs.copyFileSync(path.join('src', f), path.join(out, f));
+console.log('built', version, (html.length / 1024).toFixed(0) + ' KB', '->', path.basename(out));

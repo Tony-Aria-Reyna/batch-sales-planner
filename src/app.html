@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3f5a3c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Rata & Smudge">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Rata &amp; Smudge</title>
+<style>
+:root{
+  --green:#3f5a3c; --green2:#5f7f58; --cream:#f6f1e7; --card:#fffdf8; --ink:#2b2a26; --muted:#6d685d; --line:#e4dccb;
+  --rata:#b8322a; --honey:#c98a3b; --ok:#2f7a45; --warn:#a86a12; --danger:#b8322a;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px); --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--cream);color:var(--ink);font:18px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+/* Safari zooms into any text box under 16px: keep every input at 18px */
+input,select,textarea{font:inherit;font-size:18px;color:var(--ink);-webkit-user-select:text;user-select:text}
+.txt{width:100%;padding:14px 16px;border:2px solid var(--line);border-radius:14px;background:#fff;min-height:56px}
+.txt:focus{outline:none;border-color:var(--green2)}
+[hidden]{display:none!important}
+a{color:var(--green)}
+
+/* ---------- top bar (never scrolls away) ---------- */
+.top{position:fixed;left:0;right:0;top:0;z-index:20;background:var(--green);color:#fff;
+  padding:calc(10px + var(--sat)) calc(16px + var(--sar)) 10px calc(16px + var(--sal));display:flex;align-items:center;gap:12px;min-height:calc(72px + var(--sat))}
+.top .back{background:rgba(255,255,255,.16);border-radius:14px;padding:10px 18px 10px 12px;font-weight:700;font-size:19px;min-height:52px;display:flex;align-items:center;gap:4px}
+.top .back b{font-size:28px;line-height:1;margin-top:-3px}
+.top .title{flex:1;min-width:0}
+.top .title h1{margin:0;font-size:24px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .title small{display:block;opacity:.85;font-size:15px}
+.syncpill{border-radius:99px;padding:8px 14px;font-size:15px;font-weight:700;background:rgba(255,255,255,.16);white-space:nowrap}
+.syncpill.wait{background:#ffe2a8;color:#5b3c00}
+.top .cog{font-size:26px;width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.16)}
+main{padding:calc(88px + var(--sat)) calc(18px + var(--sar)) calc(28px + var(--sab)) calc(18px + var(--sal));max-width:1180px;margin:0 auto}
+
+/* ---------- home ---------- */
+.today{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.today div span{display:block;color:var(--muted);font-size:15px;font-weight:600}
+.today div b{font-size:28px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:26px;min-height:190px;padding:22px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 2px 0 rgba(0,0,0,.04);transition:transform .08s}
+.tile:active{transform:scale(.98)}
+.tile .ic{font-size:52px;line-height:1}
+.tile h2{margin:10px 0 2px;font-size:28px}
+.tile p{margin:0;color:var(--muted);font-size:16px}
+.tile.sell{background:var(--green);color:#fff;border-color:var(--green)} .tile.sell p{color:#e5eee1}
+.tile.lock h2::after{content:" 🔒";font-size:20px}
+.soon{display:inline-block;margin-top:8px;background:#efe7d6;color:var(--muted);border-radius:99px;padding:3px 12px;font-size:14px;font-weight:700}
+.tile.sell .soon{background:rgba(255,255,255,.2);color:#fff}
+
+/* ---------- screens and cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px 22px;margin-bottom:16px}
+.card h3{margin:0 0 10px;font-size:22px}
+.note{color:var(--muted);font-size:16px;margin:6px 0}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);min-height:64px}
+.row:first-of-type{border-top:0}
+.row .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.row small{display:block;color:var(--muted);font-size:15px}
+.btn{background:var(--green);color:#fff;border-radius:16px;padding:14px 22px;font-weight:700;min-height:56px;font-size:18px}
+.btn.alt{background:#efe7d6;color:var(--ink)}
+.btn.danger{background:#fbe4e1;color:var(--danger)}
+.btn.small{min-height:48px;padding:10px 16px;font-size:16px}
+.btn:disabled{opacity:.5}
+.chip{border-radius:99px;padding:5px 12px;font-size:14px;font-weight:700;background:#efe7d6;white-space:nowrap}
+.chip.owner{background:#dfe9d9;color:var(--green)} .chip.manager{background:#e6eef7;color:#24507a} .chip.helper{background:#fdebd3;color:#7a4b0b}
+.seg{display:inline-flex;background:#efe7d6;border-radius:14px;padding:4px;gap:4px}
+.seg button{padding:10px 16px;border-radius:11px;font-weight:700;font-size:16px;min-height:48px}
+.seg button.on{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.coming{text-align:center;padding:40px 20px}
+.coming .ic{font-size:80px}
+.coming ul{text-align:left;max-width:560px;margin:16px auto;color:var(--muted)}
+
+/* ---------- products, deals ---------- */
+.colours{display:flex;flex-wrap:wrap;gap:8px}
+.colours button{border-radius:12px;padding:10px 14px;font-weight:700;font-size:15px;min-height:48px;border:3px solid transparent}
+.colours button.on{border-color:var(--ink)}
+.pastnames{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.chip.big{font-size:18px;padding:12px 20px;min-height:52px}
+.chip.on{background:var(--green);color:#fff}
+.bigseg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 14px}
+.bigseg button{background:#efe7d6;border-radius:16px;min-height:68px;font-weight:700;font-size:18px;border:3px solid transparent}
+.bigseg button.on{background:#dfe9d9;border-color:var(--green)}
+.bigbtn{width:100%;min-height:72px;font-size:22px}
+.linkb{color:var(--rata);font-weight:700;text-decoration:underline;font-size:16px}
+
+/* ---------- the till: products left, sale right (landscape); sale at the bottom (portrait) ---------- */
+.till{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding-bottom:84px}
+.ptile{position:relative;border-radius:20px;min-height:128px;padding:14px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 2px 0 rgba(0,0,0,.08);transition:transform .06s}
+.ptile:active{transform:scale(.96)}
+.ptile .pn{font-weight:800;font-size:18px;line-height:1.2}
+.ptile .ps{font-size:15px;opacity:.85}
+.ptile .pp{font-size:24px;font-weight:800;margin-top:6px}
+.ptile .pq{position:absolute;top:-8px;right:-8px;background:var(--ink);color:#fff;border-radius:99px;min-width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;padding:0 8px}
+.cart{position:sticky;top:calc(84px + var(--sat));background:var(--card);border:2px solid var(--green);border-radius:22px;display:flex;flex-direction:column;max-height:calc(100vh - 110px - var(--sat) - var(--sab));overflow:hidden}
+.clines{flex:1;overflow:auto;padding:8px 14px;min-height:80px}
+.cempty{text-align:center;padding:24px 0}
+.cl{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.cl small{display:block;color:var(--muted);font-size:14px}
+.cl .grow{flex:1;min-width:0}
+.cl.deal{color:var(--ok)}
+.qb{width:44px;height:44px;border-radius:12px;background:#efe7d6;font-size:24px;font-weight:800}
+.qn{min-width:24px;text-align:center}
+.la{min-width:76px;text-align:right}
+.ctot{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f3eee3;border-top:2px solid var(--line)}
+.ctot b{font-size:38px}
+.ctot span{color:var(--muted);font-size:16px}
+.pay{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
+.pb{border-radius:16px;min-height:72px;font-weight:800;font-size:19px;color:#fff}
+.pb.cash{background:var(--ok)} .pb.eftpos{background:#24507a} .pb.other{background:#6d685d}
+.pb:disabled{opacity:.35}
+.tbar{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 14px}
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+.notes button{min-height:76px;border-radius:16px;background:#e8f1e3;font-size:26px;font-weight:800;color:var(--green)}
+.notes .exact{background:var(--green);color:#fff;font-size:22px}
+.change{border-radius:16px;padding:14px;font-size:20px;text-align:center;background:#f3eee3}
+.change.ok{background:#e3f1e6;color:var(--ok)} .change.bad{background:#fbe4e1;color:var(--danger)}
+.change .big{font-size:40px;display:block}
+.eod{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.eod div{background:#f3eee3;border-radius:14px;padding:10px 14px} .eod span{display:block;color:var(--muted);font-size:15px} .eod b{font-size:24px}
+.row.voided{opacity:.5;text-decoration:line-through}
+.tillmode .top{background:#7a4b0b}
+.tlock{background:rgba(255,255,255,.18);border-radius:14px;padding:10px 14px;font-weight:700;min-height:52px}
+@media (max-width:1000px) and (orientation:portrait),(max-width:860px){
+  .till{grid-template-columns:1fr}
+  .tgrid{padding-bottom:calc(330px + var(--sab))}
+  .cart{position:fixed;left:0;right:0;bottom:0;top:auto;border-radius:22px 22px 0 0;border-width:2px 0 0;max-height:46vh;z-index:15;padding-bottom:var(--sab);box-shadow:0 -8px 30px rgba(0,0,0,.12)}
+  .clines{max-height:20vh}
+}
+@media (max-width:640px){
+  .tgrid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .ptile{min-height:112px;padding:12px} .ptile .pn{font-size:16px} .ptile .pp{font-size:21px}
+  .ctot b{font-size:30px} .pb{min-height:60px;font-size:17px} .bigseg{grid-template-columns:1fr 1fr}
+  .tbar{gap:8px} .tbar .btn{min-height:48px;padding:8px 12px;font-size:15px}
+  .clines{max-height:16vh}
+}
+
+/* ---------- pop-ups ---------- */
+#layer:empty{display:none}
+.scrim{position:fixed;inset:0;background:rgba(30,28,22,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:calc(16px + var(--sat)) 16px calc(16px + var(--sab))}
+.modal{background:var(--card);border-radius:24px;padding:24px;width:min(560px,100%);max-height:100%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal h2{margin:0 0 12px;font-size:24px}
+.mact{display:flex;gap:12px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.pindots{display:flex;gap:16px;justify-content:center;margin:12px 0}
+.pindots i{width:20px;height:20px;border-radius:50%;border:3px solid var(--green)}
+.pindots i.on{background:var(--green)}
+.pindots.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-10px)}75%{transform:translateX(10px)}}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:340px;margin:0 auto}
+.pinpad button{height:76px;border-radius:18px;background:#efe7d6;font-size:30px;font-weight:700}
+.pinpad .pk-s{font-size:18px}
+#toast{position:fixed;left:50%;top:calc(80px + var(--sat));transform:translateX(-50%) translateY(-30px);opacity:0;pointer-events:none;background:var(--ink);color:#fff;padding:14px 22px;border-radius:16px;z-index:80;font-weight:600;transition:transform .25s,opacity .25s;max-width:90vw;text-align:center}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+#toast:not(.show){visibility:hidden;transition:transform .25s,visibility 0s .25s}
+.tiles.one{grid-template-columns:1fr!important}
+.tiles.one .tile{min-height:260px}
+
+/* ---------- install card ---------- */
+.inst{position:fixed;left:calc(16px + var(--sal));right:calc(16px + var(--sar));bottom:calc(16px + var(--sab));z-index:40;background:#fff;border:2px solid var(--green2);border-radius:22px;padding:16px 18px;display:flex;gap:14px;align-items:center;box-shadow:0 10px 40px rgba(0,0,0,.18);max-width:640px;margin:0 auto}
+.inst img{width:60px;height:60px;border-radius:14px}
+.inst .t{flex:1} .inst .t b{display:block;font-size:19px} .inst .t span{display:block;color:var(--muted);font-size:16px}
+.inst .how{color:var(--ink)!important;margin-top:4px}
+.shareic{display:inline-block;vertical-align:-4px;width:22px;height:22px}
+
+/* ---------- sign-in gate ---------- */
+#gate{position:fixed;inset:0;z-index:60;background:linear-gradient(170deg,#e9e1cf 0%,#f6f1e7 55%,#dfe8d9 100%);display:flex;align-items:center;justify-content:center;padding:calc(20px + var(--sat)) 20px calc(20px + var(--sab));overflow:auto}
+.gcard{background:var(--card);border-radius:28px;padding:34px 30px;width:min(520px,100%);text-align:center;box-shadow:0 20px 60px rgba(63,90,60,.18)}
+.gcard img.logo{width:96px;height:96px;border-radius:24px}
+.gcard h1{margin:14px 0 6px;font-size:32px;color:var(--green)}
+.gcard p{margin:10px 0}
+.gbtn{display:inline-flex;align-items:center;gap:12px;background:#fff;border:2px solid var(--line);border-radius:18px;padding:14px 26px;font-weight:700;font-size:20px;min-height:64px;margin-top:14px}
+.gbtn svg{width:26px;height:26px}
+.gbtn.dark{background:var(--green);color:#fff;border-color:var(--green)}
+.gsmall{font-size:15px;color:var(--muted)}
+.gerr{background:#fbe4e1;color:#7d1d16;border-radius:14px;padding:12px 14px;font-size:16px;text-align:left;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.gdots{display:flex;gap:10px;justify-content:center;margin:18px 0}
+.gdots i{width:14px;height:14px;border-radius:50%;background:var(--green2);animation:bob 1s infinite}
+.gdots i:nth-child(2){animation-delay:.15s;background:var(--honey)} .gdots i:nth-child(3){animation-delay:.3s;background:var(--rata)}
+@keyframes bob{50%{transform:translateY(-8px)}}
+
+/* ---------- iPad portrait and phones ---------- */
+@media (max-width:1000px) and (orientation:portrait),(max-width:860px){ .tiles{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:640px){
+  .tiles{gap:12px} .tile{min-height:150px;padding:16px;border-radius:22px} .tile .ic{font-size:40px} .tile h2{font-size:23px} .tile p{font-size:15px}
+  .today{grid-template-columns:repeat(2,1fr);padding:14px 16px} .today div b{font-size:23px}
+  .top .title h1{font-size:20px} .syncpill{font-size:13px;padding:6px 10px} .top .back{font-size:17px;padding:8px 14px 8px 10px}
+  main{padding-left:calc(12px + var(--sal));padding-right:calc(12px + var(--sar))}
+}
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main id="main"></main>
+<div id="layer"></div>
+<div id="toast"></div>
+<div id="gate"></div>
+
+<script>/*@SYNC@*/</script>
+<script>
+'use strict';
+/* ================= basics ================= */
+const CONFIG=/*@CONFIG@*/null;
+const APP_VERSION='/*@VERSION@*/';
+const TZ='Pacific/Auckland';                       // one home time zone, whatever the device is set to
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+const money=n=>'$'+(Math.round((+n||0)*100)/100).toLocaleString('en-NZ',{minimumFractionDigits:2,maximumFractionDigits:2});
+const nzDate=(d,o)=>new Intl.DateTimeFormat('en-NZ',Object.assign({timeZone:TZ},o||{weekday:'long',day:'numeric',month:'long'})).format(d);
+const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const isStandalone=()=>navigator.standalone===true||matchMedia('(display-mode: standalone)').matches;
+const isEmail=s=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').trim());
+let toastT=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
+
+// the whole business, in memory. Filled and kept live by SYNC.
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[] };
+const save=()=>SYNC.push();
+const role=()=>SYNC.myRole();
+const canManage=()=>['owner','manager'].includes(role());
+
+/* ================= pop-ups ================= */
+let modalStack=[];
+function modal(build){
+  const L=$('#layer'); const scrim=document.createElement('div'); scrim.className='scrim';
+  const m=document.createElement('div'); m.className='modal'; scrim.appendChild(m); L.appendChild(scrim);
+  const close=()=>{ scrim.remove(); modalStack=modalStack.filter(x=>x!==close); };
+  modalStack.push(close);
+  scrim.addEventListener('click',e=>{ if(e.target===scrim) close(); });
+  build(m,close);
+  return close;
+}
+const closeModal=()=>{ const c=modalStack[modalStack.length-1]; if(c) c(); };
+function confirmBox(title,body,yes,onYes,danger){
+  modal((m,close)=>{ m.innerHTML=`<h2>${esc(title)}</h2><p>${body}</p><div class="mact"><button class="btn alt" id="cN">Cancel</button><button class="btn ${danger?'danger':''}" id="cY">${esc(yes)}</button></div>`;
+    m.querySelector('#cN').onclick=close; m.querySelector('#cY').onclick=()=>{ close(); onYes(); }; });
+}
+
+/* ================= screens (a small stack, so Back always knows where to go) ================= */
+// Every screen has a visible Back button: the iPad has no system back button.
+const SCREENS={};
+let stack=['home'];
+const cur=()=>stack[stack.length-1];
+function go(name){ if(cur()===name||tillLock()) return; stack.push(name); render(); window.scrollTo(0,0); }
+function back(){ if(tillLock()) return true; if(stack.length>1){ const left=stack.pop(); if(left==='setup') relockPin(); render(); window.scrollTo(0,0); return true; } return false; }
+function home(){ if(stack.includes('setup')) relockPin(); stack=['home']; render(); }
+
+function render(){
+  if(!S.settings||!SYNC.businessId()) return;
+  lsSet('rs.wasSelling',cur()==='sell'?SYNC.businessId():'');
+  if(cur()!=='home'){ const ic=$('#inst'); if(ic) ic.remove(); }   // never cover the till
+  const sc=SCREENS[cur()]||SCREENS.home;
+  const t=sc.title?sc.title():{h:S.name||'Rata & Smudge',s:nzDate(new Date())}, lock=!!tillLock();
+  document.body.classList.toggle('tillmode',lock);
+  if(cur()!=='sell') keepAwake(false);
+  $('#top').innerHTML=`${cur()!=='home'&&!lock?'<button class="back" id="bk" aria-label="Back"><b>‹</b> Back</button>':''}
+    <div class="title"><h1>${esc(t.h)}</h1>${t.s?`<small>${esc(t.s)}</small>`:''}</div>
+    <span class="syncpill" id="syncPill"></span>
+    ${cur()==='home'&&canManage()?'<button class="cog" id="cog" aria-label="Setup">⚙️</button>':''}${lock?'<button class="tlock" id="tlk">🔒 Till mode</button>':''}`;
+  const tl=$('#tlk'); if(tl) tl.onclick=()=>toast('Locked to selling. Use "Leave till mode" and the PIN to unlock.');
+  const bk=$('#bk'); if(bk) bk.onclick=back;
+  const cg=$('#cog'); if(cg) cg.onclick=()=>requirePin(()=>go('setup'));
+  drawSync();
+  $('#main').innerHTML=sc.html();
+  sc.wire&&sc.wire();
+}
+
+/* ---------- saved / will sync marker ---------- */
+let pendingWrites=false;
+function drawSync(){
+  const p=$('#syncPill'); if(!p) return;
+  const off=!navigator.onLine;
+  if(off||pendingWrites){ p.className='syncpill wait'; p.textContent=off?'📴 Offline · saved on this device':'⏳ Saved on this device, will sync'; }
+  else { p.className='syncpill'; p.textContent='✓ Saved'; }
+}
+addEventListener('online',drawSync); addEventListener('offline',drawSync);
+
+/* ================= home ================= */
+const TILES=[
+  {id:'sell', ic:'🧺', h:'Sell', p:'Market, farm gate, tour or shop', all:true},
+  {id:'brew', ic:'🫙', h:'Brew', p:'Plan batches and the shopping list', phase:4},
+  {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify', phase:4},
+  {id:'lists', ic:'✅', h:'Lists', p:'To do and shopping', phase:4},
+  {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', phase:5},
+  {id:'setup', ic:'⚙️', h:'Setup', p:'Products, prices, people, PIN', lock:true},
+];
+SCREENS.home={
+  html(){
+    const tiles=TILES.filter(t=>t.all||canManage()), d=openDay();
+    const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
+    return `<section class="today" aria-label="Today">
+        <div><span>Today's takings</span><b>${c2(taken)}</b></div>
+        <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
+        <div><span>Batches due</span><b>0</b></div>
+        <div><span>Orders due</span><b>0</b></div>
+      </section>
+      <section class="tiles ${tiles.length===1?'one':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&S.settings.pinHash?'lock':''}" data-go="${t.id}">
+        <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
+      ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p>`:''}`;
+  },
+  wire(){ document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else go(id); }); }
+};
+
+/* ---------- screens still to build: say what they will do ---------- */
+const COMING={
+  brew:{ic:'🫙',h:'Brew',phase:4,what:['Pick a recipe and how many batches','See the ingredient shopping list, the cost and how many bottles it fills','Log a batch as made, then bottled']},
+  orders:{ic:'📦',h:'Orders',phase:4,what:['Wholesale and custom orders: who, what, when due, paid or not','Shopify orders arrive by themselves, ready to pack, with a notification']},
+  lists:{ic:'✅',h:'Lists',phase:4,what:['To-do and shopping lists, shared between devices, with reminders']},
+  reports:{ic:'📈',h:'Reports',phase:5,what:['Takings by day, channel and product','Monthly profit after costs, and break-even','GST collected, for the GST return']},
+};
+for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
+  title:()=>({h:c.h}),
+  html:()=>`<div class="card coming"><div class="ic">${c.ic}</div><h2>${c.h} is coming in the next stage</h2><p class="note">Stage ${c.phase} of 5. Here is what it will do:</p><ul>${c.what.map(w=>`<li>${esc(w)}</li>`).join('')}</ul><button class="btn" id="gh">Back to home</button></div>`,
+  wire(){ $('#gh').onclick=home; }
+};
+
+/* ================= Setup (behind the PIN) ================= */
+const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
+SCREENS.setup={
+  title:()=>({h:'Setup',s:'Only you can change these'}),
+  html(){
+    const st=S.settings, own=role()==='owner', mem=SYNC.getMembers();
+    return `
+    <div class="card"><h3>🏷️ Business</h3>
+      <label class="note" for="bizName">Business name</label>
+      <input class="txt" id="bizName" value="${esc(S.name)}" autocomplete="organization" enterkeyhint="done">
+      <p class="note">Time zone: New Zealand (Pacific/Auckland). GST: registered, 15%, and every price in the till includes GST.</p></div>
+
+    <div class="card"><h3>🧾 What you sell</h3>
+      <div class="row"><div class="grow"><b>Products and prices</b><small>${S.products.length} product${S.products.length===1?'':'s'} · the till buttons · prices include GST</small></div><button class="btn small" id="goProd">Open</button></div>
+      <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
+      <div class="row"><div class="grow"><b>Helpers' names</b><small>${esc((st.staff||[]).join(', ')||'None yet')} · for "who served"</small></div><button class="btn alt small" id="goStaff">Change</button></div>
+      <p class="note">Recipes, ingredients and the import from your Excel workbook come with the Brew screen.</p></div>
+
+    <div class="card"><h3>👥 People</h3>
+      <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. <b>Helpers</b> can only sell. <b>Managers</b> can change everything except people.</p>
+      ${mem.map(e=>{ const r=SYNC.roleOf(e); return `<div class="row"><div class="grow"><b>${esc(e)}</b>${e===SYNC.me()?'<small>This is you</small>':''}</div>
+        <span class="chip ${r}">${ROLE_TXT[r]}</span>${own&&r!=='owner'?`<button class="btn alt small" data-role="${esc(e)}">Change</button>`:''}</div>`; }).join('')}
+      <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button></div></div>
+
+    <div class="card"><h3>🔒 Setup PIN</h3>
+      <p class="note">${st.pinHash?'A 4-digit PIN protects Setup. It locks again as soon as you leave Setup.':'No PIN yet. Set one so helpers cannot open Setup.'}</p>
+      <div class="row"><div class="grow">Don't ask for the PIN on this device<small>Only for a device nobody else uses</small></div>
+        <div class="seg"><button data-trust="0" class="${!pinTrusted()?'on':''}">Ask</button><button data-trust="1" class="${pinTrusted()?'on':''}">Don't ask</button></div></div>
+      <div class="mact" style="justify-content:flex-start"><button class="btn" id="setPin">${st.pinHash?'Change the PIN':'Set a PIN'}</button>${st.pinHash?'<button class="btn danger" id="noPin">Remove the PIN</button>':''}</div></div>
+
+    <div class="card"><h3>📲 This device</h3>
+      <div class="row"><div class="grow">${isStandalone()?'✓ Installed on the home screen':'Not on the home screen yet'}<small>${isIOS()?'iPad or iPhone':(/Android/.test(navigator.userAgent)?'Android':'Computer')}</small></div><button class="btn alt small" id="howInst">How to install</button></div>
+      <div class="row"><div class="grow">Signed in as <b>${esc(SYNC.me())}</b><small>App version ${esc(APP_VERSION)}</small></div><button class="btn alt small" id="signOut">Sign out</button></div></div>
+
+    <div class="card"><h3>🛡️ Privacy and your data</h3>
+      <p class="note">Everything is stored in Google Firebase (Sydney data centre). Only the people above can see it. <a href="privacy.html" target="_blank" rel="noopener">Read the privacy statement</a>.</p>
+      <div class="row"><div class="grow">Download everything as a file</div><button class="btn alt small" id="dl">⬇️ Download</button></div>
+      ${own?'<div class="row"><div class="grow"><b>Delete this business</b> and everything in it, for good</div><button class="btn danger small" id="del">Delete…</button></div>':''}</div>
+
+    ${IS_ADMIN?`<div class="card"><h3>✉️ Invites (admin only)</h3>
+      <p class="note">A Google account must be invited before it can set up a new business.</p><div id="invList" class="note">Loading…</div>
+      <div class="mact" style="justify-content:flex-start"><button class="btn" id="addInv">＋ Invite an account</button></div></div>`:''}`;
+  },
+  wire(){
+    const n=$('#bizName'); n.onchange=()=>{ const v=n.value.trim(); if(!v){ n.value=S.name; return; } S.name=v; save(); toast('Saved'); };
+    n.onkeydown=e=>{ if(e.key==='Enter') n.blur(); };
+    $('#addPerson').onclick=addPerson;
+    $('#goProd').onclick=()=>go('products'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
+    document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>personMenu(b.dataset.role));
+    document.querySelectorAll('[data-trust]').forEach(b=>b.onclick=()=>{ lsSet('rs.pinTrust',b.dataset.trust==='1'); render(); });
+    $('#setPin').onclick=()=>setPinFlow(()=>render());
+    const np=$('#noPin'); if(np) np.onclick=()=>confirmBox('Remove the PIN?','Anyone holding this device could then open Setup.','Remove',()=>{ S.settings.pinHash=''; save(); render(); toast('PIN removed'); },true);
+    $('#howInst').onclick=showInstall;
+    $('#signOut').onclick=()=>confirmBox('Sign out?','You will need your Google account to sign back in.','Sign out',()=>SYNC.signOut());
+    $('#dl').onclick=downloadData;
+    const d=$('#del'); if(d) d.onclick=deleteFlow;
+    if($('#invList')) drawInvites();
+  }
+};
+function editStaff(){
+  modal((m,close)=>{ const draw=()=>{ const st=S.settings.staff||[];
+    m.innerHTML=`<h2>Helpers' names</h2><p class="note">Shown when choosing who is serving. These are just names; to let someone use their own phone, add their Google account under People.</p>
+      ${st.map((n,i)=>`<div class="row"><div class="grow">${esc(n)}</div><button class="btn alt small" data-rm="${i}">Remove</button></div>`).join('')}
+      <div style="display:flex;gap:10px;margin-top:10px"><input class="txt" id="sN" autocapitalize="words" placeholder="First name"><button class="btn" id="sA">Add</button></div><div class="mact"><button class="btn" id="sOk">Done</button></div>`;
+    m.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ S.settings.staff=st.filter((x,i)=>i!==+b.dataset.rm); save(); draw(); });
+    m.querySelector('#sA').onclick=()=>{ const n=m.querySelector('#sN').value.trim(); if(!n) return; if(!st.includes(n)) S.settings.staff=[...st,n]; save(); draw(); };
+    m.querySelector('#sOk').onclick=()=>{ close(); render(); }; }; draw(); });
+}
+function addPerson(){
+  modal((m,close)=>{ let r='helper';
+    const draw=()=>{ m.innerHTML=`<h2>Add a person</h2><p class="note">They sign in with this Google account.</p>
+      <input class="txt" id="pE" type="email" inputmode="email" autocomplete="off" autocapitalize="none" placeholder="name@gmail.com">
+      <p class="note" style="margin-top:14px">What can they do?</p>
+      <div class="seg"><button data-r="helper" class="${r==='helper'?'on':''}">Helper: sell only</button><button data-r="manager" class="${r==='manager'?'on':''}">Manager: everything</button></div>
+      <div class="mact"><button class="btn alt" id="pC">Cancel</button><button class="btn" id="pA">Add</button></div>`;
+      m.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{ const v=m.querySelector('#pE').value; r=b.dataset.r; draw(); m.querySelector('#pE').value=v; });
+      m.querySelector('#pC').onclick=close;
+      m.querySelector('#pA').onclick=async()=>{ const e=m.querySelector('#pE').value.trim().toLowerCase();
+        if(!isEmail(e)){ toast('Type a full Google email address'); return; }
+        if(SYNC.getMembers().includes(e)){ toast('They are already in'); return; }
+        try{ await SYNC.addMember(e,r); close(); toast('Added '+e); }catch(x){ toast('Could not add: '+(x.code||x.message)); } };
+    }; draw(); });
+}
+function personMenu(e){
+  modal((m,close)=>{ const r=SYNC.roleOf(e);
+    m.innerHTML=`<h2>${esc(e)}</h2><p class="note">Now: ${ROLE_TXT[r]}</p>
+      <div class="mact" style="justify-content:flex-start"><button class="btn alt" data-r="helper">Make a helper</button><button class="btn alt" data-r="manager">Make a manager</button></div>
+      <div class="mact"><button class="btn danger" id="rm">Remove from the business</button><button class="btn" id="ok">Done</button></div>`;
+    m.querySelectorAll('[data-r]').forEach(b=>b.onclick=async()=>{ try{ await SYNC.setRole(e,b.dataset.r); close(); toast('Updated'); }catch(x){ toast('Could not change: '+(x.code||x.message)); } });
+    m.querySelector('#rm').onclick=()=>{ close(); confirmBox('Remove '+e+'?','They will no longer be able to open the business.','Remove',async()=>{ try{ await SYNC.removeMember(e); toast('Removed'); }catch(x){ toast('Could not remove: '+(x.code||x.message)); } },true); };
+    m.querySelector('#ok').onclick=close; });
+}
+async function drawInvites(){
+  const el=$('#invList'); if(!el) return;
+  try{ const l=await SYNC.listInvites();
+    el.innerHTML=l.length?l.map(i=>`<div class="row"><div class="grow">${esc(i.email)}</div><button class="btn alt small" data-uninv="${esc(i.email)}">Cancel invite</button></div>`).join(''):'No invites waiting.';
+    el.querySelectorAll('[data-uninv]').forEach(b=>b.onclick=async()=>{ await SYNC.removeInvite(b.dataset.uninv); drawInvites(); });
+  }catch(e){ el.textContent='Could not load invites: '+(e.code||e.message); }
+  $('#addInv').onclick=()=>modal((m,close)=>{ m.innerHTML=`<h2>Invite an account</h2><input class="txt" id="iE" type="email" inputmode="email" autocapitalize="none" placeholder="name@gmail.com"><div class="mact"><button class="btn alt" id="iC">Cancel</button><button class="btn" id="iA">Invite</button></div>`;
+    m.querySelector('#iC').onclick=close;
+    m.querySelector('#iA').onclick=async()=>{ const e=m.querySelector('#iE').value; if(!isEmail(e)){ toast('Type a full email address'); return; } try{ await SYNC.addInvite(e); close(); drawInvites(); toast('Invited'); }catch(x){ toast('Could not invite: '+(x.code||x.message)); } }; });
+}
+async function downloadData(){
+  try{ const data=await SYNC.exportBusiness(); const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+    a.download='rata-smudge-'+new Intl.DateTimeFormat('en-CA',{timeZone:TZ}).format(new Date())+'.json'; document.body.appendChild(a); a.click(); a.remove(); toast('Downloaded'); }
+  catch(e){ toast('Could not download: '+(e.code||e.message)); }
+}
+function deleteFlow(){
+  modal((m,close)=>{ m.innerHTML=`<h2 style="color:var(--danger)">Delete this business?</h2><p>This permanently deletes every product, recipe, sale and order, for <b>everyone</b>, on every device. It cannot be undone.</p><p class="note">Download a copy first. Type <b>DELETE</b> to confirm.</p>
+    <input class="txt" id="dIn" autocapitalize="characters" placeholder="DELETE"><div class="mact"><button class="btn alt" id="dC">Keep it</button><button class="btn danger" id="dGo">Delete everything</button></div>`;
+    m.querySelector('#dC').onclick=close;
+    m.querySelector('#dGo').onclick=async()=>{ if(m.querySelector('#dIn').value.trim().toUpperCase()!=='DELETE'){ toast('Type DELETE to confirm'); return; }
+      try{ await SYNC.deleteBusiness(); close(); toast('Deleted'); setTimeout(()=>location.reload(),800); }catch(e){ toast('Could not delete: '+(e.code||e.message)); } }; });
+}
+
+/*@MODULES@*/
+
+/* ================= Setup PIN ================= */
+// Lesson from Family Screen: it stayed unlocked for 5 minutes. Here it locks again the moment Setup closes.
+let pinOpen=false, pinFails=0, pinWaitUntil=0;
+const pinTrusted=()=>!!lsGet('rs.pinTrust',false);
+const relockPin=()=>{ pinOpen=false; };
+async function pinHashOf(pin){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode((SYNC.businessId()||'')+'|rata-smudge|'+pin)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function requirePin(fn){
+  if(!S.settings.pinHash||pinTrusted()||pinOpen){ pinOpen=true; fn(); return; }
+  pinPad('Enter your PIN',async pin=>{ if(await pinHashOf(pin)===S.settings.pinHash){ pinFails=0; pinOpen=true; return true; } if(++pinFails>=3){ pinWaitUntil=Date.now()+30e3; pinFails=0; } return false; },fn,role()==='owner');
+}
+function pinPad(title,check,onOk,canForget){
+  modal((m,close)=>{ let val='';
+    const draw=()=>{ const wait=Math.max(0,Math.ceil((pinWaitUntil-Date.now())/1000));
+      m.innerHTML=`<h2 style="text-align:center">🔒 ${esc(title)}</h2><div class="pindots">${[0,1,2,3].map(i=>`<i class="${i<val.length?'on':''}"></i>`).join('')}</div>
+        <p class="note" id="pinMsg" style="text-align:center;min-height:24px">${wait?`Too many tries. Wait ${wait} seconds.`:''}</p>
+        <div class="pinpad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button data-k="x" class="pk-s">Cancel</button><button data-k="0">0</button><button data-k="b" class="pk-s" aria-label="Delete">⌫</button></div>
+        ${canForget?'<p style="text-align:center;margin:14px 0 0"><button class="btn alt small" id="pinForgot">Forgot the PIN?</button></p>':''}`;
+      m.querySelectorAll('[data-k]').forEach(b=>b.onclick=async()=>{ const k=b.dataset.k;
+        if(k==='x'){ close(); return; } if(Date.now()<pinWaitUntil){ draw(); return; }
+        if(k==='b'){ val=val.slice(0,-1); draw(); return; }
+        if(val.length<4) val+=k; draw();
+        if(val.length===4){ const ok=await check(val); if(ok){ close(); onOk&&onOk(val); } else { val=''; draw(); const msg=m.querySelector('#pinMsg'); if(msg&&!msg.textContent) msg.textContent='That PIN is not right'; m.querySelector('.pindots').classList.add('shake'); } } });
+      const f=m.querySelector('#pinForgot'); if(f) f.onclick=()=>{ close(); confirmBox('Reset the PIN?','You will be signed out. Sign back in with <b>'+esc(SYNC.me())+'</b> within 10 minutes and the PIN will be removed, so you can set a new one.','Sign out and reset',()=>{ lsSet('rs.pinReset',Date.now()); SYNC.signOut(); }); };
+    };
+    draw(); m.tabIndex=-1; m.focus();
+    m.onkeydown=e=>{ if(/^[0-9]$/.test(e.key)) m.querySelector(`[data-k="${e.key}"]`).click(); if(e.key==='Backspace') m.querySelector('[data-k="b"]').click(); };
+  });
+}
+function setPinFlow(after){
+  pinPad('Choose a 4-digit PIN',async pin=>{ setPinFlow.first=pin; return true; },()=>{
+    pinPad('Type it again',async pin=>pin===setPinFlow.first,async pin=>{ S.settings.pinHash=await pinHashOf(pin); pinOpen=true; save(); toast('PIN set'); after&&after(); },false);
+  },false);
+}
+// forgot-PIN: the owner signed out and back in with Google, which proves it's them
+function checkPinReset(){
+  const at=lsGet('rs.pinReset',0); if(!at) return;
+  if(Date.now()-at>10*60e3){ lsSet('rs.pinReset',0); return; }
+  if(role()==='owner'&&SYNC.lastSignIn()>at-5000){ lsSet('rs.pinReset',0); S.settings.pinHash=''; save(); toast('PIN removed. Set a new one in Setup.'); }
+}
+
+/* ================= install ================= */
+let INSTALL_EVT=null;
+const SHARE_SVG='<svg class="shareic" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+function offerInstall(){
+  if(cur()!=='home'||isStandalone()||$('#inst')||$('#gate').innerHTML&&!$('#gate').hidden) return;
+  if(Date.now()<lsGet('rs.installSnooze',0)) return;
+  if(!INSTALL_EVT&&!isIOS()) return;                 // nothing to offer (already installed, or a browser that can't)
+  const d=document.createElement('div'); d.id='inst'; d.className='inst';
+  d.innerHTML=`<img src="icon-192.png" alt=""><div class="t"><b>Put Rata &amp; Smudge on your home screen</b>
+    <span>It opens like an app and keeps working with no signal.</span>
+    ${isIOS()?`<span class="how">Tap ${SHARE_SVG} <b>Share</b> at the top of Safari, then <b>Add to Home Screen</b>.</span>`:''}</div>
+    ${INSTALL_EVT?'<button class="btn small" id="iGo">Install</button>':''}<button class="btn alt small" id="iNo">${isIOS()?'Got it':'Not now'}</button>`;
+  document.body.appendChild(d);
+  const g=d.querySelector('#iGo'); if(g) g.onclick=async()=>{ const e=INSTALL_EVT; INSTALL_EVT=null; d.remove(); try{ e.prompt(); await e.userChoice; }catch(x){} };
+  d.querySelector('#iNo').onclick=()=>{ lsSet('rs.installSnooze',Date.now()+3*864e5); d.remove(); };
+}
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); INSTALL_EVT=e; setTimeout(offerInstall,1200); });
+addEventListener('appinstalled',()=>{ INSTALL_EVT=null; const d=$('#inst'); if(d) d.remove(); toast('Installed ✓'); });
+function showInstall(){
+  const android=/Android/.test(navigator.userAgent);
+  const steps=isIOS()?['Open this page in <b>Safari</b> (not Chrome).',`Tap the ${SHARE_SVG} <b>Share</b> button at the top right.`,'Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.','Open it from the new <b>Rata &amp; Smudge</b> icon and sign in once more.']
+    :android?['Open this page in <b>Chrome</b>.','Tap the <b>⋮</b> menu at the top right.','Tap <b>Install app</b> (or <b>Add to Home screen</b>), then <b>Install</b>.']
+    :['Click the install icon at the right of the address bar.'];
+  modal((m,close)=>{ m.innerHTML=`<h2>📲 Install Rata &amp; Smudge</h2>${isStandalone()?'<p>✓ It is installed on this device.</p>':`<ol style="line-height:1.7">${steps.map(s=>`<li>${s}</li>`).join('')}</ol>`}
+    ${INSTALL_EVT?'<div class="mact" style="justify-content:flex-start"><button class="btn" id="inGo">Install now</button></div>':''}
+    <p class="note">Address for other devices: <b style="-webkit-user-select:text;user-select:text">${esc(location.origin+location.pathname)}</b></p><div class="mact"><button class="btn" id="inOk">Done</button></div>`;
+    const g=m.querySelector('#inGo'); if(g) g.onclick=async()=>{ const e=INSTALL_EVT; INSTALL_EVT=null; try{ e.prompt(); await e.userChoice; }catch(x){} close(); };
+    m.querySelector('#inOk').onclick=close; });
+}
+
+/* ================= sign-in gate ================= */
+const GOOGLE_G='<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+const errText=e=>e?((e.code?e.code+' · ':'')+String(e.message||e).replace(/^Firebase: /,'').slice(0,220)):'';
+function gate(kind,extra){
+  const g=$('#gate');
+  if(!kind){ g.hidden=true; g.innerHTML=''; setTimeout(offerInstall,2500); return; }
+  g.hidden=false;
+  const logo='<img class="logo" src="icon-192.png" alt="">';
+  let c='';
+  if(kind==='loading') c=`${logo}<h1>Rata &amp; Smudge</h1><div class="gdots"><i></i><i></i><i></i></div><p class="gsmall">Getting everything ready…</p>`;
+  if(kind==='noconfig') c=`${logo}<h1>Not connected yet</h1><p>This copy of the app has no Firebase project set up, so it cannot sign in.</p><p class="gsmall">For Tony: add <b>firebase-config.json</b> and rebuild.</p>`;
+  if(kind==='signin') c=`${logo}<h1>Rata &amp; Smudge</h1><p>Your till, brew planner and orders, on the iPad and your phone.</p>
+     <button class="gbtn" id="gIn">${GOOGLE_G}<span>Sign in with Google</span></button>${extra?`<p class="gerr">${esc(extra)}</p>`:''}
+     <p class="gsmall">Only the Google accounts added to a business can see it.</p><p class="gsmall"><a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>`;
+  if(kind==='nobiz') c=`${logo}<h1>Nearly there</h1><p>You're signed in as <b>${esc(SYNC.me())}</b>, but this account isn't part of a business yet.</p>
+     ${extra==='invited'?`<p class="gsmall">You've been invited to set up a business. It starts empty.</p><input class="txt" id="gName" placeholder="Business name, e.g. Rata &amp; Smudge" autocomplete="organization" style="text-align:center"><div><button class="gbtn dark" id="gNew">🌿 Set up the business</button></div>`
+       :`<p class="gsmall">Helping at a business? Ask the owner to add <b>${esc(SYNC.me())}</b> in Setup → People, then tap Check again.</p><p class="gsmall">Starting a new business? It's invite-only. Ask the app's administrator to invite <b>${esc(SYNC.me())}</b>.</p>`}
+     <div><button class="gbtn" id="gCheck">🔄 Check again</button></div><p class="gsmall"><a href="#" id="gOut">Use a different Google account</a></p>`;
+  if(kind==='error') c=`${logo}<h1>Something went wrong</h1><p class="gerr">${esc(extra||'Unknown problem.')}</p><button class="gbtn dark" id="gRetry">Try again</button><p class="gsmall">Signed in as <b>${esc(SYNC.me()||'nobody')}</b> · <a href="#" id="gOut">Sign out</a></p>`;
+  g.innerHTML=`<div class="gcard">${c}</div>`;
+  const on=(id,f)=>{ const b=document.getElementById(id); if(b) b.onclick=e=>{ e.preventDefault(); f(); }; };
+  on('gIn',async()=>{ try{ await SYNC.signIn(); }catch(e){ gate('signin',e&&/popup-closed|cancelled/.test(e.code||'')?'':'Sign-in did not finish: '+errText(e)); } });
+  on('gCheck',enterBusiness);
+  on('gNew',async()=>{ const n=($('#gName').value||'').trim(); if(!n){ toast('Type the business name first'); return; } gate('loading');
+    try{ const id=await SYNC.createBusiness(n); SYNC.useInvite(); startBusiness(id); }catch(e){ gate('error','Could not set up the business. '+errText(e)); } });
+  on('gOut',()=>SYNC.signOut());
+  on('gRetry',()=>location.reload());
+}
+// Lesson: show the real reason and the signed-in account, never a vague "check the internet connection".
+async function enterBusiness(){
+  gate('loading');
+  try{ const id=await SYNC.findBusiness(); if(id) startBusiness(id); else gate('nobiz',(await SYNC.isInvited())?'invited':''); }
+  catch(e){ const pd=e&&e.code==='permission-denied', off=!navigator.onLine;
+    gate('error',(pd?'The database refused this account.':off?'This device is offline and has not opened the business before.':'Could not reach the database.')+' Signed in as '+(SYNC.me()||'?')+'. Details: '+errText(e)); }
+}
+let rT=null, firstRender=true;
+function syncChanged(what,err){
+  if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
+  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
+    const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);
+    if(!typing) render(); gate(null); },60);
+}
+let IS_ADMIN=false;
+function startBusiness(id){ firstRender=true; SYNC.start(id,S,syncChanged); SYNC.isAdmin().then(a=>{ IS_ADMIN=a; if(a&&cur()==='setup') render(); }); }
+SYNC.onPendingChange(v=>{ pendingWrites=v; drawSync(); });
+
+/* ================= Android back button ================= */
+// Back closes the pop-up, then the screen, then asks "Close?". Chrome ignores our back step until the
+// screen has been tapped, so the guard is re-armed on the next tap.
+let backArmed=false, quitAsk=false;
+const reguard=()=>{ if(history.state&&history.state.rs==='guard') return; history.pushState({rs:'guard'},''); backArmed=true; };
+history.replaceState({rs:'base'},''); reguard();
+['pointerdown','keydown'].forEach(t=>document.addEventListener(t,()=>{ if(!quitAsk&&!backArmed) reguard(); },true));
+addEventListener('popstate',()=>{
+  backArmed=false;
+  if(quitAsk){ quitAsk=false; history.back(); return; }
+  if(modalStack.length){ closeModal(); reguard(); return; }
+  if(back()){ reguard(); return; }
+  if(!$('#gate').hidden){ history.back(); return; }
+  quitAsk=true;
+  modal((m,close)=>{ m.innerHTML=`<h2>Close Rata &amp; Smudge?</h2><p>Press <b>back</b> again to close it.</p><div class="mact"><button class="btn" id="stay">Stay</button></div>`;
+    m.querySelector('#stay').onclick=()=>{ quitAsk=false; close(); reguard(); }; });
+});
+
+/* ================= stay up to date ================= */
+// Checks version.json every 5 minutes and reloads itself, but never while a pop-up or form is open.
+let updateReady=false;
+async function checkUpdate(){
+  if(location.protocol!=='https:') return;
+  try{ const r=await fetch('version.json?t='+Date.now(),{cache:'no-store'}); const v=(await r.json()).version; if(v&&v!==APP_VERSION){ updateReady=true; applyUpdate(); } }catch(e){}
+}
+function applyUpdate(){
+  if(!updateReady) return;
+  const busy=modalStack.length||(document.activeElement&&/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))||cur()==='sell';
+  if(busy){ setTimeout(applyUpdate,30000); return; }
+  location.reload();
+}
+setInterval(checkUpdate,5*60e3); setTimeout(checkUpdate,20e3);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkUpdate(); });
+setInterval(()=>{ if(cur()==='home'&&!modalStack.length) render(); },60e3);   // keeps the date right after midnight
+
+/* ================= boot ================= */
+if(!CONFIG){ gate('noconfig'); }
+else {
+  gate('loading');
+  SYNC.init(CONFIG,{emulator:/[?&]emulator/.test(location.search)});
+  SYNC.watchAuth(async u=>{ if(!u){ SYNC.stop(); await SYNC.afterRedirect(); if(SYNC.me()) return; const e=SYNC.takeRedirectError(); gate('signin',e?'Sign-in did not finish: '+errText(e):''); } else enterBusiness(); });
+  window.__test={ S, SYNC, go, home, back };
+}
+if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

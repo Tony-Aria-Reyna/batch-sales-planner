@@ -1,0 +1,75 @@
+rules_version = '2';
+// Rata & Smudge: each business is one private document, businesses/{bid}.
+// Only Google accounts listed in its "members" can read or change it; one business can never see another's.
+// New businesses are invite-only: an admin adds invites/{email}, and only that account can create one.
+// Admins are listed as documents admins/{email}, created by hand in the Firebase console. Nobody can
+// create, change or delete them from the app, and no admin address is written in this code.
+//
+// Roles:  owner   = the "owner" field (one person). Everything, plus removing people and deleting the business.
+//         manager = roles[email] == 'manager'. Everything except removing people, changing roles or deleting.
+//         helper  = any other member (the safe default). Can see products and deals, open and close a selling
+//                   day, and record sales as themselves. Cannot change prices, products, settings or past sales.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function email() { return request.auth.token.email.lower(); }
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(email())); }
+    function invited() { return signedIn() && exists(/databases/$(database)/documents/invites/$(email())); }
+    function biz(bid) { return get(/databases/$(database)/documents/businesses/$(bid)).data; }
+    function isMember(bid) { return signedIn() && email() in biz(bid).members; }
+    function roleIn(b) { return email() == b.owner ? 'owner' : b.get('roles', {}).get(email(), 'helper'); }
+    function canManage(bid) { return isMember(bid) && roleIn(biz(bid)) in ['owner', 'manager']; }
+
+    match /admins/{adminEmail} {
+      allow read: if signedIn() && email() == adminEmail;      // lets the app ask "am I an admin?"
+      allow write: if false;                                    // console only
+    }
+
+    match /invites/{inviteEmail} {
+      allow read: if isAdmin() || (signedIn() && email() == inviteEmail);
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && email() == inviteEmail);
+    }
+
+    match /businesses/{bid} {
+      allow read: if signedIn() && email() in resource.data.members;
+
+      // a new business starts with just the person creating it, as owner, and nothing else in it
+      allow create: if (isAdmin() || invited())
+                    && request.resource.data.members == [email()]
+                    && request.resource.data.owner == email()
+                    && request.resource.data.get('roles', {}) == {};
+
+      // owners and managers change settings; nobody can change the owner here; only the owner removes
+      // people or changes an existing person's role; roles can only be 'manager' or 'helper'
+      allow update: if signedIn() && email() in resource.data.members
+                    && roleIn(resource.data) in ['owner', 'manager']
+                    && request.resource.data.owner == resource.data.owner
+                    && request.resource.data.owner in request.resource.data.members
+                    && request.resource.data.members.size() > 0 && request.resource.data.members.size() <= 20
+                    && request.resource.data.get('roles', {}).values().hasOnly(['manager', 'helper'])
+                    && (email() == resource.data.owner
+                        || (request.resource.data.members.hasAll(resource.data.members)
+                            && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).changedKeys().size() == 0
+                            && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).removedKeys().size() == 0));
+      allow delete: if signedIn() && email() == resource.data.owner;
+
+      // set-up data: everyone in the business can read it (the till needs products and deals);
+      // only owners and managers can change it, so a helper can never change a price
+      match /{col}/{id} {
+        allow read: if isMember(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
+        allow write: if canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
+      }
+      // helpers: open and close a selling day, and record (never edit or delete) their own sales
+      match /sessions/{id} {
+        allow create, update: if isMember(bid) && request.resource.data.openedBy is string;
+      }
+      match /sales/{id} {
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.get('voided', false) == false;
+        // "Undo last sale": the person who took it can remove it within 10 minutes (the app allows 1 minute;
+        // the extra time covers a sale undone with no signal and sent later). After that, only a void by the owner.
+        allow delete: if isMember(bid) && resource.data.by == email() && request.time.toMillis() < resource.data.at + 600000;
+      }
+    }
+  }
+}

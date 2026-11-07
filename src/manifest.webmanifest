@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "Rata & Smudge",
+  "short_name": "Rata & Smudge",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f1e7",
+  "theme_color": "#3f5a3c",
+  "description": "Market till, brew planner and orders for Rata & Smudge.",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

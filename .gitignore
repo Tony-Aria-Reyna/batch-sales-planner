@@ -1,0 +1,6 @@
+node_modules/
+dist-test/
+public/
+.firebase/
+*.log
+test/shots/

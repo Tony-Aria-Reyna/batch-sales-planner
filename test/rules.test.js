@@ -1,0 +1,42 @@
+// Security-rules tests against the Firestore emulator.  Run:  npx firebase emulators:exec --only firestore "node test/rules.test.js"
+// (needs Java; npm i --no-save @firebase/rules-unit-testing)
+const fs = require('fs');
+const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
+const { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, getDocs } = require('firebase/firestore');
+const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', HELPER = 'helper@example.com', MANAGER = 'manager@example.com', STRANGER = 'stranger@example.com';
+(async () => {
+  const env = await initializeTestEnvironment({ projectId: 'rata-smudge-test', firestore: { rules: fs.readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 } });
+  const as = e => env.authenticatedContext(e, { email: e, email_verified: true }).firestore();
+  let fails = 0; const t = async (name, p) => { try { await p; console.log('  ✓ ' + name); } catch (e) { fails++; console.log('  ✗ ' + name + ' — ' + e.message); } };
+
+  await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'admins/' + ADMIN), { note: 'test admin' }));
+  await t('nobody can make themselves an admin', assertFails(setDoc(doc(as(STRANGER), 'admins/' + STRANGER), {})));
+  await t('stranger cannot create a business (not invited)', assertFails(setDoc(doc(as(STRANGER), 'businesses/x'), { members: [STRANGER], owner: STRANGER, roles: {} })));
+  await t('admin can invite', assertSucceeds(setDoc(doc(as(ADMIN), 'invites/' + OWNER), { at: 1 })));
+  await t('invited account cannot start with someone else in it', assertFails(setDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, STRANGER], owner: OWNER, roles: {} })));
+  await t('invited account can create an empty business', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1'), { name: 'B1', members: [OWNER], owner: OWNER, roles: {} })));
+  await t('owner adds a helper and a manager', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { members: [OWNER, HELPER, MANAGER], roles: { [HELPER]: 'helper', [MANAGER]: 'manager' } })));
+  await t('nobody can make a second owner via roles', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { roles: { [HELPER]: 'owner', [MANAGER]: 'manager' } })));
+  await t('stranger cannot read the business', assertFails(getDoc(doc(as(STRANGER), 'businesses/b1'))));
+  await t('stranger cannot read its products', assertFails(getDocs(collection(as(STRANGER), 'businesses/b1/products'))));
+  await t('owner can add a product', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/products/p1'), { name: 'Balm', retail: 25 })));
+  await t('manager can change a price', assertSucceeds(updateDoc(doc(as(MANAGER), 'businesses/b1/products/p1'), { retail: 26 })));
+  await t('helper can read products', assertSucceeds(getDoc(doc(as(HELPER), 'businesses/b1/products/p1'))));
+  await t('helper cannot change a price', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1/products/p1'), { retail: 1 })));
+  await t('helper cannot read recipes', assertFails(getDocs(collection(as(HELPER), 'businesses/b1/recipes'))));
+  await t('helper cannot change settings', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1'), { name: 'Hacked' })));
+  await t('helper can open a selling day', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/sessions/s1'), { openedBy: HELPER, type: 'market' })));
+  await t('helper can record a sale as themselves', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/sales/a1'), { by: HELPER, total: 26, voided: false })));
+  await t('helper cannot record a sale as someone else', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/sales/a2'), { by: OWNER, total: 26 })));
+  await t('helper cannot void a sale', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1/sales/a1'), { voided: true })));
+  await t('helper can undo their own sale straight away', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/sales/u1'), { by: HELPER, total: 5, at: Date.now() }).then(() => deleteDoc(doc(as(HELPER), 'businesses/b1/sales/u1')))));
+  await t('helper cannot delete an old sale', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/sales/a3'), { by: HELPER, total: 5, at: Date.now() - 3600e3 }).then(() => deleteDoc(doc(as(HELPER), 'businesses/b1/sales/a3')))));
+  await t('unknown collections are refused', assertFails(setDoc(doc(as(OWNER), 'businesses/b1/junk/j1'), { a: 1 })));
+  await t('manager cannot remove a person', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { members: [OWNER, MANAGER], roles: { [MANAGER]: 'manager' } })));
+  await t('manager cannot promote the helper', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { roles: { [HELPER]: 'manager', [MANAGER]: 'manager' } })));
+  await t('nobody can change the owner', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1'), { owner: MANAGER })));
+  await t('manager cannot delete the business', assertFails(deleteDoc(doc(as(MANAGER), 'businesses/b1'))));
+  await t('owner can delete the business', assertSucceeds(deleteDoc(doc(as(OWNER), 'businesses/b1'))));
+  await env.cleanup();
+  console.log(fails ? `\n${fails} rule check(s) failed` : '\nAll rule checks passed'); process.exit(fails ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

@@ -1,0 +1,18 @@
+{
+  "name": "rata-smudge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rata & Smudge: market till, batch planner and orders. Home-screen web app on iPad and Android.",
+  "scripts": {
+    "build": "node build.js",
+    "test:build": "MOCK=1 node build.js",
+    "test": "MOCK=1 node build.js && node test/screens.js"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "firebase": "^12.19.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.35.0"
+  }
+}
