@@ -1,6 +1,9 @@
 # Builds the app and publishes it to https://batch-sales-planner.web.app on every push to main.
 # Needs one repository secret, FIREBASE_SERVICE_ACCOUNT (the JSON key from Firebase →
 # Project settings → Service accounts → Generate new private key). Never commit that key.
+# It also publishes firestore.rules first, so the rules always arrive before (or with) the app that needs them.
+# That step needs the deploy account to have the "Firebase Rules Admin" role; without it the step warns and
+# the app still deploys (the app copes with older rules: new areas just say they are waiting for an update).
 name: Deploy to Firebase Hosting
 on:
   push:
@@ -23,6 +26,15 @@ jobs:
           pip install --quiet pillow
           python3 scripts/fetch-logo.py src/brand-logo.webp || echo "::warning::Logo not fetched; the app will show its icon instead"
       - run: npm run build
+      - name: Publish the security rules
+        continue-on-error: true
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/sa.json"' EXIT
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx --yes firebase-tools@15 deploy --only firestore:rules --project batch-sales-planner --non-interactive \
+            || { echo "::warning::Rules were not published. Give the github-deploy account the Firebase Rules Admin role, or paste firestore.rules into the Firebase console."; exit 1; }
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

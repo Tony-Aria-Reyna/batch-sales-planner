@@ -67,12 +67,59 @@ service cloud.firestore {
                             && request.resource.data.get('roles', {}).diff(resource.data.get('roles', {})).removedKeys().size() == 0));
       allow delete: if signedIn() && email() == resource.data.owner;
 
-      // set-up data: owners and managers can read and change everything; helpers can read only what the
-      // till needs (products, deals, selling days, sales), and can never change a price
+      // Shared business data. Owners and managers read and change these; helpers read only what the till
+      // and the day's work need (products, deals, selling days, sales, places, calendar, brew plan, stock),
+      // and can never change a price.
+      function managed() { return ['inputs', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders',
+                                   'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'xero']; }
+      function everyone() { return ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans']; }
       match /{col}/{id} {
-        allow read: if (canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'])
-                    || (isMember(bid) && col in ['products', 'deals', 'sessions', 'sales']);   // helpers: just what the till needs
-        allow write: if canManage(bid) && col in ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos'];
+        allow read: if (canManage(bid) && col in managed().concat(['stockmoves', 'shopping', 'todos', 'voicenotes', 'ai']))
+                    || (isMember(bid) && col in everyone());
+        allow write: if canManage(bid) && col in managed();
+      }
+      // Recipes and staff pay rates: owners only (recipes are the business's secret; pay is private)
+      match /recipes/{id} {
+        allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
+      }
+      match /pay/{id} {
+        allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
+      }
+      // Stock movements (made, packed for a market, sold, returned, fixed). Everyone sees stock, so the till
+      // can hint "sold out". Anyone can add a movement in their own name; a helper's fix must carry the
+      // owner or manager who approved it with their PIN. Movements are never edited or deleted.
+      match /stockmoves/{id} {
+        allow read: if isMember(bid);
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.at is number
+                      && request.resource.data.qty is number
+                      && (canManage(bid) || request.resource.data.get('kind', '') in ['sold', 'packed', 'returned']
+                          || request.resource.data.get('approvedBy', '') is string && request.resource.data.get('approvedBy', '') != '');
+      }
+      // To-dos: owners and managers see and change all of them; a helper sees only their own, can add one
+      // for themselves and tick their own off, but cannot hand it to someone else.
+      match /todos/{id} {
+        allow read: if canManage(bid) || (isMember(bid) && resource.data.get('who', '') == email());
+        allow create: if canManage(bid) || (isMember(bid) && request.resource.data.get('who', '') == email());
+        allow update: if canManage(bid) || (isMember(bid) && resource.data.get('who', '') == email()
+                                            && request.resource.data.get('who', '') == email());
+        allow delete: if canManage(bid);
+      }
+      // Shopping list: everyone can see it, add to it and tick things off; only owners and managers remove items.
+      match /shopping/{id} {
+        allow read, create, update: if isMember(bid);
+        allow delete: if canManage(bid) || (isMember(bid) && resource.data.get('by', '') == email());
+      }
+      // Voice notes: you add notes in your own name and see and settle your own (owners and managers see all).
+      // The business helper reads them and writes the drafts back (it works outside these rules).
+      match /voicenotes/{id} {
+        allow read: if canManage(bid) || (isMember(bid) && resource.data.get('by', '') == email());
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.at is number;
+        allow update: if isMember(bid) && resource.data.by == email() && request.resource.data.by == email();
+        allow delete: if canManage(bid) || (isMember(bid) && resource.data.get('by', '') == email());
+      }
+      // This device's push-notification address, one per person; the business helper sends the alerts.
+      match /devices/{who} {
+        allow read, write: if isMember(bid) && who == email();
       }
       // Personal PINs: one document per owner or manager, holding only a salted hash of their PIN.
       // Helpers can't read them, so a helper can't try to work a PIN out. You set only your own;
