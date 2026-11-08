@@ -305,7 +305,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -733,8 +733,8 @@ let rT=null, firstRender=true;
 // Parts of the business the database refused to share (usually: the Firebase rules haven't been
 // republished after an update). The app keeps working without them and says what's missing.
 const missingCols=new Set();
-const COL_TXT={pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales'};
-function rulesNotice(){ return missingCols.size?`<div class="card" style="border:2px solid var(--warn);background:#fff4d6"><b>⚠️ The database rules need updating.</b><p class="note" style="margin-bottom:0">These parts are switched off until the Firebase rules are republished: ${[...missingCols].map(c=>COL_TXT[c]||c).join(', ')}. ${canManage()?'Copy the latest rules into Firebase → Firestore → Rules → Publish, then reopen the app.':'Ask the owner.'}</p></div>`:''; }
+const COL_TXT={pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales',places:'markets and shops',events:'the calendar',plans:'the brew plan',ideas:'ideas',costs:'costs',prices:'ingredient prices',fuel:'fuel records',stockmoves:'stock',shopping:'the shopping list',voicenotes:'voice notes',pay:'pay rates',contacts:'customer contacts'};
+function rulesNotice(){ return missingCols.size?`<div class="card" style="border:2px solid var(--warn);background:#fff4d6"><b>⚠️ The database rules need updating.</b><p class="note" style="margin-bottom:0">These parts are switched off until the Firebase rules are republished: ${[...missingCols].map(c=>COL_TXT[c]||c).join(', ')}. ${canManage()?'Selling is not affected. The rules publish automatically with each update; if this stays, copy the latest rules into Firebase → Firestore → Rules → Publish, then reopen the app.':'Selling is not affected. Ask the owner.'}</p></div>`:''; }
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }

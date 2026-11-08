@@ -7,9 +7,13 @@ import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signI
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection,
   onSnapshot, query, where, getDocs, addDoc, writeBatch, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 
-// every sub-collection the rules allow, and which ones a helper may read
-export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts'];
-const HELPER_COLS = ['products', 'deals', 'sessions', 'sales'];
+// every sub-collection the rules allow, and which ones each role may read
+export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts',
+  'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'voicenotes', 'pay'];
+const OWNER_ONLY = ['recipes', 'pay'];                                     // recipes are the business's secret; pay is private
+const HELPER_COLS = ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans', 'stockmoves', 'shopping', 'todos', 'voicenotes'];
+const MINE_ONLY = { todos: 'who', voicenotes: 'by' };                       // a helper sees only their own of these
+export const readableCols = role => role === 'helper' ? HELPER_COLS.slice() : role === 'manager' ? COLS.filter(c => !OWNER_ONLY.includes(c)) : COLS.slice();
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
 let app, auth, db, bid = null, unsub = [], S = null, onChange = () => {}, synced = null, user = null;
@@ -124,9 +128,10 @@ export function start(businessId, state, changed) {
   }, err => onChange('error', err)));
 }
 function listenCols() {
-  const allowed = myRole() === 'helper' ? HELPER_COLS : COLS;
+  const role = myRole(), allowed = readableCols(role);
   for (const c of allowed) {
-    unsub.push(onSnapshot(collection(db, 'businesses', bid, c), { includeMetadataChanges: true }, snap => {
+    const ref = role === 'helper' && MINE_ONLY[c] ? query(collection(db, 'businesses', bid, c), where(MINE_ONLY[c], '==', me())) : collection(db, 'businesses', bid, c);
+    unsub.push(onSnapshot(ref, { includeMetadataChanges: true }, snap => {
       markPending(c, snap.metadata.hasPendingWrites);
       const list = snap.docs.map(x => Object.assign({ id: x.id }, x.data()));
       mergeArray(S[c], list);

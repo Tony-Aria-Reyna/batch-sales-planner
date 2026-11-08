@@ -13,7 +13,7 @@ export const deleteField=()=>({__del:1}); export const arrayUnion=v=>({__u:v}); 
 function snapCol(d,path){ const pre=path+'/'; const docs=Object.keys(d).filter(k=>k.startsWith(pre)&&!k.slice(pre.length).includes('/')).map(k=>({id:k.slice(pre.length),data:()=>JSON.parse(JSON.stringify(d[k]))})); return {docs,empty:!docs.length}; }
 export function onSnapshot(ref,a,b,c){ let cb=a,err=b; if(typeof a!=='function'){ cb=b; err=c; } const denied=(localStorage.getItem('mockdeny')||'').split(',').filter(Boolean); if(ref.t!=='doc'&&denied.includes(ref.path.split('/').pop())){ setTimeout(()=>err&&err({code:'permission-denied',message:'Missing or insufficient permissions.'}),0); return ()=>{}; }
   const s={run(){ const d=load(); if(!memberOf(d,ref.path)) return deny(err);
-    if(ref.t==='doc'){ const v=d[ref.path]; cb({exists:()=>!!v,data:()=>JSON.parse(JSON.stringify(v)),id:ref.id,metadata:{hasPendingWrites:false}}); } else { const sc=snapCol(d,ref.path); sc.metadata={hasPendingWrites:false}; cb(sc); } }};
+    if(ref.t==='doc'){ const v=d[ref.path]; cb({exists:()=>!!v,data:()=>JSON.parse(JSON.stringify(v)),id:ref.id,metadata:{hasPendingWrites:false}}); } else { const sc=snapCol(d,ref.path); if(ref.w&&ref.w.op==='==') sc.docs=sc.docs.filter(x=>x.data()[ref.w.f]===ref.w.v); sc.metadata={hasPendingWrites:false}; cb(sc); } }};
   subs.push(s); setTimeout(()=>s.run(),0); return ()=>{ subs=subs.filter(x=>x!==s); };
 }
 export async function getDocs(q){ const d=load(); const s=snapCol(d,q.path); if(q.w) s.docs=s.docs.filter(x=>{ const v=x.data()[q.w.f]; return Array.isArray(v)&&v.includes(q.w.v); }); s.empty=!s.docs.length; return s; }
