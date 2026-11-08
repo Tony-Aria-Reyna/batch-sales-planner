@@ -45,12 +45,13 @@ SCREENS.products={
 function editProduct(p){
   const isNew=!p; p=p||{name:'',size:'',price:0,colour:'',active:true};
   modal((m,close)=>{ let col=p.colour||'';
-    const draw=()=>{ const n=m.querySelector('#eN'),z=m.querySelector('#eZ'),pr=m.querySelector('#eP'); const ww=m.querySelector('#eW'); const keep=n?{n:n.value,z:z.value,p:pr.value,w:ww?ww.value:''}:{n:p.name,z:p.size||'',p:p.price?(p.price/100).toFixed(2):'',w:p.wholesale?(p.wholesale/100).toFixed(2):''};
+    const draw=()=>{ const n=m.querySelector('#eN'),z=m.querySelector('#eZ'),pr=m.querySelector('#eP'); const ww=m.querySelector('#eW'); const nw=m.querySelector('#eNW'); const keep=n?{n:n.value,z:z.value,p:pr.value,w:ww?ww.value:'',nw:nw?nw.checked:false}:{n:p.name,z:p.size||'',p:p.price?(p.price/100).toFixed(2):'',w:p.wholesale?(p.wholesale/100).toFixed(2):'',nw:!!p.noWholesale};
       m.innerHTML=`<h2>${isNew?'Add a product':'Edit product'}</h2>
         <label class="note">Name</label><input class="txt" id="eN" value="${esc(keep.n)}" autocapitalize="words">
         <label class="note">Size (e.g. 50ml, 30g, Balm, Gift set)</label><input class="txt" id="eZ" value="${esc(keep.z)}">
         <label class="note">Price, including GST</label><input class="txt" id="eP" inputmode="decimal" value="${esc(keep.p)}" placeholder="25.00">
-        <label class="note">Wholesale price, including GST (optional)</label><input class="txt" id="eW" inputmode="decimal" value="${esc(keep.w)}" placeholder="for shop orders">
+        <label class="note">Wholesale price, including GST</label><input class="txt" id="eW" inputmode="decimal" value="${esc(keep.w)}" placeholder="for shop orders">
+        <label class="tickrow"><input type="checkbox" id="eNW" ${keep.nw?'checked':''}><span>Not sold wholesale</span></label>
         <p class="note">Button colour</p><div class="colours">${Object.entries(COLOURS).map(([k,v])=>`<button data-c="${k}" class="${(col||guessColour(keep.n,keep.z))===k?'on':''}" style="background:${v[0]};color:${v[1]}">${v[2]}</button>`).join('')}</div>
         ${isNew?'':`<div class="row"><div class="grow">Show on the till</div><div class="seg"><button data-a="1" class="${p.active!==false?'on':''}">Show</button><button data-a="0" class="${p.active===false?'on':''}">Hide</button></div></div>`}
         <div class="mact">${isNew?'':'<button class="btn danger" id="eD">Delete</button>'}<button class="btn alt" id="eC">Cancel</button><button class="btn" id="eS">Save</button></div>`;
@@ -61,7 +62,7 @@ function editProduct(p){
       m.querySelector('#eS').onclick=()=>{ const name=m.querySelector('#eN').value.trim(), size=m.querySelector('#eZ').value.trim(), c=toCents(m.querySelector('#eP').value);
         if(!name){ toast('Type the product name'); return; } if(!(c>0)){ toast('Type a price, e.g. 25'); return; }
         const wT=m.querySelector('#eW').value.trim(), w=wT?toCents(wT):0; if(wT&&!(w>0)){ toast('Type the wholesale price, e.g. 18'); return; }
-        Object.assign(p,{name,size,price:c,wholesale:w||0,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
+        Object.assign(p,{name,size,price:c,wholesale:w||0,noWholesale:!(w>0)&&m.querySelector('#eNW').checked,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
         if(isNew){ p.id=SYNC.newId('products'); S.products.push(p); }
         save(); close(); render(); toast('Saved '+prodName(p)+' at '+money(c/100)); };
     }; draw(); });

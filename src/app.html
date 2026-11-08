@@ -145,6 +145,11 @@ body:has(.rcal) main{min-height:0}
 .draft h3{font-size:19px}.draft.settled{opacity:.7}
 .txt.unsure{background:#fff6c9;border-color:#e2c44d}
 .note.clash{color:var(--danger);font-weight:700}
+.bad,small.bad,b.bad{color:var(--danger)!important;font-weight:700}
+.attncard{border:2px solid var(--danger)}
+.lrow.attn{align-items:flex-start}.lrow.attn small{display:block;margin-top:2px}.fixes{display:flex;flex-direction:column;gap:6px}
+.unitin{display:flex;align-items:center;gap:8px}.unitin .txt{flex:1}.unitin .u{font-weight:700;min-width:44px}
+.tickrow{display:flex;align-items:center;gap:10px;margin:10px 0;cursor:pointer}.tickrow input{width:26px;height:26px;flex:none}
 .drive{display:flex;flex-direction:column;gap:16px;padding-top:6px}
 .dbtn{min-height:120px;border-radius:26px;font-size:34px;font-weight:800;color:#fff;width:100%}
 .dbtn.talk{background:var(--rata);min-height:200px;font-size:46px}.dbtn.today{background:var(--green)}.dbtn.next{background:var(--green)}
@@ -491,7 +496,7 @@ SCREENS.home={
     const tiles=TILES.filter(t=>t.all||(t.owner?role()==='owner':canManage())), d=openDay();
     const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
     const pinNag=canManage()&&!tillLock()&&!myPin()&&!missingCols.has('pins')?`<div class="card" style="border:2px solid var(--green2)"><b>🔒 Set your own PIN</b><p class="note">${esc(SYNC.me())} hasn't got a PIN yet. You'll need it to approve discounts, see sales and end the day.</p><button class="btn" id="nagPin">Choose my PIN</button></div>`:'';
-    return rulesNotice()+pinNag+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
+    return rulesNotice()+pinNag+(typeof attentionCard==='function'?attentionCard():'')+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
       <section class="today" aria-label="Today">
         <div><span>Today's takings</span>${canManage()&&!tillLock()?(Date.now()<moneyUntil?`<b>${c2(taken)}</b>`:`<b><button class="linkb" id="showMoney" style="font-size:22px;color:var(--green)">🔒 Show</button></b>`):'<b>—</b>'}</div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
@@ -505,6 +510,7 @@ SCREENS.home={
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
+    const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention');
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive');
     const hp=$('#hPush'); if(hp) hp.onclick=()=>go('notify'); const hN=$('#hNotify'); if(hN) hN.onclick=()=>go('notify'); const hn=$('#hPushNo'); if(hn) hn.onclick=()=>{ lsSet('rs.pushNo','1'); render(); };
@@ -714,8 +720,8 @@ async function whosePin(pin){ for(const p of S.pins){ if(p.hash&&await pinHashOf
 // An owner working on their own (not in till mode) is not logged: opening Setup, seeing the takings and
 // so on are an owner's own business. (Sales, voids, discounts and floats still record who approved them
 // on the record itself, whoever did it.)
-function logApproval(action,approver,details){
-  if(!tillLock()&&role()==='owner') return;
+function logApproval(action,approver,details,always){
+  if(!always&&!tillLock()&&role()==='owner') return;   // an owner on their own device isn't logged, except a sale that goes ahead with an override
   S.audit.push({id:SYNC.newId('audit'),at:Date.now(),day:nzDay(),action,approver:approver||null,approverName:approver?personName(approver):'',by:SYNC.me(),tillMode:!!tillLock(),details:String(details||'')});
   save();
 }

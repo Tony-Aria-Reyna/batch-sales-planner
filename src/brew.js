@@ -101,18 +101,20 @@ function planHtml(){
   if(!recs.length) return needSetupHtml();
   const pl=brewPlan=brewPlan||{recipe:recs[0].id,mult:1,date:nzDay(),fill:{}}, r=S.recipes.find(x=>x.id===pl.recipe)||recs[0]; pl.recipe=r.id;
   const prods=S.products.filter(p=>p.recipe===r.id&&p.active!==false), total=r.yield*pl.mult;
-  const used=prods.reduce((n,p)=>n+(+pl.fill[p.id]||0)*(p.fill||0),0), lines=planLines(r,pl.mult);
+  const used=prods.reduce((n,p)=>n+(+pl.fill[p.id]||0)*(p.fill||0),0), lines=planLines(r,pl.mult), pf=prods.find(p=>p.fill>0);
+  const chosen=prods.filter(p=>(+pl.fill[p.id]||0)>0), gaps=chosen.some(p=>!(p.fill>0))||lines.some(l=>noPrice(l.i))||chosen.some(p=>(p.pack||[]).some(x=>noPrice(S.inputs.find(i=>i.id===x.input))));
   const ing=lines.reduce((n,l)=>n+l.cost,0), pk=prods.reduce((n,p)=>n+(+pl.fill[p.id]||0)*packCost(p),0), units=prods.reduce((n,p)=>n+(+pl.fill[p.id]||0),0);
   return `<div class="card"><h3>Plan a brew</h3>
       <div class="formrow"><div><label class="note" for="bR">Recipe</label><select class="txt" id="bR">${recs.map(x=>`<option value="${x.id}" ${x.id===r.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
         <div><label class="note" for="bM">How many batches</label><input class="txt" id="bM" type="number" min="0.25" step="0.25" value="${pl.mult}"></div></div>
       <label class="note" for="bD">Brew day</label><input class="txt" id="bD" type="date" value="${pl.date}">
-      <p class="note">Makes ${fmtQty(total,r.unit)}${prods.length?'. Fill:':'. No products use this recipe yet: link them under Ingredients and recipes → Products.'}</p>
-      ${prods.map(p=>{ const st=stockOf(p.id); return `<div class="lrow"><div class="grow ltxt"><b>${esc(prodName(p))}</b><small>${fmtQty(p.fill,r.unit)} each${st?' · '+st.total+' in stock':''}</small></div><input class="txt qty" type="number" min="0" data-fill="${p.id}" value="${pl.fill[p.id]||''}" placeholder="0"></div>`; }).join('')}
-      ${prods.length?`<p class="note ${used>total?'clash':''}" id="bUse">${used>total?'⚠️ ':''}Uses ${fmtQty(used,r.unit)} of ${fmtQty(total,r.unit)}${used<total&&prods[0]&&total-used>=(prods[0].fill||1)?` · ${fmtQty(total-used,r.unit)} left (about ${Math.floor((total-used)/(prods[0].fill||1))} more ${esc(prodName(prods[0]))})`:''}</p>`:''}</div>
-    <div class="card"><h3>Ingredients</h3>${lines.map(l=>`<div class="lrow"><div class="grow ltxt"><b>${esc(l.i.name)}</b><small>Need ${fmtQty(l.need,l.i.unit)}${l.have==null?'':' · have '+fmtQty(l.have,l.i.unit)}</small></div>${l.short>0?`<span class="pill bad">Short ${fmtQty(l.short,l.i.unit)}</span>`:l.have!=null?'<span class="pill ok">OK</span>':''}</div>`).join('')}
+      <p class="note">Makes ${fmtQty(total,r.unit)}${prods.length?'. How many of each:':'. No products use this recipe yet: link them under Ingredients and recipes → Products.'}</p>
+      ${recipeIssues(r).map(x=>`<p class="note clash">⚠️ ${esc(x.t)} <button class="linkb" data-fixrec="${r.id}">Fix it now</button></p>`).join('')}
+      ${prods.map(p=>{ const st=stockOf(p.id), nf=!(p.fill>0); return `<div class="lrow"><div class="grow ltxt"><b>${esc(prodName(p))}</b>${nf?'<small class="bad">⚠️ No fill set, so the amounts and cost are wrong</small>':`<small>${fmtQty(p.fill,r.unit)} each${st?' · '+st.total+' in stock':''}</small>`}</div>${nf?`<button class="btn small" data-fixlink="${p.id}">Fix it now</button>`:''}<input class="txt qty" type="number" min="0" data-fill="${p.id}" value="${pl.fill[p.id]||''}" placeholder="0"></div>`; }).join('')}
+      ${prods.length?`<p class="note ${used>total?'clash':''}" id="bUse">${used>total?'⚠️ ':''}Uses ${fmtQty(used,r.unit)} of ${fmtQty(total,r.unit)}${used<total&&pf&&total-used>=pf.fill?` · ${fmtQty(total-used,r.unit)} left (about ${Math.floor((total-used)/pf.fill)} more ${esc(prodName(pf))})`:''}</p>`:''}</div>
+    <div class="card"><h3>Ingredients</h3>${lines.map(l=>`<div class="lrow"><div class="grow ltxt"><b>${esc(l.i.name)}</b>${noPrice(l.i)?'<small class="bad">⚠️ No price, so the cost is too low</small>':''}<small>Need ${fmtQty(l.need,l.i.unit)}${l.have==null?'':' · have '+fmtQty(l.have,l.i.unit)}</small></div>${noPrice(l.i)?`<button class="btn small" data-fixin="${l.i.id}">Fix it now</button>`:''}${l.short>0?`<span class="pill bad">Short ${fmtQty(l.short,l.i.unit)}</span>`:l.have!=null?'<span class="pill ok">OK</span>':''}</div>`).join('')}
       <div class="mact" style="justify-content:flex-start"><button class="btn alt" id="bShop">🛒 Add ${lines.some(l=>l.short!=null)?'what\'s short':'all of these'} to the shopping list</button></div></div>
-    <div class="card"><h3>Cost (ex GST)</h3><p>Ingredients ${c2(ing)} · packaging ${c2(pk)}${units?` · <b>${c2((ing*Math.min(1,used/total||0)+pk)/units)} a unit</b>`:''}</p>
+    <div class="card"><h3>Cost (ex GST)</h3>${gaps?'<p class="note clash">⚠️ Something above has no price or no fill, so this cost is wrong.</p>':''}<p class="${gaps?'bad':''}">Ingredients ${c2(ing)} · packaging ${c2(pk)}${units&&used>0?` · <b>${c2((ing*Math.min(1,used/total||0)+pk)/units)} a unit</b>`:''}</p>
       <div class="mact"><button class="btn alt" id="bSave">Save as planned</button><button class="btn" id="bMade">✓ Made it</button></div></div>`
     +plansHtml(true);
 }
@@ -129,18 +131,33 @@ function wirePlan(){
     for(const l of planLines(r,pl.mult)){ const want=l.short!=null?l.short:l.need; if(!(want>0)||S.shopping.some(x=>!x.done&&x.input===l.i.id)) continue;
       const packs=l.i.pack>0?Math.ceil(want/l.i.pack):1; S.shopping.push({id:SYNC.newId('shopping'),item:l.i.name,qty:packs,size:l.i.pack?fmtQty(l.i.pack,l.i.unit):'',input:l.i.id,done:false,by:SYNC.me(),at:Date.now(),from:'brew'}); n++; }
     save(); toast(n?n+' added to the shopping list':'Already on the list'); };
-  const keep=status=>{ const r=S.recipes.find(x=>x.id===pl.recipe), prods=S.products.filter(p=>p.recipe===r.id), items=prods.filter(p=>pl.fill[p.id]>0).map(p=>({pid:p.id,units:pl.fill[p.id]}));
+  document.querySelectorAll('[data-fixlink]').forEach(b=>b.onclick=()=>editLink(S.products.find(p=>p.id===b.dataset.fixlink)));
+  document.querySelectorAll('[data-fixrec]').forEach(b=>b.onclick=()=>editRecipe(S.recipes.find(r=>r.id===b.dataset.fixrec)));
+  document.querySelectorAll('[data-fixin]').forEach(b=>b.onclick=()=>editInput(S.inputs.find(i=>i.id===b.dataset.fixin)));
+  // missing information: "Fix it now", or "Carry on anyway" (confirmed, and the batch shows ⚠️ with who and when)
+  const checked=(status,go)=>{ const r=S.recipes.find(x=>x.id===pl.recipe), prods=S.products.filter(p=>p.recipe===r.id&&(+pl.fill[p.id]||0)>0);
+    if(!prods.length){ toast('Fill in how many of each'); return; }
+    const gaps=[...prods.filter(p=>!(p.fill>0)).map(p=>prodName(p)+' has no fill'),...planLines(r,pl.mult).filter(l=>noPrice(l.i)).map(l=>l.i.name+' has no price'),
+      ...[...new Set(prods.flatMap(p=>(p.pack||[]).map(x=>S.inputs.find(i=>i.id===x.input)).filter(noPrice)))].map(i=>i.name+' has no price')];
+    if(!gaps.length){ go(null); return; }
+    modal((m,close)=>{ m.innerHTML=`<h2>⚠️ Something's missing</h2><ul>${gaps.map(g=>`<li>${esc(g)}</li>`).join('')}</ul><p>So the ${status==='made'?'stock amounts and ':''}cost of this batch will be wrong.</p>
+        <div class="mact"><button class="btn alt" id="gAny">Carry on anyway</button><button class="btn" id="gFix">Fix it now</button></div>`;
+      m.querySelector('#gFix').onclick=()=>{ close(); const nf=prods.find(p=>!(p.fill>0)); if(nf) editLink(nf); else { const l=planLines(r,pl.mult).find(x=>noPrice(x.i)); if(l) editInput(l.i); else { const pi=prods.flatMap(p=>(p.pack||[]).map(x=>S.inputs.find(i=>i.id===x.input))).find(noPrice); if(pi) editInput(pi); } } };
+      m.querySelector('#gAny').onclick=()=>{ close(); confirmBox('Carry on anyway?','The batch is saved with its cost marked ⚠️ and your name, until the missing information is filled in.','Carry on anyway',()=>go({by:SYNC.me(),at:Date.now(),what:gaps.join('; ')})); }; });
+  };
+  const keep=(status,override)=>{ const r=S.recipes.find(x=>x.id===pl.recipe), prods=S.products.filter(p=>p.recipe===r.id), items=prods.filter(p=>pl.fill[p.id]>0).map(p=>({pid:p.id,units:pl.fill[p.id]}));
     if(!items.length){ toast('Fill in how many of each'); return null; }
     const used=items.reduce((n,x)=>n+x.units*(S.products.find(p=>p.id===x.pid).fill||0),0);
     if(used>r.yield*pl.mult+1e-6){ toast('That needs more than the batch makes'); return null; }
     const id=SYNC.newId('batches'), ingCost=planLines(r,pl.mult).reduce((n,l)=>n+l.cost,0), share=used/(r.yield*pl.mult);
-    const unitCosts={}; items.forEach(x=>{ const p=S.products.find(y=>y.id===x.pid); unitCosts[x.pid]=Math.round(ingCost*share*(x.units*p.fill/used)/x.units+packCost(p)); });
-    S.batches.push({id,recipe:r.id,recipeName:r.name,mult:pl.mult,date:pl.date,status,items,unitCost:unitCosts,ingredientCost:Math.round(ingCost),by:SYNC.me(),at:Date.now()});
+    // a product with no fill gets only its packaging cost (and the batch is marked), never a divide-by-zero
+    const unitCosts={}; items.forEach(x=>{ const p=S.products.find(y=>y.id===x.pid); unitCosts[x.pid]=Math.round((p.fill>0&&used>0?ingCost*share*(x.units*p.fill/used)/x.units:0)+packCost(p)); });
+    S.batches.push(Object.assign({id,recipe:r.id,recipeName:r.name,mult:pl.mult,date:pl.date,status,items,unitCost:unitCosts,ingredientCost:Math.round(ingCost),by:SYNC.me(),at:Date.now()},override?{override}:{}));
     S.plans.push({id:SYNC.newId('plans'),batch:id,date:pl.date,status,items:items.map(x=>({pid:x.pid,units:x.units})),at:Date.now()});
     return {id,r,items};
   };
-  $('#bSave').onclick=()=>{ if(keep('planned')){ save(); brewPlan=null; toast('Planned'); render(); } };
-  $('#bMade').onclick=()=>{ const k=keep('made'); if(!k) return; madeStock(k.id); save(); brewPlan=null; toast('Made: stock added'); render(); };
+  $('#bSave').onclick=()=>checked('planned',o=>{ if(keep('planned',o)){ save(); brewPlan=null; toast('Planned'); render(); } });
+  $('#bMade').onclick=()=>checked('made',o=>{ const k=keep('made',o); if(!k) return; madeStock(k.id); save(); brewPlan=null; toast('Made: stock added'); render(); });
 }
 // a batch made: products into stock (at home), ingredients and packaging used
 function madeStock(batchId){
@@ -161,7 +178,8 @@ function wirePlans(){ document.querySelectorAll('[data-made]').forEach(b=>b.oncl
 function batchesHtml(){
   const l=S.batches.filter(b=>b.status==='made').sort((a,b)=>(b.madeAt||0)-(a.madeAt||0)).slice(0,40);
   return `<div class="card"><h3>Batches made</h3>${l.length?l.map(b=>`<div class="lrow"><div class="grow ltxt"><b>${esc(b.recipeName||'Batch')} ×${b.mult} · ${esc(nzDate(kd(b.date),{day:'numeric',month:'short',year:'numeric'}))}</b>
-      <small>${b.items.map(x=>{ const p=S.products.find(y=>y.id===x.pid); return x.units+' × '+esc(p?prodName(p):'?')+(b.unitCost&&b.unitCost[x.pid]!=null?' at '+c2(b.unitCost[x.pid]):''); }).join(' · ')}</small></div></div>`).join(''):'<p class="note">No batches made yet.</p>'}
+      <small>${b.items.map(x=>{ const p=S.products.find(y=>y.id===x.pid); return x.units+' × '+esc(p?prodName(p):'?')+(b.unitCost&&b.unitCost[x.pid]!=null?' at '+c2(b.unitCost[x.pid]):''); }).join(' · ')}</small>
+      ${b.override?`<small class="bad">⚠️ Saved with missing information (${esc(b.override.what)}) by ${esc(personName(b.override.by))}, so its cost is wrong</small>`:''}</div></div>`).join(''):'<p class="note">No batches made yet.</p>'}
     <p class="note">The cost a unit is fixed on the day it was made, so later price changes never change past figures.</p></div>`;
 }
 function wireBatches(){}
@@ -245,7 +263,7 @@ function inputsHtml(){
   const l=S.inputs.slice().sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.name.localeCompare(b.name));
   return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="addIn">＋ Add an ingredient or packaging</button></div>
     ${['ingredient','packaging'].map(c=>{ const g=l.filter(i=>(i.cat||'ingredient')===c); return g.length?`<h3 style="margin-top:14px">${c==='ingredient'?'Ingredients':'Packaging'}</h3>`+g.map(i=>{ const st=inputStock(i.id);
-      return `<button class="row prow" data-in="${i.id}"><div class="grow">${esc(i.name)}<small>${c2(i.price)} for ${fmtQty(i.pack,i.unit)}${i.unit==='each'?' each':''} · ${c2(inputCost(i)*(i.unit==='each'?1:(i.unit==='g'||i.unit==='ml'?100:1)))} per ${i.unit==='each'?'one':'100 '+i.unit}${st!=null?' · have '+fmtQty(st,i.unit):''}</small></div><span class="chev">›</span></button>`; }).join(''):''; }).join('')||'<p class="note">None yet.</p>'}</div>`;
+      return `<button class="row prow" data-in="${i.id}"><div class="grow">${esc(i.name)}${inputIssues(i).map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${i.free&&!(i.price>0)?'Free · packs of '+fmtQty(i.pack,i.unit):`${c2(i.price)} for ${fmtQty(i.pack,i.unit)}${i.unit==='each'?' each':''} · ${c2(inputCost(i)*(i.unit==='each'?1:(i.unit==='g'||i.unit==='ml'?100:1)))} per ${i.unit==='each'?'one':'100 '+i.unit}`}${st!=null?' · have '+fmtQty(st,i.unit):''}</small></div><span class="chev">›</span></button>`; }).join(''):''; }).join('')||'<p class="note">None yet.</p>'}</div>`;
 }
 function editInput(src){
   const isNew=!src.id, i=Object.assign({name:'',cat:'ingredient',price:0,pack:1,unit:'g',supplier:''},src);
@@ -253,8 +271,9 @@ function editInput(src){
       <label class="note" for="iN">Name</label><input class="txt" id="iN" value="${esc(i.name)}" autocapitalize="sentences">
       <div class="bigseg"><button data-cat="ingredient" class="${i.cat!=='packaging'?'on':''}">🌿 Ingredient</button><button data-cat="packaging" class="${i.cat==='packaging'?'on':''}">🫙 Packaging</button></div>
       <div class="formrow"><div><label class="note" for="iP">Price you pay for a pack, ex GST ($)</label><input class="txt" id="iP" inputmode="decimal" value="${i.price?(i.price/100).toFixed(2):''}"></div>
-        <div><label class="note" for="iK">Pack size</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
-      <label class="note" for="iU">Unit</label><select class="txt" id="iU">${UNITS.map(u=>`<option ${i.unit===u?'selected':''}>${u}</option>`).join('')}</select>
+        <div><label class="note" for="iK">Pack size (in the unit below)</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
+      <label class="tickrow"><input type="checkbox" id="iFree" ${i.free?'checked':''}><span>Yes, this is free <small class="note">(e.g. grown at home), so $0 is right</small></span></label>
+      <label class="note" for="iU">Measured</label><select class="txt" id="iU">${UNITS.map(u=>`<option value="${u}" ${i.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select>
       <label class="note" for="iS">Supplier (optional)</label><input class="txt" id="iS" value="${esc(i.supplier||'')}">
       <label class="note" for="iH">How much you have now (optional, starts tracking it)</label><input class="txt" id="iH" type="number" min="0" step="any" placeholder="${inputStock(i.id)!=null?inputStock(i.id):'not tracked'}">
       <div class="mact">${isNew?'':'<button class="btn danger" id="iD">Delete</button>'}<button class="btn alt" id="iC">Cancel</button><button class="btn" id="iOk">Save</button></div>`;
@@ -263,9 +282,10 @@ function editInput(src){
     const d=m.querySelector('#iD'); if(d) d.onclick=()=>{ if(S.recipes.some(r=>(r.lines||[]).some(l=>l.input===i.id))||S.products.some(p=>(p.pack||[]).some(l=>l.input===i.id))){ toast('It\'s used in a recipe or product: take it out there first'); return; }
       const k=S.inputs.findIndex(x=>x.id===i.id); if(k>=0) S.inputs.splice(k,1); save(); close(); render(); };
     m.querySelector('#iOk').onclick=()=>{ const name=m.querySelector('#iN').value.trim(), price=toCents(m.querySelector('#iP').value||'0'), pack=+m.querySelector('#iK').value, unit=m.querySelector('#iU').value;
-      if(!name){ toast('Type the name'); return; } if(!(pack>0)){ toast('Type the pack size'); return; } if(!(price>=0)){ toast('Type the price'); return; }
+      if(!name){ toast('Type the name'); return; } if(!(pack>0)){ toast('Type the pack size'); return; } const free=m.querySelector('#iFree').checked;
+      if(!(price>0)&&!free){ toast('Type the price, or tick "Yes, this is free"'); return; }
       const changed=!isNew&&(price!==i.price||pack!==i.pack);
-      Object.assign(i,{name:name.slice(0,80),cat,price,pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),updated:Date.now()});
+      Object.assign(i,{name:name.slice(0,80),cat,price:price>0?price:0,free:free&&!(price>0),pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),updated:Date.now()});
       if(isNew){ i.id=SYNC.newId('inputs'); S.inputs.push(i); } else Object.assign(S.inputs.find(x=>x.id===i.id),i);
       if(isNew||changed) S.prices.push({id:SYNC.newId('prices'),input:i.id,item:i.name,cents:price,pack,unit,date:nzDay(),at:Date.now(),by:SYNC.me(),from:'setup'});
       const h=m.querySelector('#iH').value; if(h!=='') moveStock({kind:'count',input:i.id,qty:Math.max(0,+h)});
@@ -282,7 +302,8 @@ function editRecipe(src){
   modal((m,close)=>{ const draw=()=>{ m.innerHTML=`<h2>${isNew?'Add a recipe':esc(r.name)}</h2>
       <label class="note" for="rN">Name</label><input class="txt" id="rN" value="${esc(r.name)}">
       <div class="formrow"><div><label class="note" for="rY">One batch makes</label><input class="txt" id="rY" type="number" min="0" step="any" value="${r.yield}"></div>
-        <div><label class="note" for="rU">Unit</label><select class="txt" id="rU">${UNITS.map(u=>`<option ${r.unit===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
+        <div><label class="note" for="rU">Measured</label><select class="txt" id="rU">${UNITS.map(u=>`<option value="${u}" ${r.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select></div></div>
+      ${recipeIssues(r).filter(x=>!/batch size|ingredients/.test(x.t)).map(x=>`<p class="note clash">⚠️ ${esc(x.t)}</p>`).join('')}
       <h3>In one batch</h3>${r.lines.map((l,k)=>{ const i=S.inputs.find(x=>x.id===l.input); return `<div class="lrow"><select class="txt grow" data-li="${k}">${ins.map(x=>`<option value="${x.id}" ${x.id===l.input?'selected':''}>${esc(x.name)}</option>`).join('')}</select><input class="txt qty" type="number" min="0" step="any" data-lq="${k}" value="${l.qty}"><span class="unit">${i?esc(i.unit):''}</span><button class="qb rm" data-lx="${k}">✕</button></div>`; }).join('')}
       ${ins.length?'<button class="btn alt small" id="rAdd">＋ Add an ingredient</button>':'<p class="note">Add ingredients first.</p>'}
       <p class="note">Batch cost ${c2(recipeCost(r))} ex GST.</p>
@@ -295,33 +316,40 @@ function editRecipe(src){
       m.querySelector('#rC').onclick=close;
       const d=m.querySelector('#rD'); if(d) d.onclick=()=>{ if(S.products.some(p=>p.recipe===r.id)){ toast('Products use this recipe: unlink them first'); return; } const k=S.recipes.findIndex(x=>x.id===r.id); if(k>=0) S.recipes.splice(k,1); save(); close(); render(); };
       m.querySelector('#rOk').onclick=()=>{ grab(); r.name=r.name.trim(); if(!r.name){ toast('Type the name'); return; } if(!(r.yield>0)){ toast('Type what one batch makes'); return; }
-        r.lines=r.lines.filter(l=>l.qty>0); r.updated=Date.now();
-        if(isNew){ r.id=SYNC.newId('recipes'); S.recipes.push(r); } else Object.assign(S.recipes.find(x=>x.id===r.id),r);
+        r.lines=r.lines.filter(l=>l.qty>0); r.updated=Date.now(); delete r.unitGuessed;
+        if(isNew){ r.id=SYNC.newId('recipes'); S.recipes.push(r); } else { const o=S.recipes.find(x=>x.id===r.id); delete o.unitGuessed; Object.assign(o,r); }
         save(); close(); render(); toast('Saved'); }; };
     draw(); },{big:true});
 }
 function linksHtml(){
   return `<div class="card"><p class="note">Which recipe fills each product, how much goes in each, and what it's packed in. Cost a unit is ex GST.</p>
     ${S.products.filter(p=>p.active!==false).sort((a,b)=>prodName(a).localeCompare(prodName(b))).map(p=>{ const r=recipeOf(p), c=unitCost(p);
-      return `<button class="row prow" data-link="${p.id}"><div class="grow">${esc(prodName(p))}<small>${r?esc(r.name)+' · '+fmtQty(p.fill||0,r.unit)+(c!=null?' · costs '+c2(c)+' · sells '+c2(Math.round(p.price/1.15))+' ex GST · margin '+Math.round((1-c/(p.price/1.15))*100)+'%':''):'No recipe linked'}</small></div><span class="chev">›</span></button>`; }).join('')}</div>`;
+      const iss=productIssues(p).filter(x=>x.fix==='link');
+      return `<button class="row prow" data-link="${p.id}"><div class="grow">${esc(prodName(p))}${iss.map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${r?esc(r.name)+(p.fill>0?' · '+fmtQty(p.fill,r.unit)+' each':'')+(c!=null?' · costs '+c2(c)+' · sells '+c2(Math.round(p.price/1.15))+' ex GST · margin '+Math.round((1-c/(p.price/1.15))*100)+'%':''):p.noRecipe?'Bought in, not made here':''}</small></div><span class="chev">›</span></button>`; }).join('')}</div>`;
 }
 function editLink(p){
-  const v=JSON.parse(JSON.stringify({recipe:p.recipe||'',fill:p.fill||'',pack:p.pack||[]})), packs=S.inputs.filter(i=>i.cat==='packaging').sort((a,b)=>a.name.localeCompare(b.name));
+  const v=JSON.parse(JSON.stringify({recipe:p.recipe||(p.noRecipe?'-':''),fill:p.fill||'',pack:p.pack||[],noPack:!!p.noPack})), packs=S.inputs.filter(i=>i.cat==='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ const r=S.recipes.find(x=>x.id===v.recipe);
       m.innerHTML=`<h2>${esc(prodName(p))}</h2>
-        <label class="note" for="lR">Made from</label><select class="txt" id="lR"><option value="">Not made from a recipe</option>${S.recipes.map(x=>`<option value="${x.id}" ${x.id===v.recipe?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
-        ${r?`<label class="note" for="lF">Fill per unit (${esc(r.unit)})</label><input class="txt" id="lF" type="number" min="0" step="any" value="${v.fill}">`:''}
+        <label class="note" for="lR">Made from</label><select class="txt" id="lR"><option value="" ${v.recipe===''?'selected':''}>Choose a recipe…</option><option value="-" ${v.recipe==='-'?'selected':''}>Bought in, not made here</option>${S.recipes.map(x=>`<option value="${x.id}" ${x.id===v.recipe?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+        ${v.recipe===''?'<p class="note clash">⚠️ Choose its recipe, or "Bought in, not made here"</p>':''}
+        ${r?`<label class="note" for="lF">How much goes in each one</label><div class="unitin"><input class="txt" id="lF" type="number" min="0" step="any" value="${v.fill}" placeholder="e.g. ${r.unit==='g'?'15':'30'}"><span class="u">${esc(r.unit)}</span></div>
+          ${!(v.fill>0)?'<p class="note clash">⚠️ Needed for brew amounts and the cost of each one</p>':''}
+          ${r.unit==='each'&&sizeUnit(p)?`<p class="note clash">⚠️ ${esc(r.name)} is measured in "each", but this is a ${esc(sizeUnit(p))} product. <button class="linkb" id="lRU">Change the recipe's unit</button></p>`:''}`:''}
         <h3>Packed in (each)</h3>${v.pack.map((l,k)=>`<div class="lrow"><select class="txt grow" data-pi="${k}">${packs.map(x=>`<option value="${x.id}" ${x.id===l.input?'selected':''}>${esc(x.name)}</option>`).join('')}</select><input class="txt qty" type="number" min="0" step="any" data-pq="${k}" value="${l.qty}"><button class="qb rm" data-px="${k}">✕</button></div>`).join('')}
         ${packs.length?'<button class="btn alt small" id="lAdd">＋ Add packaging</button>':'<p class="note">Add packaging items first.</p>'}
+        ${v.recipe&&v.recipe!=='-'&&!v.pack.length?`<label class="tickrow"><input type="checkbox" id="lNP" ${v.noPack?'checked':''}><span>No packaging needed</span></label>`:''}
         <div class="mact"><button class="btn alt" id="lC">Cancel</button><button class="btn" id="lOk">Save</button></div>`;
-      const grab=()=>{ v.recipe=m.querySelector('#lR').value; const f=m.querySelector('#lF'); if(f) v.fill=+f.value||0;
+      const grab=()=>{ v.recipe=m.querySelector('#lR').value; const f=m.querySelector('#lF'); if(f) v.fill=+f.value||0; const np=m.querySelector('#lNP'); if(np) v.noPack=np.checked;
         m.querySelectorAll('[data-pi]').forEach(s=>v.pack[+s.dataset.pi].input=s.value); m.querySelectorAll('[data-pq]').forEach(s=>v.pack[+s.dataset.pq].qty=+s.value||0); };
-      m.querySelector('#lR').onchange=()=>{ grab(); draw(); };
+      m.querySelector('#lR').onchange=()=>{ grab(); draw(); }; const lf=m.querySelector('#lF'); if(lf) lf.onchange=()=>{ grab(); draw(); };
+      const ru=m.querySelector('#lRU'); if(ru) ru.onclick=()=>{ close(); editRecipe(r); };
       const a=m.querySelector('#lAdd'); if(a) a.onclick=()=>{ grab(); v.pack.push({input:packs[0].id,qty:1}); draw(); };
       m.querySelectorAll('[data-px]').forEach(b=>b.onclick=()=>{ grab(); v.pack.splice(+b.dataset.px,1); draw(); });
       m.querySelector('#lC').onclick=close;
-      m.querySelector('#lOk').onclick=()=>{ grab(); if(v.recipe&&!(v.fill>0)){ toast('Type how much goes in each'); return; }
-        Object.assign(p,{recipe:v.recipe,fill:v.recipe?v.fill:0,pack:v.pack.filter(l=>l.qty>0),updated:Date.now()}); save(); close(); render(); toast('Saved'); }; };
+      m.querySelector('#lOk').onclick=()=>{ grab(); const made=v.recipe&&v.recipe!=='-'; if(made&&!(v.fill>0)){ toast('Type how much goes in each one'); return; }
+        const pk=v.pack.filter(l=>l.qty>0);
+        Object.assign(p,{recipe:made?v.recipe:'',noRecipe:v.recipe==='-',fill:made?v.fill:0,pack:pk,noPack:!pk.length&&!!v.noPack,updated:Date.now()}); save(); close(); render(); toast('Saved'); }; };
     draw(); });
 }
 
@@ -360,7 +388,11 @@ async function importWorkbook(file){
       const recByName={}; S.recipes.forEach(r=>recByName[norm(r.name)]=r); let recs=0, missing=new Set();
       for(const o of recipes){ const name=String(o['Recipe']).trim(); if(!name) continue;
         const ls=lines.filter(l=>norm(l['Recipe'])===norm(name)).map(l=>{ const i=byName[norm(l['Input'])]; if(!i) missing.add(String(l['Input'])); return i?{input:i.id,qty:+l['Qty per Batch']||0}:null; }).filter(Boolean);
-        const r=recByName[norm(name)], v={name:name.slice(0,80),yield:+o['Batch Yield']||0,unit:unitOf(o['Yield Unit']),lines:ls,updated:Date.now()};
+        // a yield unit it can't read is guessed from the ingredients (ml or g) and flagged in Needs attention
+        const yu=String(o['Yield Unit']||'').trim().toLowerCase(), known=/^(ml|mls|millil|g|gram|gm|kg|each|ea\b|unit|pcs?|pieces?)/.test(yu);
+        const lu=ls.map(l=>(S.inputs.find(i=>i.id===l.input)||{}).unit).filter(u=>u==='ml'||u==='g'), guess=lu.filter(u=>u==='ml').length>=lu.filter(u=>u==='g').length?'ml':'g';
+        const r=recByName[norm(name)], v={name:name.slice(0,80),yield:+o['Batch Yield']||0,unit:known?unitOf(yu):(lu.length?guess:'ml'),lines:ls,updated:Date.now()};
+        if(!known) v.unitGuessed=true; else if(r) delete r.unitGuessed;
         if(r) Object.assign(r,v); else { const n=Object.assign({id:SYNC.newId('recipes')},v); S.recipes.push(n); recByName[norm(name)]=n; } recs++; }
       let linked=0; for(const x of plan){ if(!x.match) continue; const p=S.products.find(y=>y.id===x.match), r=recByName[norm(x.recipe)]; if(!p) continue;
         const pk=packs.filter(o=>norm(o['Product'])===norm(x.name)).map(o=>{ const i=byName[norm(o['Packaging Item'])]; if(!i) missing.add(String(o['Packaging Item'])); return i?{input:i.id,qty:+o['Qty per Unit']||1}:null; }).filter(Boolean);

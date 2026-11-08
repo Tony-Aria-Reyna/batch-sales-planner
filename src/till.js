@@ -23,10 +23,10 @@ const gstOf=c=>Math.round((c||0)*3/23);
 const gstLine=c=>`<small class="gstl">incl. ${c2(gstOf(c))} GST</small>`;
 // The open sale is kept on the device, so a reload mid-sale loses nothing. Everything kept on the device
 // is tagged with the business, so another account on the same device never inherits it.
-let cart=[], cartDisc=null, correcting=null;
-const loadCart=()=>{ const c=lsGet('rs.cart',null), ok=c&&c.bid===SYNC.businessId(); cart=ok?c.items||[]:[]; cartDisc=ok?c.disc||null:null; correcting=ok?c.correcting||null:null; };
-const saveCart=()=>lsSet('rs.cart',{bid:SYNC.businessId(),items:cart,disc:cartDisc,correcting});
-const clearCart=()=>{ cart=[]; cartDisc=null; correcting=null; saveCart(); };
+let cart=[], cartDisc=null, correcting=null, lossOk=null;
+const loadCart=()=>{ const c=lsGet('rs.cart',null), ok=c&&c.bid===SYNC.businessId(); cart=ok?c.items||[]:[]; cartDisc=ok?c.disc||null:null; correcting=ok?c.correcting||null:null; lossOk=ok?c.lossOk||null:null; };
+const saveCart=()=>lsSet('rs.cart',{bid:SYNC.businessId(),items:cart,disc:cartDisc,correcting,lossOk});
+const clearCart=()=>{ cart=[]; cartDisc=null; correcting=null; lossOk=null; saveCart(); };
 let lastSale=null, undoTimer=null;
 const tillLock=()=>{ const t=lsGet('rs.tillMode',null); return t&&t.bid===SYNC.businessId()?t:null; };   // {servedBy} while handed to a helper
 const servedBy=()=>lsGet('rs.servedBy','');
@@ -188,6 +188,7 @@ function giveDiscount(){
         <label class="note">Or type the ${kind==='pct'?'percentage':'amount'}</label><input class="txt" id="dV" inputmode="decimal" value="${kind==='pct'?value:(value/100).toFixed(2)}">
         <label class="note">Reason (shown in the approvals log)</label><input class="txt" id="dR" placeholder="e.g. regular customer, damaged label">
         <p class="change ok">Takes off <b>${c2(amt)}</b> · new total <b>${c2(base-amt)}</b></p>
+        ${(()=>{ const k=cartCost(priceCart(cart,null)); return k.cost>0&&exGst(base-amt)<k.cost?`<p class="note clash">⚠️ That's below what it costs to make (${c2(Math.ceil(k.cost*1.15))} incl. GST). The sale will stop for an owner or manager to approve it.</p>`:''; })()}
         <div class="mact"><button class="btn alt" id="dC">Cancel</button><button class="btn" id="dOk">Approve with PIN</button></div>`;
       const keepR=m.querySelector('#dR');
       m.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{ const r=keepR.value; kind=b.dataset.kind; value=kind==='pct'?10:500; draw(); m.querySelector('#dR').value=r; });
@@ -224,6 +225,55 @@ function addExtraItem(){
     }; draw(); setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#xN').focus(); },50); });
 }
 
+/* ---------- selling below cost (needs a PIN) ----------
+   If a discount or deal would sell a sale for less than it costs to make (ingredients and packaging,
+   ex GST), the sale stops. An owner or manager enters their PIN, sees cost, price and margin, then
+   approves it or sets a new total (the margin recalculates as they type), and confirms a second time.
+   Only then does it go on to payment; the approvals log records it. Costs come from the recipes,
+   which are owners-only: on a device that can't see them (or for an item with no recipe) it can't check. */
+const exGst=c=>Math.round((c||0)/1.15);
+function cartCost(pc){ let cost=0, unknown=0;
+  for(const l of pc.lines){ const p=l.custom?null:S.products.find(x=>x.id===l.pid), c=p&&typeof unitCost==='function'?unitCost(p):null;
+    if(c==null) unknown+=l.qty; else cost+=c*l.qty; }
+  return {cost:Math.round(cost),unknown}; }
+const cartSig=()=>JSON.stringify([cart.map(c=>[c.pid,c.qty]),cartDisc?[cartDisc.kind,cartDisc.value]:null]);
+const lossApproved=()=>!!(lossOk&&lossOk.sig===cartSig());
+function belowCost(pc){ const k=cartCost(pc); return k.cost>0&&exGst(pc.total)<k.cost?k:null; }
+const marginTxt=(total,cost)=>{ const ex=exGst(total), m=ex>0?Math.round((ex-cost)/ex*100):-100; return {m,txt:(ex>=cost?'Makes ':'Loses ')+c2(Math.abs(ex-cost))+' · margin '+m+'%'}; };
+function lossCheck(pc,k,done){
+  modal((m,close)=>{ const mt=marginTxt(pc.total,k.cost);
+    m.innerHTML=`<h2>⚠️ This sale loses money</h2>
+      <div class="eod"><div><span>Costs to make (ex GST)</span><b>${c2(k.cost)}</b></div><div><span>Sale (ex GST)</span><b>${c2(exGst(pc.total))}</b></div><div><span>Result</span><b class="bad">${esc(mt.txt.replace(' · ','<br>')).replace('&lt;br&gt;','<br>')}</b></div></div>
+      ${pc.manual?`<p class="note">Discount: ${pc.manual.kind==='pct'?pc.manual.value+'%':c2(pc.manual.value)} (${esc(pc.manual.reason||'')})</p>`:''}${pc.deals.length?`<p class="note">Deals: ${pc.deals.map(d=>esc(d.name)).join(', ')}</p>`:''}
+      ${k.unknown?`<p class="note">${k.unknown} item${k.unknown===1?' has':'s have'} no cost yet, so the real loss may be bigger.</p>`:''}
+      <p>The sale can't go ahead until an owner or manager approves it.</p>
+      <div class="mact"><button class="btn alt" id="lcN">Back to the order</button><button class="btn" id="lcY">Approve with PIN</button></div>`;
+    m.querySelector('#lcN').onclick=close;
+    m.querySelector('#lcY').onclick=()=>{ close(); approve('look at a sale below cost',who=>lossAdjust(k,who,done),c2(pc.total)+' total, costs '+c2(k.cost)+' ex GST to make'); }; });
+}
+function lossAdjust(k,who,done){
+  const base=priceCart(cart,null).total, even=Math.min(base,Math.ceil(k.cost*1.15/10)*10);
+  modal((m,close)=>{ let total=priceCart(cart,cartDisc).total;
+    const draw=()=>{ const mt=marginTxt(total,k.cost), quick=[['Break even',even]].concat([20,30,40].map(p=>[p+'% margin',Math.min(base,Math.ceil(k.cost*1.15/(1-p/100)/10)*10)])).concat(cartDisc?[['No discount',base]]:[]);
+      m.innerHTML=`<h2>Set this sale's total</h2><p class="note">Till price ${c2(base)}${cartDisc?' before the discount':''}. Costs ${c2(k.cost)} to make, ex GST.</p>
+        <div class="pastnames">${quick.filter((q,i,a)=>a.findIndex(x=>x[1]===q[1])===i).map(([l,v])=>`<button class="chip big ${v===total?'on':''}" data-qt="${v}">${esc(l)} · ${c2(v)}</button>`).join('')}</div>
+        <label class="note" for="laT">Or type the total, including GST</label><input class="txt" id="laT" inputmode="decimal" value="${(total/100).toFixed(2)}">
+        <p class="change ${exGst(total)>=k.cost?'ok':'bad'}" style="font-size:18px"><b>${c2(total)}</b> · ${esc(mt.txt)}</p>
+        <div class="mact"><button class="btn alt" id="laC">Cancel</button><button class="btn" id="laOk">Approve ${c2(total)}</button></div>`;
+      m.querySelectorAll('[data-qt]').forEach(b=>b.onclick=()=>{ total=+b.dataset.qt; draw(); });
+      const t=m.querySelector('#laT'); t.oninput=()=>{ const v=toCents(t.value); if(v>0){ total=Math.min(base,v); const p=m.querySelector('.change'); const mt2=marginTxt(total,k.cost); p.className='change '+(exGst(total)>=k.cost?'ok':'bad'); p.innerHTML='<b>'+c2(total)+'</b> · '+esc(mt2.txt); m.querySelector('#laOk').textContent='Approve '+c2(total); } };
+      t.onchange=()=>{ const v=toCents(t.value); if(v>base) toast('It can\'t be more than the till price, '+c2(base)); draw(); };
+      m.querySelector('#laC').onclick=close;
+      m.querySelector('#laOk').onclick=()=>{ const mt2=marginTxt(total,k.cost); close();
+        confirmBox('Confirm again','Sell this for <b>'+c2(total)+'</b>? It costs '+c2(k.cost)+' to make (ex GST): '+esc(mt2.txt)+'.','Yes, approve',()=>{
+          const old=cartDisc;
+          cartDisc=total>=base?null:{kind:'amt',value:base-total,reason:(old&&old.reason?old.reason+' · ':'')+'approved below cost',approvedBy:who,at:Date.now()};
+          lossOk={sig:cartSig(),by:who,at:Date.now(),cost:k.cost,total};
+          saveCart(); logApproval('sell below cost',who,c2(total)+' total, costs '+c2(k.cost)+' ex GST to make ('+mt2.txt+')',true);
+          render(); if(payRedraw) payRedraw(); toast('Approved by '+personName(who)); done(); }); };
+    }; draw(); });
+}
+
 /* ---------- taking payment ----------
    1. Check the order (items can still be changed)  2. take the payment  3. confirm it a second time
    4. a green "Payment approved" screen. Declined or cancelled: "Are you sure?", then the sale is cleared.
@@ -252,7 +302,9 @@ function pay(method){
         m.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{ method=b.dataset.m; draw(); });
         const rd=m.querySelector('#rDisc'); if(rd) rd.onclick=giveDiscount;
         m.querySelector('#rBack').onclick=finish;
-        m.querySelector('#rGo').onclick=()=>{ tendered=0; go('pay'); };
+        m.querySelector('#rGo').onclick=()=>{ const k=belowCost(pc);
+          if(k&&!lossApproved()){ lossCheck(pc,k,()=>{ tendered=0; go('pay'); }); return; }
+          tendered=0; go('pay'); };
         m.querySelector('#rCancel').onclick=()=>go('abandon');
         return;
       }
@@ -353,7 +405,7 @@ function recordSale(method,pc,extra){
   const now=Date.now();
   const sale=Object.assign({id:SYNC.newId('sales'),sessionId:d.id,channel:d.type,where:d.name||'',date:nzDay(new Date(now)),at:now,when:nzStamp(now),
     lines:pc.lines,deals:pc.deals,manualDiscount:pc.manual||null,subtotal:pc.subtotal,discount:pc.discount,total:pc.total,gst:Math.round(pc.total*3/23),
-    method,by:SYNC.me(),servedBy:servedBy()||'',voided:false},extra);
+    method,by:SYNC.me(),servedBy:servedBy()||'',voided:false},lossApproved()?{belowCost:{cost:lossOk.cost,approvedBy:lossOk.by}}:{},extra);
   if(correcting){ const old=S.sales.find(s=>s.id===correcting.id);
     sale.replaces=correcting.id; sale.correctedBy=correcting.approvedBy;
     if(old&&!old.voided) Object.assign(old,{voided:true,voidedBy:correcting.approvedBy,voidedAt:Date.now(),voidReason:'corrected',replacedBy:sale.id}); }
