@@ -261,6 +261,38 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => S.ideas.length === 1), 'ideas list (owners and managers)');
   await page.click('#bk'); await page.click('[data-go="calendar"]'); await page.waitForSelector('#pcSheet');
   ok(/Label the lavender jars/.test(await page.textContent('#pcSheet')), 'a dated to-do shows on the calendar');
+  // ---- voice notes: switched on by an owner, typed here (the test browser has no microphone), worked out by a stand-in helper
+  await page.click('#bk'); await page.waitForSelector('.tiles');
+  ok(!(await page.$('#hTalk')), 'voice assistant is off until an owner switches it on');
+  await page.click('[data-go="setup"]'); await pin(page, '2580'); await page.waitForSelector('#aiOn'); await page.click('#aiOn'); await page.waitForTimeout(60);
+  await page.fill('#vUrl', 'https://example.com/x'); await page.dispatchEvent('#vUrl', 'change'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => S.settings.voiceOn === true && !S.settings.voiceUrl), 'voice switched on; a wrong helper address is refused');
+  await page.click('#bk'); await page.waitForSelector('#hTalk'); await page.screenshot({ path: path.join(shots, '28a-home-voice.png') });
+  ok(await page.evaluate(() => { sendNote({ audio: 'A'.repeat(1300000), mime: 'audio/mp4', secs: 5 }, {}); const n = S.voicenotes.find(x => x.kind === 'note'); return S.voicenotes.filter(x => x.kind === 'chunk' && x.note === n.id).length === 3 && n.chunks === 3 && n.status === 'new'; }), 'a recording is saved in pieces under 1 MB each, waiting for the helper');
+  await page.click('#vL'); await page.waitForTimeout(80);
+  await page.evaluate(() => { S.voicenotes.length = 0; save(); });
+  await page.click('#hTalk'); await page.waitForSelector('#vType, #vTx');
+  if (await page.$('#vType')) { await page.click('#vType'); }
+  await page.waitForSelector('#vTx'); await page.fill('#vTx', 'Village market next week 8 till 1, label jars tomorrow, buy beeswax, idea rose balm'); await page.click('#vOk');
+  await page.waitForSelector('#vL');
+  const nextWeek = await page.evaluate(() => dk(addDays(kd(nzDay()), 7))), tomorrow = await page.evaluate(() => dk(addDays(kd(nzDay()), 1)));
+  await page.evaluate(([nw, tm]) => { const n = S.voicenotes.find(x => x.kind === 'note'); Object.assign(n, { status: 'ready', heard: 'Village market next week 8 till 1, label jars tomorrow, buy beeswax, idea rose balm', say: 'I have drafted four things.',
+    drafts: [{ kind: 'event', unsure: ['end'], event: { type: 'market', title: 'Village Market', date: nw, time: '08:00', end: '13:00', days: 1, place: 'Village Market', attendees: [], note: '' } },
+             { kind: 'todo', unsure: [], todo: { text: 'Label jars', due: tm, time: '', who: 'admin@example.com' } },
+             { kind: 'shopping', unsure: ['size'], shopping: { item: 'Beeswax', qty: 1, size: '' } },
+             { kind: 'idea', unsure: [], idea: { text: 'Rose balm', kind: 'product' } }] }); }, [nextWeek, tomorrow]);
+  await page.waitForSelector('#rYes');
+  ok(/You already have Village Market/.test(await text(page)), 'review warns about a calendar clash (the weekly Village Market)');
+  ok(await page.evaluate(() => document.querySelector('[data-dk="size"]').classList.contains('unsure') && document.querySelector('[data-dk="end"]').classList.contains('unsure')), 'guessed fields are highlighted to check');
+  await page.fill('[data-dk="size"]', '1 kg');
+  await page.screenshot({ path: path.join(shots, '28-voice-review.png') });
+  await page.click('[data-drop="0"]'); await page.waitForTimeout(40);
+  await page.click('#rYes'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.events.length === 1 && S.todos.some(t => t.text === 'Label jars' && t.from === 'voice') && S.shopping.some(x => x.item === 'Beeswax' && x.size === '1 kg' && !x.done) && S.ideas.some(i => i.text === 'Rose balm' && i.kind === 'product') && S.voicenotes.find(x => x.kind === 'note').status === 'done'), 'Save: the checked drafts are saved (with the hand-fixed size), the left-out one is not');
+  await page.click('#hDrive'); await page.waitForSelector('#dToday'); await page.click('#dToday'); await page.waitForTimeout(80);
+  ok(/Village Market/.test(await text(page)) && !!(await page.$('#dNext')), 'Drive mode: "What\'s on today" goes through today one at a time');
+  await page.screenshot({ path: path.join(shots, '29-drive-mode.png') });
+  await page.click('#dStop');
   await page.click('#bk');
   await page.click('[data-go="setup"]'); await pin(page, '2580');
   ok(/1 in the Loyalty programme · 1 receipt only/.test(await text(page)), 'Setup shows how many are in each list');
@@ -363,6 +395,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.locator('[data-buy]').first().click(); await hp.waitForSelector('#bOk');
   ok(!(await hp.$('#bP')), 'helper is not asked for prices');
   await hp.click('#bC'); await hp.screenshot({ path: path.join(shots, '27-android-lists-helper.png') });
+  await hp.evaluate(() => { S.voicenotes.push({ id: 'vhelper1', kind: 'note', by: 'helper@example.com', at: Date.now(), status: 'ready', heard: 'x', say: '',
+    drafts: [{ kind: 'event', unsure: [], event: { type: 'market', title: 'Pop-up', date: nzDay(), time: '', end: '', days: 1, place: '', attendees: [], note: '' } }, { kind: 'shopping', unsure: [], shopping: { item: 'Labels', qty: 2, size: '' } }] }); reviewNote(S.voicenotes.find(n => n.id === 'vhelper1')); });
+  await hp.waitForSelector('#rYes');
+  ok(/Only owners and managers can add this/.test(await text(hp)), 'helper: a calendar draft is shown but cannot be saved');
+  await hp.click('#rYes'); await hp.waitForTimeout(80);
+  ok(await hp.evaluate(() => S.shopping.some(x => x.item === 'Labels' && x.by === 'helper@example.com') && !S.events.some(e => e.title === 'Pop-up')), 'helper: saves the shopping, not the market');
   await hp.click('#bk'); await hp.waitForSelector('.tiles');
   await hp.click('[data-go="sell"]'); await hp.waitForSelector('#sGo');
   ok(/On the calendar today/.test(await text(hp)) && /Village Market/.test(await text(hp)), 'start of day offers today\'s market from the calendar');

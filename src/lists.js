@@ -6,19 +6,19 @@
              A price paid is kept with its date, so later price changes never rewrite past costs.
    Ideas:    owners and managers only: product ideas, people to call, things to think about. */
 let listTab=lsGet('rs.listtab','todo'), todoWho=lsGet('rs.todowho','all');
-const LIST_TABS=()=>[['todo','✅ To do'],['shop','🛒 Shopping']].concat(canManage()?[['ideas','💡 Ideas']]:[]);
+const LIST_TABS=()=>[['todo','✅ To do'],['shop','🛒 Shopping']].concat(canManage()?[['ideas','💡 Ideas']]:[]).concat([['voice','🎙 Voice notes'+(pendingNotes().length?' ('+pendingNotes().length+')':'')]]);
 const todoDue=t=>t.due?(t.due<nzDay()&&!t.done?'overdue':t.due===nzDay()?'today':'later'):'nodate';
 
 SCREENS.lists={
   title:()=>({h:'Lists',s:canManage()?'To do, shopping and ideas':'To do and shopping'}),
   html(){
     const tabs=LIST_TABS(); if(!tabs.some(t=>t[0]===listTab)) listTab='todo';
-    const body=listTab==='shop'?shopHtml():listTab==='ideas'?ideasHtml():todoHtml();
+    const body=listTab==='shop'?shopHtml():listTab==='ideas'?ideasHtml():listTab==='voice'?voiceListHtml():todoHtml();
     return rulesNotice()+`<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${listTab===k?'on':''}" data-lt="${k}">${v}</button>`).join('')}</div>`+body;
   },
   wire(){
     document.querySelectorAll('[data-lt]').forEach(b=>b.onclick=()=>{ listTab=b.dataset.lt; lsSet('rs.listtab',listTab); render(); });
-    if(listTab==='shop') wireShop(); else if(listTab==='ideas') wireIdeas(); else wireTodo();
+    if(listTab==='shop') wireShop(); else if(listTab==='ideas') wireIdeas(); else if(listTab==='voice') wireVoiceList(); else wireTodo();
   }
 };
 const addBar=(id,ph)=>`<div class="addbar"><input class="txt" id="${id}" placeholder="${ph}" autocapitalize="sentences" enterkeyhint="done"><button class="btn" id="${id}Go" aria-label="Add">＋ Add</button></div>`;

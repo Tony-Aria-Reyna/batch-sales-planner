@@ -132,6 +132,24 @@ body:has(.rcal) main{min-height:0}
 .tick.on{background:var(--green);border-color:var(--green)}
 .lrow .grow{flex:1}.ltxt{text-align:left;min-width:0}.ltxt b{display:block;font-weight:600;overflow-wrap:anywhere}.ltxt small{display:block;color:var(--muted);font-size:15px}
 .isdone .ltxt b{text-decoration:line-through;color:var(--muted)}
+.vbar{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px}
+.vtalk,.vdrive{min-height:84px;border-radius:22px;font-size:24px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 1px 0 var(--line)}
+.vtalk{background:var(--rata);color:#fff}.vtalk span{font-size:34px}.vtalk small{font-size:14px;background:#fff;color:var(--rata);border-radius:99px;padding:3px 10px}
+.vdrive{background:var(--card);color:var(--ink);font-size:20px}
+.vrec{text-align:center;padding:10px 0}
+.vdot{width:120px;height:120px;border-radius:50%;margin:6px auto 14px;display:grid;place-items:center;font-size:56px;background:#efe7d6}
+.vdot.on{background:#f6d4cf;animation:vpulse 1.2s ease-in-out infinite}.vdot.work{animation:vpulse 1.6s ease-in-out infinite}
+@keyframes vpulse{50%{transform:scale(1.08)}}
+.vdone{width:100%;min-height:76px;font-size:26px}
+.heard{font-style:italic;background:#f3efe4;border-radius:14px;padding:10px 14px}
+.draft h3{font-size:19px}.draft.settled{opacity:.7}
+.txt.unsure{background:#fff6c9;border-color:#e2c44d}
+.note.clash{color:var(--danger);font-weight:700}
+.drive{display:flex;flex-direction:column;gap:16px;padding-top:6px}
+.dbtn{min-height:120px;border-radius:26px;font-size:34px;font-weight:800;color:#fff;width:100%}
+.dbtn.talk{background:var(--rata);min-height:200px;font-size:46px}.dbtn.today{background:var(--green)}.dbtn.next{background:var(--green)}
+.dbtn.yes{background:#2f7d32}.dbtn.later{background:#a06a12}.dbtn.stop{background:#55574a;min-height:90px;font-size:28px}
+.dnow{background:var(--card);border-radius:22px;padding:18px 20px;text-align:center}.dnow small{color:var(--muted);font-weight:700}.dnow b{display:block;font-size:30px;margin:6px 0}.dnow span{color:var(--muted);font-size:18px}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -376,7 +394,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -463,11 +481,14 @@ SCREENS.home={
         <div><span>Batches due</span><b>0</b></div>
         <div><span>Orders due</span><b>0</b></div>
       </section>
+      ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p>`:''}`;
   },
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
+    const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
+    const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive');
     const sm=$('#showMoney'); if(sm) sm.onclick=()=>approve('see the takings',()=>{ moneyUntil=Date.now()+60e3; render(); setTimeout(render,60.5e3); });
     document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else go(id); }); }
 };
@@ -487,7 +508,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=2;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=3;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -522,6 +543,13 @@ SCREENS.setup={
       <label class="note" for="rcEmail">Business Gmail that sends the receipts</label><input class="txt" id="rcEmail" type="email" inputmode="email" autocapitalize="none" value="${esc(st.receiptEmail||'')}" placeholder="rataandsmudge@gmail.com">
       <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><input class="txt" id="rcNote" value="${esc(st.receiptNote||'')}" placeholder="Thank you! rataandsmudge.co.nz">
       <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
+
+    ${role()==='owner'?`<div class="card"><h3>🎙 Voice assistant</h3>
+      <p class="note">Talk instead of typing: notes become draft calendar entries, to-dos, shopping and ideas to check before saving. It uses the business's own Gemini key, kept in the business helper (never in the app). Recordings are deleted once understood.</p>
+      <div class="row"><div class="grow"><b>Voice assistant</b><small>${S.settings.aiPaused?'Paused: notes are kept but not worked out':S.settings.voiceOn?'On':'Off'}</small></div>
+        <button class="btn small ${S.settings.voiceOn&&!S.settings.aiPaused?'alt':''}" id="aiOn">${S.settings.voiceOn&&!S.settings.aiPaused?'Pause':'Switch on'}</button></div>
+      <label class="note" for="vUrl">Helper web address (makes replies near-instant; from the helper's Deploy → Web app)</label><input class="txt" id="vUrl" inputmode="url" autocapitalize="none" value="${esc(S.settings.voiceUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
+      <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div></div>`:''}
 
     <div class="card"><h3>💌 Customer contacts</h3>
       <div class="row"><div class="grow"><b>Loyalty programme and receipt-only emails</b><small>${(()=>{ const l=contactList(); return l.filter(c=>c.loyalty).length+' in the Loyalty programme · '+l.filter(c=>!c.loyalty).length+' receipt only'; })()}</small></div><button class="btn small" id="goContacts">Open</button></div></div>
@@ -558,6 +586,8 @@ SCREENS.setup={
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
+    const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
+    const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
     $('#goProd').onclick=()=>go('products'); $('#goPlaces').onclick=()=>go('places'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;

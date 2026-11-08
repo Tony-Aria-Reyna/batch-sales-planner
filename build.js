@@ -10,7 +10,7 @@ const config = fs.existsSync(cfgFile) ? JSON.stringify(JSON.parse(fs.readFileSyn
 const version = 'rs-' + Date.now().toString(36);
 const html = fs.readFileSync('src/app.html', 'utf8')
   .replace('/*@SYNC@*/', () => sync)
-  .replace('/*@MODULES@*/', () => ['catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'contacts.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
+  .replace('/*@MODULES@*/', () => ['catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'voice.js', 'contacts.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
   .replace('/*@CONFIG@*/null', () => MOCK ? JSON.stringify({ projectId: 'mock', apiKey: 'mock', authDomain: 'mock' }) : config)
   .replace('/*@VERSION@*/', version);
 fs.writeFileSync(path.join(out, 'index.html'), html);

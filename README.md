@@ -47,6 +47,31 @@ Set-up, once:
 
 Gmail allows about 100 emails a day from a free account, plenty for a market stall.
 
+## Voice notes (Gemini)
+
+Mum taps **🎙 Talk** (or uses **🚗 Drive mode**), speaks, and taps **Done**. The business helper sends the recording to
+Gemini on the business's own key and gets back draft calendar entries, to-dos, shopping and ideas. They appear as
+ordinary forms: anything can be fixed by hand, guessed fields are yellow, clashes are flagged, and nothing is saved
+until she taps Save. Recordings are deleted as soon as they are understood (and never kept past a day). Helpers can
+only make their own to-dos and shopping. "What's on today" in Drive mode is read aloud by the iPad itself (free).
+
+Set-up (once, after the GST receipt helper is working, because it is the same script):
+1. Signed in as the business Gmail, go to aistudio.google.com → **Get API key** → create a key in a new project
+   called "Rata & Smudge voice". Turn on billing for it (paid tier: Google does not use the content to improve its
+   products) and set a budget alert, e.g. NZ$10 a month, in Google Cloud → Billing → Budgets & alerts.
+2. In the helper script: paste the latest `helper/Code.gs` and `appsscript.json`, then **Project Settings → Script
+   properties → Add**: `GEMINI_API_KEY` = the key. Optional: `GEMINI_MODEL` (default `gemini-3.8-flash`) and
+   `VOICE_MONTHLY_LIMIT` (default 600 notes a month).
+3. **Deploy → New deployment → Web app**, execute as *Me*, access *Anyone*. Copy the address ending in `/exec`.
+   (The address only tells the helper "a note is waiting"; it reads the note itself from the database, so it
+   can only act on notes a signed-in member has saved.)
+4. Run `setup()` again once, and allow the new permissions.
+5. In the app: **Setup → 🎙 Voice assistant → Switch on**, and paste the web address. Without the address, notes
+   are still worked out, but only at the 5-minute check.
+6. Siri: in the Shortcuts app, make a shortcut "Rata note" that opens the Rata & Smudge home-screen app, then tap
+   **🎙 Talk**. (Apple doesn't let home-screen web apps use live speech recognition, which is why the note is
+   recorded and sent to Gemini.)
+
 ## Files
 
 | File | What it is |

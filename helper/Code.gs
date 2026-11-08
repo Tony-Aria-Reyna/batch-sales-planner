@@ -1,7 +1,10 @@
 /**
- * Rata & Smudge — receipt helper (Google Apps Script).
- * Runs every 5 minutes inside the business Gmail account. Finds GST receipts that the till has asked
- * to be emailed, builds each receipt from the saved sale, and sends it from this Gmail account.
+ * Rata & Smudge — business helper (Google Apps Script), running inside the business Gmail account.
+ *  - Emails GST receipts that the till has queued (every 5 minutes).
+ *  - Voice notes: turns a recorded note into draft calendar entries, to-dos, shopping and ideas, using
+ *    the business's own Gemini API key (kept in this script's Script properties, never in the app or on
+ *    GitHub). The app calls this helper's web address the moment a note is recorded, so drafts come back
+ *    in a few seconds; the 5-minute check picks up anything missed (for example, a note made offline).
  *
  * Set-up (once): see "Emailed GST receipts" in the README.
  *   1. Signed in as the business Gmail, open script.google.com → New project → name it "Rata & Smudge receipts".
@@ -12,7 +15,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 2;   // 2: welcome line for new Loyalty programme members
+const HELPER_VERSION = 3;   // 2: welcome line for new Loyalty programme members · 3: voice notes
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -40,6 +43,7 @@ function sendTestReceipt() {
 function tick() {
   const now = Date.now();
   for (const b of myBusinesses()) {
+    try { voiceTick(b); } catch (e) { Logger.log('Voice notes: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -133,8 +137,8 @@ function getDoc(path) {
   if (r.getResponseCode() === 404) return null;
   return docOf(check(r, 'Reading ' + path));
 }
-function runQuery(bid, field, value, limit) {
-  const body = { structuredQuery: { from: [{ collectionId: 'receipts' }], where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: enc(value) } }, limit: limit || 50 } };
+function runQuery(bid, field, value, limit, col) {
+  const body = { structuredQuery: { from: [{ collectionId: col || 'receipts' }], where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: enc(value) } }, limit: limit || 50 } };
   const j = check(UrlFetchApp.fetch(BASE + '/businesses/' + bid + ':runQuery', { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), headers: headers(), muteHttpExceptions: true }), 'Looking for receipts');
   return j.filter(x => x.document).map(x => docOf(x.document));
 }
@@ -144,4 +148,120 @@ function patch(path, fields) {
   const mask = Object.keys(fields).map(k => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
   const body = { fields: {} }; Object.keys(fields).forEach(k => { if (fields[k] !== undefined) body.fields[k] = enc(fields[k]); });
   check(UrlFetchApp.fetch(BASE + '/' + path + '?' + mask, { method: 'patch', contentType: 'application/json', payload: JSON.stringify(body), headers: headers(), muteHttpExceptions: true }), 'Saving ' + path);
+}
+
+function del(path) {
+  const r = UrlFetchApp.fetch(BASE + '/' + path, { method: 'delete', headers: headers(), muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200 && r.getResponseCode() !== 404) throw new Error('Deleting ' + path + ': ' + r.getResponseCode());
+}
+
+/* ================= Voice notes ================= */
+// Script properties (Project Settings → Script properties): GEMINI_API_KEY (required), GEMINI_MODEL (optional),
+// VOICE_MONTHLY_LIMIT (optional, notes a month, default 600). Nothing here is ever sent to the app.
+const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea'];
+function prop(k, d) { return PropertiesService.getScriptProperties().getProperty(k) || d; }
+
+// the app calls this the moment a note is saved: { bid, id }. The note itself is read from the database,
+// so a caller can only ask the helper to look at a note that a signed-in member has already saved.
+function doPost(e) {
+  let out = 'ok';
+  try {
+    const q = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (!/^[A-Za-z0-9_-]{6,40}$/.test(q.bid || '') || !/^[A-Za-z0-9_-]{6,40}$/.test(q.id || '')) return ContentService.createTextOutput('bad');
+    const b = getDoc('businesses/' + q.bid);
+    if (!b || String((b.settings || {}).receiptEmail || '').toLowerCase() !== me()) return ContentService.createTextOutput('not this helper');
+    b._id = q.bid;
+    processNote(b, q.id);
+  } catch (err) { out = 'error'; Logger.log(err); }
+  return ContentService.createTextOutput(out);
+}
+function doGet() { return ContentService.createTextOutput('Rata & Smudge helper v' + HELPER_VERSION + ' is running.'); }
+
+function voiceTick(b) {
+  const waiting = runQuery(b._id, 'status', 'new', 10, 'voicenotes');
+  const stuck = runQuery(b._id, 'status', 'working', 10, 'voicenotes').filter(n => Date.now() - (n.workingAt || 0) > 5 * 60000);
+  waiting.concat(stuck).forEach(n => { try { processNote(b, n._id); } catch (e) { Logger.log(e); } });
+  // tidy: any recording pieces left more than a day are deleted
+  runQuery(b._id, 'kind', 'chunk', 50, 'voicenotes').filter(c => Date.now() - (c.at || 0) > 24 * 3600000)
+    .forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));
+}
+
+function processNote(b, id) {
+  const path = 'businesses/' + b._id + '/voicenotes/' + id, note = getDoc(path);
+  if (!note || note.kind === 'chunk') return;
+  if (note.status !== 'new' && !(note.status === 'working' && Date.now() - (note.workingAt || 0) > 5 * 60000)) return;
+  const st = b.settings || {}, month = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM');
+  const use = (b.aiUsage && b.aiUsage.month === month) ? b.aiUsage : { month: month, notes: 0, inTok: 0, outTok: 0 };
+  const fail = msg => patch(path, { status: 'failed', error: msg, doneAt: Date.now() });
+  if (st.aiPaused) return fail('The voice assistant is paused in Setup.');
+  if (use.notes >= Number(prop('VOICE_MONTHLY_LIMIT', '600'))) return fail('This month\'s voice note limit has been reached.');
+  if (!prop('GEMINI_API_KEY', '')) return fail('The voice assistant has no Gemini key yet (Script properties).');
+  patch(path, { status: 'working', workingAt: Date.now() });
+
+  const pieces = runQuery(b._id, 'note', id, 40, 'voicenotes').filter(c => c.kind === 'chunk').sort((x, y) => x.i - y.i);
+  const audio = pieces.map(c => c.data || '').join('');
+  if (!audio && !note.text) return fail('The recording did not arrive. Please try again.');
+
+  const role = (b.owners || []).indexOf(note.by) >= 0 ? 'owner' : ((b.roles || {})[note.by] || 'helper');
+  const names = {}; listDocs('businesses/' + b._id + '/pins').forEach(p => { if (p.name) names[p._id] = p.name; });
+  const people = (b.members || []).map(m => ({ email: m, name: names[m] || m.split('@')[0] }));
+  const places = listDocs('businesses/' + b._id + '/places').filter(p => !p.gone).map(p => p.name);
+  const now = new Date(), todayK = today();
+  const context = {
+    today: todayK, weekday: Utilities.formatDate(now, 'Pacific/Auckland', 'EEEE'), time: Utilities.formatDate(now, 'Pacific/Auckland', 'HH:mm'),
+    speaker: { email: note.by, name: (people.find(p => p.email === note.by) || {}).name || note.by, role: role },
+    people: people, markets_and_places: places
+  };
+  const allowed = role === 'helper' ? ['todo', 'shopping'] : VOICE_KINDS;
+  const instructions = [
+    'You help a small New Zealand natural-products business (balms, oils, teas) that sells at markets.',
+    'Listen to the voice note (or read the typed note) and turn it into draft actions. Use New Zealand English.',
+    'Allowed kinds for this speaker: ' + allowed.join(', ') + '. If they ask for something else, leave it out and say so in "say".',
+    'event: something for the calendar. type is one of market, brew (a day to make products), order (an order due to be sent), other.',
+    '  For a market, set place to the exact name from markets_and_places when it matches, else "". attendees are emails from people.',
+    'todo: a task. who is the email of the person it is for (the speaker unless they name someone). due is a date or "".',
+    'shopping: something to buy. qty is a number, size like "1 kg" or "500 ml" or "".',
+    'idea: kind is idea, call (a person to call) or product (a product idea).',
+    'Dates are YYYY-MM-DD in New Zealand, worked out from today (' + todayK + ', ' + context.weekday + '). Times are 24-hour HH:MM or "".',
+    'Never invent details. Leave anything not said as "" and list the field names you guessed or were unsure of in "unsure".',
+    '"say" is one or two short sentences read aloud back to the speaker, listing what you drafted, e.g. "I\'ve drafted the Matakana market on Saturday from 8 to 1, and beeswax on the shopping list."',
+    'Reply with JSON only, in this shape: {"heard": string, "say": string, "drafts": [{"kind": string, "unsure": [string], ' +
+      '"event": {"type","title","date","time","end","days","place","attendees","note"}, "todo": {"text","due","time","who"}, ' +
+      '"shopping": {"item","qty","size"}, "idea": {"text","kind"}}]}. Include only the object matching each draft\'s kind.',
+    'Context: ' + JSON.stringify(context)
+  ].join('\n');
+
+  const parts = [{ text: instructions }];
+  if (audio) parts.push({ inline_data: { mime_type: geminiMime(note.mime), data: audio } });
+  if (note.text) parts.push({ text: 'Typed note: ' + String(note.text).slice(0, 2000) });
+  const model = prop('GEMINI_MODEL', 'gemini-3.8-flash');
+  const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-goog-api-key': prop('GEMINI_API_KEY', '') },
+    payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
+  });
+  if (r.getResponseCode() !== 200) {
+    patch(path, { status: 'new', error: 'Gemini ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 160), workingAt: 0 });
+    throw new Error('Gemini ' + r.getResponseCode());
+  }
+  const j = JSON.parse(r.getContentText()), u = j.usageMetadata || {};
+  let ans = {};
+  try { ans = JSON.parse((((j.candidates || [])[0] || {}).content || {}).parts.map(p => p.text || '').join('')); } catch (e) { ans = {}; }
+  const drafts = (Array.isArray(ans.drafts) ? ans.drafts : []).filter(d => d && allowed.indexOf(d.kind) >= 0).slice(0, 12).map(cleanDraft);
+  patch(path, { status: 'ready', heard: String(ans.heard || '').slice(0, 4000), say: String(ans.say || '').slice(0, 500), drafts: drafts, doneAt: Date.now(), error: '' });
+  pieces.forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));      // the recording is not kept
+  patch('businesses/' + b._id, { aiUsage: { month: month, notes: use.notes + 1, inTok: use.inTok + (u.promptTokenCount || 0), outTok: use.outTok + (u.candidatesTokenCount || 0) } });
+}
+function geminiMime(m) { m = String(m || '').split(';')[0]; return m === 'audio/mp4' || m === 'audio/x-m4a' ? 'audio/m4a' : (m || 'audio/webm'); }
+function str(x, n) { return String(x == null ? '' : x).slice(0, n || 200); }
+function cleanDraft(d) {
+  const date = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '', time = x => /^\d{2}:\d{2}$/.test(x || '') ? x : '';
+  const o = { kind: d.kind, unsure: (Array.isArray(d.unsure) ? d.unsure : []).map(x => str(x, 30)).slice(0, 10) };
+  const e = d.event || {}, t = d.todo || {}, s = d.shopping || {}, i = d.idea || {};
+  if (d.kind === 'event') o.event = { type: ['market', 'brew', 'order', 'other'].indexOf(e.type) >= 0 ? e.type : 'other', title: str(e.title, 80), date: date(e.date), time: time(e.time), end: time(e.end),
+    days: Math.max(1, Math.min(7, Number(e.days) || 1)), place: str(e.place, 80), attendees: (Array.isArray(e.attendees) ? e.attendees : []).map(x => str(x, 100).toLowerCase()).slice(0, 10), note: str(e.note, 500) };
+  if (d.kind === 'todo') o.todo = { text: str(t.text), due: date(t.due), time: time(t.time), who: str(t.who, 100).toLowerCase() };
+  if (d.kind === 'shopping') o.shopping = { item: str(s.item, 120), qty: Math.max(1, Math.min(999, Number(s.qty) || 1)), size: str(s.size, 40) };
+  if (d.kind === 'idea') o.idea = { text: str(i.text), kind: ['idea', 'call', 'product'].indexOf(i.kind) >= 0 ? i.kind : 'idea' };
+  return o;
 }
