@@ -46,11 +46,14 @@ SCREENS.sell={
 };
 
 /* ---------- start a selling day ---------- */
-let startType=lsGet('rs.lastType','market');
+let startType=lsGet('rs.lastType','market'), startEvent=null;
+// markets on the calendar for today, offered first so the name, place and float fill themselves in
+const todaysMarkets=()=>(typeof eventsOn==='function'?eventsOn(nzDay()):[]).filter(e=>e.type==='market');
 function startHtml(){
+  const tm=todaysMarkets();
   const past=[...new Set(S.sessions.filter(s=>s.type===startType&&s.name).sort((a,b)=>b.openedAt-a.openedAt).map(s=>s.name))].slice(0,6);
   const staff=S.settings.staff||[];
-  return `<div class="card"><h3>Where are you selling today?</h3>
+  return (tm.length?`<div class="card"><h3>📅 On the calendar today</h3><div class="pastnames">${tm.map(e=>`<button class="chip big ${startEvent===e.id?'on':''}" data-ev0="${e.id}">🧺 ${esc(e.title)}${e.time?' · '+esc(t12(e.time)):''}</button>`).join('')}</div></div>`:'')+`<div class="card"><h3>Where are you selling today?</h3>
       <div class="bigseg">${Object.entries(DAY_TYPES).map(([k,v])=>`<button data-t="${k}" class="${startType===k?'on':''}">${v}</button>`).join('')}</div>
       <label class="note" for="sName">${startType==='market'?'Which market?':'Name (optional)'}</label>
       <input class="txt" id="sName" list="sPast" autocomplete="off" placeholder="${startType==='market'?'e.g. Titirangi Village Market':''}">
@@ -64,14 +67,19 @@ function startHtml(){
 }
 function wireStart(){
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ startType=b.dataset.t; lsSet('rs.lastType',startType); render(); });
-  document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{ $('#sName').value=b.dataset.n; });
+  document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{ $('#sName').value=b.dataset.n; startEvent=null; });
+  document.querySelectorAll('[data-ev0]').forEach(b=>b.onclick=()=>{ const e=S.events.find(x=>x.id===b.dataset.ev0); if(!e) return;
+    startEvent=e.id; startType='market'; lsSet('rs.lastType','market'); render();
+    $('#sName').value=e.title; const pl=S.places.find(p=>p.id===e.place); if(pl&&pl.float) $('#sFloat').value=(pl.float/100).toFixed(2); });
   document.querySelectorAll('[data-who]').forEach(b=>b.onclick=()=>{ lsSet('rs.servedBy',b.dataset.who); document.querySelectorAll('[data-who]').forEach(x=>x.classList.toggle('on',x===b)); });
   $('#sWhoAdd').onclick=()=>askName(n=>{ lsSet('rs.servedBy',n); if(canManage()&&!(S.settings.staff||[]).includes(n)){ S.settings.staff=[...(S.settings.staff||[]),n]; save(); } render(); });
   $('#sGo').onclick=()=>{
     if(!servedBy()){ toast('Tap who is serving first'); return; }
     const fl=$('#sFloat').value.trim(), fc=fl?toCents(fl):0; if(fl&&!(fc>=0)){ toast('The float should be a number, e.g. 100'); return; }
     const name=$('#sName').value.trim(); if(startType==='market'&&!name){ toast('Type which market'); return; }
-    S.sessions.push({id:SYNC.newId('sessions'),type:startType,name,date:nzDay(),openedAt:Date.now(),openedBy:SYNC.me(),float:fc||0,status:'open'});
+    const ev=startEvent&&S.events.find(x=>x.id===startEvent&&x.title===name);
+    S.sessions.push(Object.assign({id:SYNC.newId('sessions'),type:startType,name,date:nzDay(),openedAt:Date.now(),openedBy:SYNC.me(),float:fc||0,status:'open'},ev?{eventId:ev.id,placeId:ev.place||''}:{}));
+    startEvent=null;
     cart=[]; saveCart(); save(); render();
   };
 }
