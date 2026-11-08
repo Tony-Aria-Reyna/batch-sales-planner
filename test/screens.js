@@ -353,6 +353,27 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const o = S.orders.find(x => x.from === 'voice'); return o && o.lines[0].pid && o.lines[0].qty === 4 && o.lines[0].unit === 2300 && o.status === 'new'; }), 'a voice note can make an order, matched to the till product at the wholesale price');
   await page.click('#bk'); await page.click('[data-go="calendar"]'); await page.waitForSelector('#pcSheet');
   ok(await page.evaluate(() => calItems(dk(addDays(kd(nzDay()), 5))).some(i => /Send: Test Corner Store/.test(i.title))), 'an order\'s send-by date shows on the calendar');
+  // ---- reports: takings, GST and real profit
+  await page.click('#bk'); await page.waitForSelector('.tiles');
+  await page.click('[data-go="reports"]'); await page.waitForSelector('#rP');
+  await page.selectOption('#rP', 'today'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const R = crunch(nzDay(), nzDay(), 'all'); const sales = S.sales.filter(s => !s.voided && s.date === nzDay()).reduce((n, s) => n + s.total, 0), orders = S.orders.filter(o => o.status !== 'cancelled' && o.date === nzDay()).reduce((n, o) => n + (o.total != null ? o.total : orderTotal(o)), 0);
+    return R.revenue === sales + orders && R.gst === Math.round(R.gst) && /Takings/.test(document.querySelector('#main').innerText); }), 'reports: today\'s takings = till sales + orders, with GST');
+  await page.click('[data-rtab="costs"]'); await page.waitForSelector('#rVeh'); await page.click('#rVeh'); await page.waitForSelector('#vAdd');
+  await page.fill('#vR', '76'); await page.dispatchEvent('#vR', 'change'); await page.waitForTimeout(40);
+  for (const [l, t, o] of [['60', '150', '100000'], ['50', '125', '100500']]) { await page.click('#vAdd'); await page.waitForSelector('#fOk'); await page.fill('#fL', l); await page.fill('#fT', t); await page.fill('#fO', o); await page.click('#fOk'); await page.waitForTimeout(40); }
+  ok(await page.evaluate(() => { const v = vehicleCost(); return Math.round(v.l100) === 10 && Math.round(v.perL) === 250 && Math.abs(v.perKm - (0.1 * 250 + 7.6) / 1.15) < 0.01; }), 'vehicle: real L/100 km from fill-ups, fuel price and RUC give the cost a km');
+  await page.screenshot({ path: path.join(shots, '33-vehicle.png') });
+  ok(await page.evaluate(() => { const pl = S.places.find(p => p.name === 'Village Market'); S.pay.push({ id: 'paysam', name: 'Sam', day: 12000, hourly: 0 });
+    S.sessions.push({ id: 'sesvm', type: 'market', name: 'Village Market', date: nzDay(), placeId: pl.id, openedAt: Date.now() - 4 * 3600e3, closedAt: Date.now(), status: 'closed', float: 0 });
+    S.sales.push({ id: 'salevm', sessionId: 'sesvm', channel: 'market', where: 'Village Market', date: nzDay(), at: Date.now(), lines: [], total: 5000, gst: 652, method: 'cash', servedBy: 'Sam', voided: false });
+    const R = crunch(nzDay(), nzDay(), 'p:' + pl.id), v = vehicleCost(), p = Object.values(R.byPlace)[0];
+    const okk = R.revenue === 5000 && p.fees === Math.round(2250 / 1.15) && p.mileage === Math.round(64 * v.perKm) && p.staff === 12000 && R.net === R.gross - p.fees - p.mileage - 12000;
+    S.sessions.splice(S.sessions.findIndex(x => x.id === 'sesvm'), 1); S.sales.splice(S.sales.findIndex(x => x.id === 'salevm'), 1); return okk; }), 'a market day\'s net profit takes off half the 2-day stall fee, the mileage and the helper\'s day rate');
+  await page.click('#bk'); await page.click('[data-rtab="summary"]'); await page.waitForTimeout(50);
+  const dl2 = page.waitForEvent('download'); await page.click('#rCsv'); const csv2 = fs.readFileSync(await (await dl2).path(), 'utf8');
+  ok(/"Date","Time","Receipt","Where"/.test(csv2) && /Test Market/.test(csv2), 'sales download as a CSV for the accountant');
+  await page.screenshot({ path: path.join(shots, '34-reports.png') });
   await page.click('#bk'); await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt]');
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); S.plans.push({ id: 'plantest', batch: 'nobatch', date: nzDay(), status: 'planned', items: [{ pid: p.id, units: 12 }], at: Date.now() }); save(); });
   await page.click('#bk');
