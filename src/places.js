@@ -37,7 +37,7 @@ function addGroup(channel,done){
       if(placeGroups().some(g=>g.channel===channel&&g.name.toLowerCase()===n.toLowerCase())){ toast('That group is already there'); return; }
       S.settings.groups=[...(S.settings.groups||[]),{id:'g'+Date.now().toString(36),channel,name:n.slice(0,40)}]; save(); close(); done&&done(); };
     m.querySelector('#gC').onclick=close; m.querySelector('#gOk').onclick=ok; m.querySelector('#gN').onkeydown=e=>{ if(e.key==='Enter') ok(); };
-    setTimeout(()=>m.querySelector('#gN').focus(),50); });
+    setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#gN').focus(); },50); });
 }
 function editPlace(src,done){
   if(!canManage()) return;
@@ -70,6 +70,6 @@ function editPlace(src,done){
       else if(fx) S.costs.splice(S.costs.indexOf(fx),1);
       save(); close(); toast('Saved'); done&&done(p);
     };
-    if(isNew) setTimeout(()=>m.querySelector('#pN').focus(),50);
+    if(isNew) setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#pN').focus(); },50);
   });
 }

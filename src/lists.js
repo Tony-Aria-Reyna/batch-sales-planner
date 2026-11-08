@@ -104,7 +104,9 @@ function confirmBought(x){
     m.querySelector('#bOk').onclick=()=>{ const q=+m.querySelector('#bQ').value.replace(/[^0-9.]/g,'')||1, sz=m.querySelector('#bS').value.trim().slice(0,40);
       const pe=m.querySelector('#bP'), pt=pe?pe.value.trim():'', cents=pt?toCents(pt):0; if(pt&&!(cents>=0)){ toast('Type the price, e.g. 24.90'); return; }
       Object.assign(x,{done:true,doneAt:Date.now(),doneBy:SYNC.me(),gotQty:q,gotSize:sz});
-      if(cents){ S.prices.push({id:SYNC.newId('prices'),item:x.item,size:sz,qty:q,cents,at:Date.now(),date:nzDay(),by:SYNC.me(),from:'shopping'}); }
+      const inp=x.input&&S.inputs.find(i=>i.id===x.input);   // an ingredient from a brew plan: what was bought goes into its stock
+      if(inp&&typeof inputStock==='function'&&inputStock(inp.id)!=null) moveStock({kind:'bought',input:inp.id,qty:q*(inp.pack||0)});
+      if(cents){ S.prices.push({id:SYNC.newId('prices'),input:x.input||'',item:x.item,size:sz,qty:q,cents,at:Date.now(),date:nzDay(),by:SYNC.me(),from:'shopping'}); }
       save(); close(); render(); toast('Ticked off'); }; });
 }
 

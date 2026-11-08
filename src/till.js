@@ -87,7 +87,7 @@ function askName(done){
   modal((m,close)=>{ m.innerHTML=`<h2>Who is serving?</h2><input class="txt" id="wN" autocapitalize="words" placeholder="First name"><div class="mact"><button class="btn alt" id="wC">Cancel</button><button class="btn" id="wOk">OK</button></div>`;
     const go=()=>{ const n=m.querySelector('#wN').value.trim(); if(!n){ toast('Type a name'); return; } close(); done(n); };
     m.querySelector('#wC').onclick=close; m.querySelector('#wOk').onclick=go; m.querySelector('#wN').onkeydown=e=>{ if(e.key==='Enter') go(); };
-    setTimeout(()=>m.querySelector('#wN').focus(),50); });
+    setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#wN').focus(); },50); });
 }
 
 /* ---------- the till ---------- */
@@ -131,7 +131,7 @@ function tillHtml(){
       `<button class="fchip ${tillFilter===k?'on':''}" data-f="${k}" style="${k==='all'?'':`--c:${COLOURS[k][0]}`}">${k==='all'?'':'<i></i>'}${esc(label)} <small>${n}</small></button>`).join(''):''}</div>
     <div class="till">
     <section class="tgrid">${shown.map(p=>{ const k=COLOURS[p.colour]||COLOURS.other; return `<button class="ptile" data-add="${p.id}" style="background:${k[0]};color:${k[1]}">
-        ${qty[p.id]?`<span class="pq">${qty[p.id]}</span>`:''}<span class="pc">${esc(k[2])}</span><span class="pn">${esc(p.name)}</span><span class="ps">${esc(p.size||'')}</span><span class="pp">${c2(p.price)}</span></button>`; }).join('')}
+        ${qty[p.id]?`<span class="pq">${qty[p.id]}</span>`:''}${(()=>{ const st=typeof stockOf==='function'?stockOf(p.id):null; return st&&st.total-(qty[p.id]||0)<=0?'<span class="pout">0 left?</span>':''; })()}<span class="pc">${esc(k[2])}</span><span class="pn">${esc(p.name)}</span><span class="ps">${esc(p.size||'')}</span><span class="pp">${c2(p.price)}</span></button>`; }).join('')}
       <button class="ptile extra" id="tExtra"><span class="pc">🔒 Needs a PIN</span><span class="pn">＋ Item not on the till</span><span class="ps">One-off, or add it for next time</span></button></section>
     <aside class="cart ${sheetOpen?'open':''}" id="cart">
       <div class="grab" id="cGrab"><i></i><span>${pc.lines.length?(sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'):'Tap a product to start'}</span></div>
@@ -221,7 +221,7 @@ function addExtraItem(){
           else cart.push({pid:'x-'+Date.now().toString(36),qty:1,custom:{name,size,price,colour:col,approvedBy:who}});
           saveCart(); save(); render(); toast(name+' added · approved by '+personName(who)); },
           name+(size?' '+size:'')+' at '+c2(price)+(keep?', added to the till':', one-off')); };
-    }; draw(); setTimeout(()=>m.querySelector('#xN').focus(),50); });
+    }; draw(); setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#xN').focus(); },50); });
 }
 
 /* ---------- taking payment ----------

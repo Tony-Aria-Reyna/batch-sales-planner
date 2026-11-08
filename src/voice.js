@@ -57,7 +57,7 @@ function typedNote(opts){
       <textarea class="txt" id="vTx" rows="4" autocapitalize="sentences"></textarea><div class="mact"><button class="btn alt" id="vC">Cancel</button><button class="btn" id="vOk">Work it out</button></div>`;
     m.querySelector('#vC').onclick=close;
     m.querySelector('#vOk').onclick=()=>{ const t=m.querySelector('#vTx').value.trim(); if(!t){ toast('Type the note'); return; } close(); sendNote({text:t.slice(0,2000)},opts); };
-    setTimeout(()=>m.querySelector('#vTx').focus(),50); });
+    setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#vTx').focus(); },50); });
 }
 // save the note (and its recording, in pieces), then tell the helper so it starts straight away
 function sendNote(n,opts){

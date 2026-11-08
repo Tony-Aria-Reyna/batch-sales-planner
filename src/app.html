@@ -150,6 +150,12 @@ body:has(.rcal) main{min-height:0}
 .dbtn.talk{background:var(--rata);min-height:200px;font-size:46px}.dbtn.today{background:var(--green)}.dbtn.next{background:var(--green)}
 .dbtn.yes{background:#2f7d32}.dbtn.later{background:#a06a12}.dbtn.stop{background:#55574a;min-height:90px;font-size:28px}
 .dnow{background:var(--card);border-radius:22px;padding:18px 20px;text-align:center}.dnow small{color:var(--muted);font-weight:700}.dnow b{display:block;font-size:30px;margin:6px 0}.dnow span{color:var(--muted);font-size:18px}
+.pill{flex:none;border-radius:99px;padding:5px 12px;font-weight:700;font-size:15px}.pill.bad{background:#fbe4e1;color:var(--danger)}.pill.ok{background:#e3efdb;color:var(--ok)}
+.txt.qty{width:96px;flex:none;text-align:center}.unit{flex:none;color:var(--muted);min-width:34px}
+.stockhead,.stockrow{display:grid;grid-template-columns:1fr 110px 110px;gap:8px;align-items:center}
+.stockhead{font-size:14px;color:var(--muted);padding-bottom:6px}.stockhead b,.stockrow b{text-align:center}
+.stockrow{width:100%;text-align:left;padding:12px 0;border-top:1px solid var(--line);font-size:18px}.stockrow b{font-size:20px}.stockrow b.zero{color:var(--danger)}
+.ptile .pout{position:absolute;left:10px;top:10px;background:rgba(255,255,255,.85);color:var(--danger);font-size:12px;font-weight:800;border-radius:99px;padding:2px 8px}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -463,7 +469,7 @@ addEventListener('online',drawSync); addEventListener('offline',drawSync);
 const TILES=[
   {id:'sell', ic:'🧺', h:'Sell', p:'Market, farm gate, tour or shop', all:true},
   {id:'calendar', ic:'📅', h:'Calendar', p:'Markets, brew days, orders, to-dos', all:true},
-  {id:'brew', ic:'🫙', h:'Brew', p:'Plan batches and the shopping list', phase:4},
+  {id:'brew', ic:'🫙', h:'Brew', p:'What to make, batches and stock', all:true},
   {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify', phase:4},
   {id:'lists', ic:'✅', h:'Lists', p:'To do, shopping and ideas', all:true},
   {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', phase:5},
@@ -478,7 +484,7 @@ SCREENS.home={
       <section class="today" aria-label="Today">
         <div><span>Today's takings</span>${canManage()&&!tillLock()?(Date.now()<moneyUntil?`<b>${c2(taken)}</b>`:`<b><button class="linkb" id="showMoney" style="font-size:22px;color:var(--green)">🔒 Show</button></b>`):'<b>—</b>'}</div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
-        <div><span>Batches due</span><b>0</b></div>
+        <div><span>Batches due</span><b>${S.plans.filter(p=>p.status!=='made'&&p.date<=dk(addDays(kd(nzDay()),7))).length}</b></div>
         <div><span>Orders due</span><b>0</b></div>
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
@@ -495,7 +501,6 @@ SCREENS.home={
 
 /* ---------- screens still to build: say what they will do ---------- */
 const COMING={
-  brew:{ic:'🫙',h:'Brew',phase:4,what:['Pick a recipe and how many batches','See the ingredient shopping list, the cost and how many bottles it fills','Log a batch as made, then bottled']},
   orders:{ic:'📦',h:'Orders',phase:4,what:['Wholesale and custom orders: who, what, when due, paid or not','Shopify orders arrive by themselves, ready to pack, with a notification']},
   reports:{ic:'📈',h:'Reports',phase:5,what:['Takings by day, channel and product','Monthly profit after costs, and break-even','GST collected, for the GST return']},
 };
@@ -531,6 +536,7 @@ SCREENS.setup={
 
     <div class="card"><h3>🧾 What you sell</h3>
       <div class="row"><div class="grow"><b>Products and prices</b><small>${S.products.length} product${S.products.length===1?'':'s'} · the till buttons · prices include GST</small></div><button class="btn small" id="goProd">Open</button></div>
+      <div class="row"><div class="grow"><b>Ingredients and recipes</b><small>${S.inputs.length} ingredients and packaging${role()==='owner'?' · '+S.recipes.length+' recipes (owners only)':''} · import from the workbook</small></div><button class="btn small" id="goRecipes">Open</button></div>
       <div class="row"><div class="grow"><b>Markets and places</b><small>${S.places.filter(p=>!p.gone).length} · markets, Farm Shop, online, shops · fees and distances</small></div><button class="btn small" id="goPlaces">Open</button></div>
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
       <div class="row"><div class="grow"><b>Usual cash float</b><small>Filled in for you when a selling day starts</small></div><input class="txt" id="defFloat" inputmode="decimal" style="width:130px;min-height:48px" value="${st.defaultFloat?(st.defaultFloat/100).toFixed(2):''}" placeholder="200.00"></div>
@@ -590,7 +596,7 @@ SCREENS.setup={
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
-    $('#goProd').onclick=()=>go('products'); $('#goPlaces').onclick=()=>go('places'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
+    $('#goProd').onclick=()=>go('products'); $('#goPlaces').onclick=()=>go('places'); $('#goRecipes').onclick=()=>go('recipes'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
     document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>personMenu(b.dataset.role));
     $('#setPin').onclick=()=>setPinFlow(()=>render());
     $('#goAudit').onclick=()=>go('audit');
