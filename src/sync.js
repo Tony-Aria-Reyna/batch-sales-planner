@@ -6,6 +6,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,  signOut as fbSignOut, connectAuthEmulator, signInWithCredential, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection,
   onSnapshot, query, where, getDocs, addDoc, writeBatch, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 
 // every sub-collection the rules allow, and which ones each role may read
 export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts',
@@ -210,3 +211,9 @@ export async function deleteBusiness() {
 }
 
 export const businessId = () => bid;
+
+// ---- notifications: this person's devices (one document per person; only they can read or change it)
+export async function pushSupported() { try { return await isSupported(); } catch (e) { return false; } }
+export async function pushToken(vapidKey, reg) { return getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: reg }); }
+export async function getMyDevices() { const d = await getDoc(doc(db, 'businesses', bid, 'devices', me())); return d.exists() ? d.data() : { tokens: {}, prefs: {} }; }
+export const saveMyDevices = data => setDoc(doc(db, 'businesses', bid, 'devices', me()), data);

@@ -3,14 +3,14 @@
 const fs = require('fs'), path = require('path'), esbuild = require('esbuild');
 const MOCK = process.env.MOCK === '1';
 const out = path.join(__dirname, MOCK ? 'dist-test' : 'public'); fs.mkdirSync(out, { recursive: true });
-const alias = MOCK ? { 'firebase/app': './test/mock-app.js', 'firebase/auth': './test/mock-auth.js', 'firebase/firestore': './test/mock-firestore.js' } : undefined;
+const alias = MOCK ? { 'firebase/app': './test/mock-app.js', 'firebase/auth': './test/mock-auth.js', 'firebase/firestore': './test/mock-firestore.js', 'firebase/messaging': './test/mock-messaging.js' } : undefined;
 const sync = esbuild.buildSync({ entryPoints: ['src/sync.js'], bundle: true, minify: true, format: 'iife', globalName: 'SYNC', write: false, target: 'es2019', alias }).outputFiles[0].text;
 const cfgFile = path.join(__dirname, 'firebase-config.json');
 const config = fs.existsSync(cfgFile) ? JSON.stringify(JSON.parse(fs.readFileSync(cfgFile, 'utf8'))) : 'null';
 const version = 'rs-' + Date.now().toString(36);
 const html = fs.readFileSync('src/app.html', 'utf8')
   .replace('/*@SYNC@*/', () => sync)
-  .replace('/*@MODULES@*/', () => ['catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'voice.js', 'brew.js', 'orders.js', 'reports.js', 'contacts.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
+  .replace('/*@MODULES@*/', () => ['catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'voice.js', 'brew.js', 'orders.js', 'reports.js', 'notify.js', 'contacts.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
   .replace('/*@CONFIG@*/null', () => MOCK ? JSON.stringify({ projectId: 'mock', apiKey: 'mock', authDomain: 'mock' }) : config)
   .replace('/*@VERSION@*/', version);
 fs.writeFileSync(path.join(out, 'index.html'), html);

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.js",
     "test:build": "MOCK=1 node build.js",
-    "test": "MOCK=1 node build.js && node test/screens.js"
+    "test": "node test/helper.test.js && MOCK=1 node build.js && node test/screens.js"
   },
   "dependencies": {
     "esbuild": "^0.28.2",

@@ -16,3 +16,15 @@ self.addEventListener('fetch', e => {
   }
   e.respondWith(caches.match(req).then(r => r || fetch(req).then(n => { if (n.ok) { const cp = n.clone(); caches.open(VERSION).then(c => c.put(req, cp)); } return n; })));
 });
+
+// Notifications from the business helper (Firebase Cloud Messaging data messages): show them, and open the app when tapped
+self.addEventListener('push', e => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch (x) { d = { data: { title: 'Rata & Smudge', body: e.data ? e.data.text() : '' } }; }
+  const m = Object.assign({}, d.notification || {}, d.data || {});
+  e.waitUntil(self.registration.showNotification(m.title || 'Rata & Smudge', { body: m.body || '', tag: m.tag || undefined, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: m.url || './' }, renotify: !!m.tag }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => { for (const c of cs) { if ('focus' in c) { if (url !== './' && 'navigate' in c) c.navigate(url).catch(() => {}); return c.focus(); } } return self.clients.openWindow(url); }));
+});

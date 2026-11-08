@@ -166,6 +166,7 @@ body:has(.rcal) main{min-height:0}
 .rbars{display:flex;flex-direction:column;gap:6px}.rbar{display:grid;grid-template-columns:minmax(80px,30%) 1fr auto;gap:10px;align-items:center;font-size:15px}
 .rbar .rl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rbar .rt{height:18px;background:#f1ece0;border-radius:6px;overflow:hidden}.rbar .rt i{display:block;height:100%;background:var(--green2);border-radius:6px}.rbar .rv{font-weight:700;min-width:70px;text-align:right}
 .ptable{display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-size:17px}.ptable b{text-align:right}.ptable .neg{color:var(--danger)}
+.card.nudge{border:2px solid var(--green2)}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -498,13 +499,15 @@ SCREENS.home={
         <div><span>Orders to send</span><b>${canManage()?openOrders().length:'—'}</b></div>
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
+      ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
-      ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p>`:''}`;
+      ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive');
+    const hp=$('#hPush'); if(hp) hp.onclick=()=>go('notify'); const hN=$('#hNotify'); if(hN) hN.onclick=()=>go('notify'); const hn=$('#hPushNo'); if(hn) hn.onclick=()=>{ lsSet('rs.pushNo','1'); render(); };
     const sm=$('#showMoney'); if(sm) sm.onclick=()=>approve('see the takings',()=>{ moneyUntil=Date.now()+60e3; render(); setTimeout(render,60.5e3); });
     document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else go(id); }); }
 };
@@ -521,7 +524,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=4;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=5;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -544,6 +547,7 @@ SCREENS.setup={
 
     <div class="card"><h3>🧾 What you sell</h3>
       <div class="row"><div class="grow"><b>Products and prices</b><small>${S.products.length} product${S.products.length===1?'':'s'} · the till buttons · prices include GST</small></div><button class="btn small" id="goProd">Open</button></div>
+      <div class="row"><div class="grow"><b>🔔 Notifications</b><small>${S.settings.vapidKey?'Choose what you get on this device':'Needs the web push key from Firebase'}</small></div><button class="btn small" id="goNotify">Open</button></div>
       <div class="row"><div class="grow"><b>Ingredients and recipes</b><small>${S.inputs.length} ingredients and packaging${role()==='owner'?' · '+S.recipes.length+' recipes (owners only)':''} · import from the workbook</small></div><button class="btn small" id="goRecipes">Open</button></div>
       <div class="row"><div class="grow"><b>Markets and places</b><small>${S.places.filter(p=>!p.gone).length} · markets, Farm Shop, online, shops · fees and distances</small></div><button class="btn small" id="goPlaces">Open</button></div>
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
@@ -610,7 +614,7 @@ SCREENS.setup={
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
-    $('#goProd').onclick=()=>go('products'); $('#goPlaces').onclick=()=>go('places'); $('#goRecipes').onclick=()=>go('recipes'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
+    $('#goProd').onclick=()=>go('products'); $('#goPlaces').onclick=()=>go('places'); $('#goNotify').onclick=()=>go('notify'); $('#goRecipes').onclick=()=>go('recipes'); $('#goContacts').onclick=()=>go('contacts'); $('#goDeals').onclick=()=>go('deals'); $('#goStaff').onclick=editStaff;
     document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>personMenu(b.dataset.role));
     $('#setPin').onclick=()=>setPinFlow(()=>render());
     $('#goAudit').onclick=()=>go('audit');
@@ -859,7 +863,7 @@ function rulesNotice(){ return missingCols.size?`<div class="card" style="border
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
-  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
+  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); SYNC.getMyDevices().then(d=>{ myDevices=d; if(cur()==='home') render(); refreshPush(); }).catch(()=>{}); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
     const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);
     if(what==='orders'||what==='business') try{ settleOrders(); }catch(e){}
     if(!typing) render(); gate(null); },60);

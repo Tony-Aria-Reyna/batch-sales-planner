@@ -87,6 +87,23 @@ Set-up (once), in her Shopify admin:
 3. In the app: **Setup → Shopify** → type the shop address ending in `.myshopify.com`.
 4. In the script editor, run `checkShopifyNow()` once; the last check shows in Setup → Shopify and on Orders.
 
+## Notifications and the market report email
+
+The business helper (version 5 or later) sends web push through Firebase Cloud Messaging every 5 minutes:
+calendar reminders (the evening before, and an hour before), a 7:30 am list of today's markets and to-dos,
+"till still open" nudges, new Shopify orders, and low stock the evening before a market. Each person chooses
+what they get under 🔔 Notifications. When the last till at a market closes, owners are emailed a one-page report.
+
+Set-up (once):
+1. Firebase console → ⚙️ Project settings → **Cloud Messaging** → Web configuration → Web Push certificates →
+   **Generate key pair**. Copy the key into the app: Setup → 🔔 Notifications → Web push key.
+2. Google Cloud console → IAM → find the **business Gmail** account (the one running the helper) → Edit →
+   Add role **Firebase Cloud Messaging API Admin** → Save. (Check APIs & Services shows "Firebase Cloud Messaging
+   API" enabled.)
+3. Paste the latest `helper/Code.gs` into the helper script and save.
+4. On each device: open the app (on the iPad, from its Home Screen icon) → 🔔 Notifications → Turn on, then
+   "Send a test".
+
 ## Files
 
 | File | What it is |

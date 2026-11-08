@@ -6,6 +6,7 @@
  *    GitHub). The app calls this helper's web address the moment a note is recorded, so drafts come back
  *    in a few seconds; the 5-minute check picks up anything missed (for example, a note made offline).
  *  - Shopify: every 15 minutes, copies new online orders into the app (read-only; it never changes Shopify).
+ *  - Notifications (web push through Firebase Cloud Messaging) and the market report email.
  *
  * Set-up (once): see "Emailed GST receipts" in the README.
  *   1. Signed in as the business Gmail, open script.google.com → New project → name it "Rata & Smudge receipts".
@@ -16,7 +17,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 4;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders
+const HELPER_VERSION = 5;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -46,6 +47,7 @@ function tick() {
   for (const b of myBusinesses()) {
     try { voiceTick(b); } catch (e) { Logger.log('Voice notes: ' + e); }
     try { shopifyTick(b); } catch (e) { Logger.log('Shopify: ' + e); }
+    try { notifyTick(b); } catch (e) { Logger.log('Notifications: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -335,6 +337,7 @@ function shopifyTick(b, force) {
       o.gst = Math.round(o.total * 3 / 23);
       if (fulfilled) { o.sentAt = Date.now(); o.sentBy = 'shopify'; }
       patch(path, o); added++;
+      try { pushTo(b, bosses(b), 'orders', '📦 New Shopify order ' + (n.name || ''), o.customer.name + ' · ' + o.lines.reduce((t, l) => t + l.qty, 0) + ' items · ' + money(o.total), 'order-' + id); } catch (e) { Logger.log(e); }
     }
   } catch (e) { err = String(e && e.message || e).slice(0, 200); }
   const prev = b.shopifyHelper || {};
@@ -342,3 +345,121 @@ function shopifyTick(b, force) {
 }
 // run by hand from the script editor to check the Shopify connection straight away
 function checkShopifyNow() { myBusinesses().forEach(b => shopifyTick(b, true)); Logger.log('Checked Shopify. See the Orders screen in the app.'); }
+
+/* ================= Notifications and the market report ================= */
+// The business Gmail account needs the "Firebase Cloud Messaging API Admin" role on the Firebase project.
+const APP_URL = 'https://batch-sales-planner.web.app/';
+function bosses(b) { return (b.owners || []).concat(Object.keys(b.roles || {}).filter(e => b.roles[e] === 'manager')); }
+function nzNow() { const t = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM-dd HH mm').split(' '); return { day: t[0], mins: Number(t[1]) * 60 + Number(t[2]) }; }
+function addDay(k, n) { const d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function occursOn(e, key) {   // same rules as the app's calendar
+  if (!e || !e.date || key < e.date) return false; if (e.until && key > e.until) return false; if ((e.skip || []).indexOf(key) >= 0) return false;
+  const days = Math.max(1, Math.min(14, Number(e.days) || 1)), diff = Math.round((Date.parse(key + 'T12:00:00Z') - Date.parse(e.date + 'T12:00:00Z')) / 864e5), within = n => n >= 0 && n < days;
+  if (e.rpt === 'week') return within(diff % 7); if (e.rpt === '2weeks') return within(diff % 14);
+  if (e.rpt === 'month') { for (let i = 0; i < days; i++) { const s = addDay(key, -i); if (s >= e.date && s.slice(8) === e.date.slice(8)) return true; } return false; }
+  return within(diff);
+}
+const t12 = t => { if (!t) return ''; let h = Number(t.slice(0, 2)), m = t.slice(3); const ap = h < 12 ? 'am' : 'pm'; h = h % 12 || 12; return h + (m !== '00' ? ':' + m : '') + ap; };
+let DEV_CACHE = null;
+function devicesOf(b) { if (!DEV_CACHE || DEV_CACHE.bid !== b._id) DEV_CACHE = { bid: b._id, list: listDocs('businesses/' + b._id + '/devices') }; return DEV_CACHE.list; }
+// send to these people's devices, for one kind of notification they haven't switched off
+function pushTo(b, emails, kind, title, body, tag) {
+  const want = {}; emails.forEach(e => want[String(e).toLowerCase()] = 1); let n = 0;
+  for (const d of devicesOf(b)) {
+    if (!want[d._id] || (d.prefs || {})[kind] === false) continue;
+    for (const h of Object.keys(d.tokens || {})) {
+      const tok = (d.tokens[h] || {}).token; if (!tok) continue;
+      const r = UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/' + PROJECT_ID + '/messages:send', { method: 'post', contentType: 'application/json', headers: headers(), muteHttpExceptions: true,
+        payload: JSON.stringify({ message: { token: tok, data: { title: String(title), body: String(body).slice(0, 300), tag: String(tag || ''), url: APP_URL }, webpush: { headers: { Urgency: 'high', TTL: '3600' } } } }) });
+      const code = r.getResponseCode();
+      if (code === 404 || (code === 400 && /UNREGISTERED|INVALID_ARGUMENT/.test(r.getContentText()))) {   // that device was reset or turned them off: forget it
+        delete d.tokens[h]; patch('businesses/' + b._id + '/devices/' + d._id, { tokens: d.tokens });
+      } else if (code !== 200) throw new Error('Sending a notification: ' + code + ' ' + r.getContentText().slice(0, 160));
+      else n++;
+    }
+  }
+  return n;
+}
+function notifyTick(b) {
+  DEV_CACHE = null;
+  const st = b.settings || {}, sent = b.notified || {}, marks = {}, now = Date.now(), nz = nzNow(), today = nz.day, tomorrow = addDay(today, 1);
+  const once = (key, fn) => { if (sent[key] || marks[key]) return; marks[key] = now; try { fn(); } catch (e) { Logger.log(e); } };
+  const boss = bosses(b), devs = st.vapidKey ? devicesOf(b) : [];
+  if (devs.length) {
+    // a test from the Notifications screen
+    devs.forEach(d => { if (d.test && now - d.test < 15 * 60000) once('test-' + d._id + '-' + d.test, () => pushTo(b, [d._id], 'test', 'Rata & Smudge', 'Notifications are working on this device. 🌿', 'test')); });
+    const events = listDocs('businesses/' + b._id + '/events'), who = e => e.type === 'market' ? boss.concat(e.attendees || []) : boss;
+    const ty = { market: '🧺 Market', brew: '🫙 Brew day', order: '📦 Order due', other: '📌' };
+    for (const e of events) {
+      const rem = e.remind || [];
+      if (rem.indexOf('day') >= 0 && nz.mins >= 18 * 60 && occursOn(e, tomorrow) && !occursOn(e, today))
+        once('rd-' + e._id + '-' + tomorrow, () => pushTo(b, who(e), 'reminders', (ty[e.type] || '📌') + ' tomorrow', (e.title || '') + (e.time ? ' at ' + t12(e.time) : ''), 'ev-' + e._id));
+      if (rem.indexOf('hour') >= 0 && e.time && occursOn(e, today)) { const start = Number(e.time.slice(0, 2)) * 60 + Number(e.time.slice(3)), left = start - nz.mins;
+        if (left > 0 && left <= 60) once('rh-' + e._id + '-' + today, () => pushTo(b, who(e), 'reminders', (ty[e.type] || '📌') + ' in ' + left + ' min', (e.title || '') + ' at ' + t12(e.time), 'ev-' + e._id)); }
+    }
+    // the morning list, 7:30 to 10 am: today's markets and that person's to-dos
+    if (nz.mins >= 450 && nz.mins < 600) {
+      const todos = listDocs('businesses/' + b._id + '/todos').filter(t => !t.done && t.due && t.due <= today);
+      for (const d of devs) {
+        const isBoss = boss.indexOf(d._id) >= 0, mk = events.filter(e => e.type === 'market' && occursOn(e, today) && (isBoss || (e.attendees || []).indexOf(d._id) >= 0));
+        const td = todos.filter(t => t.who === d._id), lines = mk.map(e => '🧺 ' + e.title + (e.time ? ' ' + t12(e.time) : '')).concat(td.slice(0, 5).map(t => (t.due < today ? '⚠️ ' : '✅ ') + t.text));
+        if (lines.length) once('am-' + today + '-' + d._id, () => pushTo(b, [d._id], 'todos', 'Today', lines.join('\n') + (td.length > 5 ? '\n…and ' + (td.length - 5) + ' more' : ''), 'morning'));
+      }
+    }
+    // a till left open: 2 hours after the market's finish time, or 10 hours after it opened
+    const sessions = listDocs('businesses/' + b._id + '/sessions');
+    for (const s of sessions.filter(x => x.status === 'open')) {
+      const ev = events.find(e => e._id === s.eventId), endMins = ev && ev.end ? Number(ev.end.slice(0, 2)) * 60 + Number(ev.end.slice(3)) : null;
+      const late = (s.date < today) || (endMins != null && s.date === today && nz.mins > endMins + 120) || now - (s.openedAt || now) > 10 * 3600000;
+      if (late) once('till-' + s._id, () => pushTo(b, boss.concat(s.openedBy ? [s.openedBy] : []), 'tills', '💵 Till still open', (s.name || 'A selling day') + ': end the day on the till when you\'re finished', 'till-' + s._id));
+    }
+    // the evening before a market: anything that has run out
+    if (nz.mins >= 18 * 60 + 30 && events.some(e => e.type === 'market' && occursOn(e, tomorrow)))
+      once('ls-' + tomorrow, () => { const out = productsOut(b); if (out.length) pushTo(b, boss, 'lowstock', '🧺 Before tomorrow\'s market', out.length + ' product' + (out.length === 1 ? '' : 's') + ' at 0: ' + out.slice(0, 6).join(', ') + (out.length > 6 ? '…' : ''), 'lowstock'); });
+  }
+  // the market report email, once every till for that market and day is closed
+  marketReports(b, devs, once);
+  const keep = {}; Object.keys(sent).forEach(k => { if (now - sent[k] < 4 * 864e5) keep[k] = sent[k]; }); Object.keys(marks).forEach(k => keep[k] = marks[k]);
+  if (Object.keys(marks).length) patch('businesses/' + b._id, { notified: keep });
+}
+// products whose stock has reached 0 (the same sums as the app: counts and moves, less what was sold since)
+function productsOut(b) {
+  const moves = listDocs('businesses/' + b._id + '/stockmoves').filter(m => m.product), sales = listDocs('businesses/' + b._id + '/sales').filter(s => !s.voided);
+  const prods = listDocs('businesses/' + b._id + '/products').filter(p => p.active !== false), out = [];
+  for (const p of prods) {
+    const ms = moves.filter(m => m.product === p._id && m.kind !== 'packed' && m.kind !== 'returned').sort((a, c) => a.at - c.at); if (!ms.length) continue;
+    let base = 0, since = ms[0].at; const lc = ms.filter(m => m.kind === 'count').pop(); if (lc) { base = lc.qty; since = lc.at; }
+    ms.forEach(m => { if (m.at >= since && m.kind !== 'count') base += m.qty; });
+    const sold = sales.filter(s => s.at >= since).reduce((n, s) => n + (s.lines || []).filter(l => l.pid === p._id).reduce((a, l) => a + l.qty, 0), 0);
+    if (base - sold <= 0) out.push(p.name + (p.size ? ' ' + p.size : ''));
+  }
+  return out;
+}
+function marketReports(b, devs, once) {
+  const nz = nzNow(), days = [nz.day, addDay(nz.day, -1)], sessions = listDocs('businesses/' + b._id + '/sessions').filter(s => days.indexOf(s.date) >= 0);
+  const groups = {}; sessions.forEach(s => { const k = s.date + '|' + (s.name || s.type); (groups[k] = groups[k] || []).push(s); });
+  const owners = (b.owners || []).filter(e => { const d = devs.find(x => x._id === e); return !d || (d.prefs || {}).report !== false; });
+  if (!owners.length) return;
+  for (const k of Object.keys(groups)) {
+    const g = groups[k]; if (g.some(s => s.status === 'open') || g.every(s => s.reported)) continue;
+    once('report-' + k, () => {
+      const ids = g.map(s => s._id), sales = listDocs('businesses/' + b._id + '/sales').filter(s => ids.indexOf(s.sessionId) >= 0);
+      const live = sales.filter(s => !s.voided), total = live.reduce((n, s) => n + s.total, 0), gst = live.reduce((n, s) => n + (s.gst || 0), 0);
+      const by = m => live.filter(s => s.method === m).reduce((n, s) => n + s.total, 0), items = {};
+      live.forEach(s => (s.lines || []).forEach(l => { const key = l.name + (l.size ? ' ' + l.size : ''); items[key] = (items[key] || 0) + l.qty; }));
+      const top = Object.keys(items).sort((a, c) => items[c] - items[a]).slice(0, 8);
+      const place = g[0].placeId ? getDoc('businesses/' + b._id + '/places/' + g[0].placeId) : null, fee = place ? getDoc('businesses/' + b._id + '/costs/fee-' + g[0].placeId) : null;
+      const counted = g.reduce((n, s) => n + (s.countedCash != null ? s.countedCash : 0), 0), expected = g.reduce((n, s) => n + (s.expectedCash != null ? s.expectedCash : 0), 0);
+      const name = (g[0].name || 'Selling day'), when = Utilities.formatDate(new Date(g[0].openedAt || Date.now()), 'Pacific/Auckland', 'EEEE d MMMM');
+      const rows = [['Takings', money(total)], ['Sales', String(live.length)], ['Cash', money(by('cash'))], ['EFTPOS', money(by('eftpos'))], ['Other', money(by('other'))], ['GST in the takings', money(gst)],
+        ['Average sale', live.length ? money(Math.round(total / live.length)) : '—'], ['Voided', String(sales.length - live.length)]]
+        .concat(fee && fee.cents ? [['Stall fee', money(Math.round(fee.cents / Math.max(1, fee.days || 1))) + (fee.days > 1 ? ' (share of ' + money(fee.cents) + ' for ' + fee.days + ' days)' : '')]] : [])
+        .concat(expected ? [['Cash counted against expected', money(counted) + ' / ' + money(expected) + (counted === expected ? ' ✓' : ' (' + (counted > expected ? 'over ' : 'short ') + money(Math.abs(counted - expected)) + ')')]] : []);
+      const html = '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f">' + esc(name) + '</h2><p>' + esc(when) + '</p>' +
+        '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' +
+        (top.length ? '<h3>Top sellers</h3><p>' + top.map(t => esc(items[t] + ' × ' + t)).join('<br>') + '</p>' : '') + '<p style="color:#686a5a">Full figures: Reports in the app.</p></div>';
+      MailApp.sendEmail({ to: owners.join(','), subject: name + ' · ' + when + ' · ' + money(total), htmlBody: html, body: rows.map(r => r[0] + ': ' + r[1]).join('\n'), name: b.name || 'Rata & Smudge' });
+      g.forEach(s => patch('businesses/' + b._id + '/sessions/' + s._id, { reported: true }));
+    });
+  }
+}

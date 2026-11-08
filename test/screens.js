@@ -374,6 +374,17 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const dl2 = page.waitForEvent('download'); await page.click('#rCsv'); const csv2 = fs.readFileSync(await (await dl2).path(), 'utf8');
   ok(/"Date","Time","Receipt","Where"/.test(csv2) && /Test Market/.test(csv2), 'sales download as a CSV for the accountant');
   await page.screenshot({ path: path.join(shots, '34-reports.png') });
+  // ---- notifications: an owner adds the web push key; this device turns them on
+  await page.context().grantPermissions(['notifications']);
+  await page.click('#bk'); await page.waitForSelector('.tiles');
+  ok(!(await page.$('#hPush')), 'no notifications prompt until the web push key is in');
+  await page.evaluate(() => { S.settings.vapidKey = 'B' + 'x'.repeat(86); save(); render(); }); await page.waitForSelector('#hPush');
+  ok(/only work from the Home Screen app/.test(await (async () => { await page.click('#hPush'); await page.waitForSelector('[data-np]'); return text(page); })()), 'iPad in Safari: explains notifications need the Home Screen app');
+  await page.evaluate(() => { Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }); render(); }); await page.waitForSelector('#nOn'); await page.click('#nOn'); await page.waitForSelector('#nTest', { timeout: 8000 });
+  ok(await page.evaluate(() => { const d = JSON.parse(localStorage.mockdb), k = Object.keys(d).find(x => /\/devices\/admin@example\.com$/.test(x)); return k && Object.keys(d[k].tokens).length === 1 && /^tok-/.test(Object.values(d[k].tokens)[0].token); }), 'notifications on: this device\'s address saved in the owner\'s own record');
+  await page.click('[data-np="orders:0"]'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const d = JSON.parse(localStorage.mockdb), k = Object.keys(d).find(x => /\/devices\/admin@example\.com$/.test(x)); return d[k].prefs.orders === false; }), 'each kind can be switched off');
+  await page.screenshot({ path: path.join(shots, '35-notifications.png') });
   await page.click('#bk'); await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt]');
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); S.plans.push({ id: 'plantest', batch: 'nobatch', date: nzDay(), status: 'planned', items: [{ pid: p.id, units: 12 }], at: Date.now() }); save(); });
   await page.click('#bk');
