@@ -438,7 +438,7 @@ const seesCosts=()=>role()==='owner'||(role()==='manager'&&!!S.settings.mgrCosts
    An owner sees the app exactly as a role or a person would: only what they can read and do. Nothing is
    sent to the cloud, and leaving reloads the app from the cloud, so every sale, edit or tick is thrown away.
    What's kept on this device (the open sale, till mode) is put back as it was. */
-const PRACTICE_KEYS=['rs.cart','rs.tillMode','rs.servedBy'];
+const PRACTICE_KEYS=['rs.cart','rs.tillMode','rs.servedBy','rs.lastCash'];
 let practice=null;
 try{ const b=sessionStorage.getItem('rs.practiceBackup'); if(b){ const o=JSON.parse(b); PRACTICE_KEYS.forEach(k=>{ if(o[k]==null) localStorage.removeItem(k); else localStorage.setItem(k,o[k]); }); sessionStorage.removeItem('rs.practiceBackup'); } }catch(e){}
 function startPractice(email,r,label){
@@ -448,14 +448,16 @@ function startPractice(email,r,label){
   if(typeof loadCart==='function') loadCart(); stack=['home']; render(); toast('Viewing as '+label+'. Nothing is saved.');
 }
 function endPractice(){ location.reload(); }
-function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">👁 Viewing as ${esc(practice.label)} · nothing is saved · <u>Tap to go back</u></button>`:''; }
+function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">${practice.role==='owner'&&practice.email===SYNC.me()?'🧪 Owner test mode':'👁 Viewing as '+esc(practice.label)} · nothing is saved · <u>Tap to go back</u></button>`:''; }
 function viewAsPicker(){
   modal((m,close)=>{ const others=SYNC.getMembers().filter(e=>e!==SYNC.me());
     m.innerHTML=`<h2>👁 View as</h2><p class="note">See the app exactly as they would: only what they can see and do. Practice freely: nothing you do is saved, and it's all thrown away when you go back.</p>
+      <h3>Yourself</h3><div class="row"><div class="grow"><b>Owner test mode</b><small>Everything you normally see and can do, to try things out safely: sales, stock, prices, recipes. Nothing is saved.</small></div><button class="btn small" id="vaMe">Test mode</button></div>
       <h3>A role</h3><div class="mact" style="justify-content:flex-start"><button class="btn alt" data-va="manager|">Manager</button><button class="btn alt" data-va="helper|">Helper</button></div>
       ${others.length?`<h3>A person</h3>${others.map(e=>`<div class="row"><div class="grow"><b>${esc(personName(e))}</b><small>${esc(e)} · ${esc(ROLE_TXT[SYNC.roleOf(e)]||'Co-owner')}</small></div><button class="btn small" data-va="${esc(SYNC.roleOf(e))}|${esc(e)}">View as</button></div>`).join('')}`:''}
       <div class="mact"><button class="btn alt" id="vaC">Cancel</button></div>`;
     m.querySelector('#vaC').onclick=close;
+    m.querySelector('#vaMe').onclick=()=>{ close(); startPractice(SYNC.me(),'owner','yourself (owner test mode)'); };
     m.querySelectorAll('[data-va]').forEach(b=>b.onclick=()=>{ const [r,e]=b.dataset.va.split('|'); close(); startPractice(e||null,r,e?personName(e)+' ('+(ROLE_TXT[r]||'Co-owner')+')':'a '+(ROLE_TXT[r]||r).toLowerCase()); }); });
 }
 

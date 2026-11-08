@@ -280,7 +280,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
     drafts: [{ kind: 'event', unsure: ['end'], event: { type: 'market', title: 'Village Market', date: nw, time: '08:00', end: '13:00', days: 1, place: 'Village Market', attendees: [], note: '' } },
              { kind: 'todo', unsure: [], todo: { text: 'Label jars', due: tm, time: '', who: 'admin@example.com' } },
              { kind: 'shopping', unsure: ['size'], shopping: { item: 'Beeswax', qty: 1, size: '' } },
-             { kind: 'idea', unsure: [], idea: { text: 'Rose balm', kind: 'product' } }] }); }, [nextWeek, tomorrow]);
+             { kind: 'idea', unsure: [], idea: { text: 'Rose balm', kind: 'product' } }] }); save(); }, [nextWeek, tomorrow]);
   await page.waitForSelector('#rYes');
   ok(/You already have Village Market/.test(await text(page)), 'review warns about a calendar clash (the weekly Village Market)');
   ok(await page.evaluate(() => document.querySelector('[data-dk="size"]').classList.contains('unsure') && document.querySelector('[data-dk="end"]').classList.contains('unsure')), 'guessed fields are highlighted to check');
@@ -445,7 +445,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '28b-voice-steps.png') });
   await page.click('#vL'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.voicenotes.find(x => x.id === 'vstep1').notify === true), '"Carry on, tell me when it\'s ready" asks for a notification');
-  await page.evaluate(() => { Object.assign(S.voicenotes.find(x => x.id === 'vstep1'), { status: 'ready', drafts: [] }); }); await page.waitForSelector('.notebanner', { timeout: 4000 });
+  await page.evaluate(() => { Object.assign(S.voicenotes.find(x => x.id === 'vstep1'), { status: 'ready', drafts: [] }); save(); }); await page.waitForSelector('.notebanner', { timeout: 4000 });
   ok(true, 'a banner says when it\'s ready'); await page.evaluate(() => document.querySelector('.notebanner').remove());
   await page.evaluate(() => typedText('how many test oil have we got?')); await page.waitForSelector('#aOk');
   ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)), 'a typed question is answered at once from the app (stock)'); await page.click('#aOk');
@@ -471,8 +471,8 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { const v = { id: 'vfollow', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'buy beeswax', say: '', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 1, size: '' } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('#rTx'); await page.fill('#rTx', 'make it 3'); await page.click('#rTxGo'); await page.waitForSelector('#vS');
   ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); return n && n.text === 'make it 3' && n.prev.length === 1 && n.prev[0].shopping.item === 'Beeswax'; }), 'a typed change goes back to the assistant with the drafts on screen');
-  await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); Object.assign(n, { status: 'ready', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 3, size: '' } }] }); });
-  await page.waitForTimeout(900);
+  await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); Object.assign(n, { status: 'ready', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 3, size: '' } }] }); save(); });
+  await page.waitForFunction(() => S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced', null, { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(150);
   ok(await page.evaluate(() => document.querySelector('[data-dk="qty"]').value === '3' && S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced'), 'the changed drafts replace the old ones');
   await page.fill('#rTx', 'cancel'); await page.click('#rTxGo'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => !document.querySelector('#rTx') && !S.shopping.some(x => x.item === 'Beeswax' && x.qty === 3)), '"cancel" throws it away');
@@ -608,6 +608,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(n => Object.keys(JSON.parse(localStorage.mockdb)).filter(k => /\/todos\//.test(k)).length === n, todosBefore), 'practice: a to-do added as the helper is not saved');
   await page.click('#practiceBar'); await page.click('#cY'); await page.waitForSelector('.tiles'); await page.waitForTimeout(500);
   ok(await page.evaluate(() => role() === 'owner' && !S.todos.some(t => t.id === 'practicetodo') && S.recipes.length > 0 && !document.querySelector('#practiceBar')), 'going back reloads as the owner, with the practice thrown away');
+  await page.evaluate(() => { stack = ['home', 'setup']; setupOpen = true; render(); }); await page.waitForSelector('#viewAs');
+  await page.click('#viewAs'); await page.click('#vaMe'); await page.waitForSelector('#practiceBar');
+  ok(await page.evaluate(() => role() === 'owner' && SYNC.me() === 'admin@example.com' && S.recipes.length > 0 && document.querySelectorAll('.tile').length === 8 && /Owner test mode/.test(document.querySelector('#practiceBar').textContent)), 'Owner test mode: everything as normal (all tiles, recipes), with the test-mode bar');
+  const salesBefore = await page.evaluate(() => Object.keys(JSON.parse(localStorage.mockdb)).filter(k => /\/products\//.test(k)).length);
+  await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.price = 1; S.products.push({ id: 'testmodeprod', name: 'Test mode only', price: 500, colour: 'other', active: true }); save(); render(); });
+  await page.waitForTimeout(150);
+  ok(await page.evaluate(n => { const db = JSON.parse(localStorage.mockdb); return Object.keys(db).filter(k => /\/products\//.test(k)).length === n && !Object.keys(db).some(k => /testmodeprod/.test(k)); }, salesBefore), 'changes in test mode never reach the database');
+  await page.click('#practiceBar'); await page.click('#cY'); await page.waitForSelector('.tiles'); await page.waitForTimeout(500);
+  ok(await page.evaluate(() => !document.querySelector('#practiceBar') && S.products.find(x => x.name === 'Test Oil').price !== 1 && !S.products.some(p => p.id === 'testmodeprod')), 'leaving test mode puts everything back as it was');
   console.log('Calendar on a phone: the day panel clear of the add button, weeks and months swipe and snap');
   await page.setViewportSize({ width: 412, height: 860 }); await page.evaluate(() => { stack = ['home']; render(); go('calendar'); calView = 'week'; calSnap = 'low'; calSel = nzDay(); drawCal(); }); await page.waitForSelector('#pwSheet'); await page.waitForTimeout(150);
   ok(await page.evaluate(() => { const f = document.querySelector('#calFab').getBoundingClientRect(), h = document.querySelector('#psHead').getBoundingClientRect(); return h.bottom <= f.top; }), 'phone, week view, panel pulled down: the day header (date and ‹ ›) sits above the "Add on" button');
