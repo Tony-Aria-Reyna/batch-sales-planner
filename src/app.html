@@ -620,6 +620,15 @@ SCREENS.setup={
       <label class="note" for="aiLessons"><b>What it has learnt</b> · from the changes people make to its drafts, worked out each evening. Change or delete any line; it's never emailed.</label>
       <textarea class="txt" id="aiLessons" rows="5" placeholder="Nothing yet">${esc(S.settings.aiLessons||'')}</textarea></div>`:''}
 
+    ${role()==='owner'?(()=>{ const sm=st.summaries||{}, fy=['January','February','March','April','May','June','July','August','September','October','November','December'][(+(st.fyStart||4))-1];
+      return `<div class="card"><h3>📊 Summaries by email</h3><p class="note">Sent by the business helper to the owners' email. Managers and helpers don't get them.</p>
+      ${[['daily','Daily briefing','Each morning, only on days with something on the calendar or a to-do due: what\'s on, to-dos, what\'s run out before a market, orders due, yesterday\'s takings'],
+         ['weekly','Weekly summary','Takings, sales, markets, best sellers and best day, against the week before'],
+         ['monthly','Monthly summary','On the 1st, for the month before'],
+         ['yearly','Yearly summary','On 1 '+fy+', the start of your financial year (change it in Reports → Costs)']].map(([k,t,d])=>`<div class="row"><div class="grow"><b>${t}</b><small>${d}</small></div><button class="switch ${sm[k]!==false?'on':''}" data-sum="${k}" role="switch" aria-checked="${sm[k]!==false}" aria-label="${t}"><i></i></button></div>`).join('')}
+      <div class="formrow"><div><label class="note" for="sumT">Time</label><input class="txt" id="sumT" type="time" value="${esc(sm.time||'07:00')}"></div>
+        <div><label class="note" for="sumW">Weekly summary on</label><select class="txt" id="sumW">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>`<option value="${i}" ${+(sm.weekday??1)===i?'selected':''}>${d}</option>`).join('')}</select></div></div></div>`; })():''}
+
     ${role()==='owner'?`<div class="card"><h3>🛍️ Shopify</h3>
       <p class="note">Online orders are copied into Orders every 15 minutes by the business helper, using a read-only app made in Shopify's Dev Dashboard. Its keys stay in the helper, never in the app.</p>
       <label class="note" for="shShop">Shop address</label><input class="txt" id="shShop" autocapitalize="none" value="${esc(S.settings.shopifyShop||'')}" placeholder="yourshop.myshopify.com">
@@ -665,6 +674,10 @@ SCREENS.setup={
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
     const ss=$('#shShop'); if(ss) ss.onchange=()=>{ const v=ss.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if(v&&!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v)){ toast('Use the address ending in .myshopify.com'); ss.value=S.settings.shopifyShop||''; return; } S.settings.shopifyShop=v; save(); toast('Saved'); };
     const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
+    const sumSet=(k,v)=>{ S.settings.summaries=Object.assign({},S.settings.summaries||{},{[k]:v}); save(); };
+    document.querySelectorAll('[data-sum]').forEach(b=>b.onclick=()=>{ const k=b.dataset.sum, on=(S.settings.summaries||{})[k]!==false; sumSet(k,!on); render(); });
+    const sT=$('#sumT'); if(sT) sT.onchange=()=>{ if(/^\d\d:\d\d$/.test(sT.value)){ sumSet('time',sT.value); toast('Saved'); } };
+    const sW=$('#sumW'); if(sW) sW.onchange=()=>{ sumSet('weekday',+sW.value); toast('Saved'); };
     const al=$('#aiLessons'); if(al) al.onchange=()=>{ S.settings.aiLessons=al.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40).join('\n').slice(0,3000); save(); toast('Saved'); };
     const ah=$('#aiHelp'); if(ah) ah.onclick=assistantHelp;
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };

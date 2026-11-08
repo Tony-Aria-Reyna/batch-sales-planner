@@ -593,6 +593,8 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.mgrCosts === true), 'an owner can let managers see recipes and costs');
+  await page.click('[data-sum="monthly"]'); await page.waitForTimeout(40); await page.fill('#sumT', '06:30'); await page.dispatchEvent('#sumT', 'change'); await page.waitForTimeout(40);
+  ok(await page.evaluate(() => S.settings.summaries.monthly === false && S.settings.summaries.time === '06:30' && S.settings.summaries.weekly !== false), 'Summaries: each can be switched off, and the time changed');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   await page.click('#viewAs'); await page.click('[data-va="helper|"]'); await page.waitForSelector('#practiceBar');
   ok(await page.evaluate(() => role() === 'helper' && S.recipes.length === 0 && S.pins.length === 0 && document.querySelectorAll('.tile').length === 4 && !document.querySelector('#hAttn')), 'View as a helper: only the helper\'s tiles, and no recipes, PINs or warnings in memory');

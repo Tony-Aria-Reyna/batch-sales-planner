@@ -17,7 +17,7 @@ const db = {
   'businesses/b1/sessions': []
 };
 ctx.listDocs = p => (db[p] || []).map(x => Object.assign({}, x)); ctx.getDoc = p => null; ctx.patch = (p, f) => patches.push([p, f]); ctx.nzNow = () => clock; ctx.today = () => clock.day;
-const b = { _id: 'b1', name: 'Test Co', owners: ['mum@example.com', 'off@example.com'], roles: { 'sam@example.com': 'helper' }, settings: { vapidKey: 'K', receiptEmail: 'biz@example.com' }, notified: {} };
+const b = { _id: 'b1', name: 'Test Co', owners: ['mum@example.com', 'off@example.com'], roles: { 'sam@example.com': 'helper' }, settings: { vapidKey: 'K', receiptEmail: 'biz@example.com', summaries: { daily: false, weekly: false, monthly: false, yearly: false } }, notified: {} };
 ctx.notifyTick(b);
 const to = t => sentPush.filter(m => m.token === t).map(m => m.data.title + ' | ' + m.data.body);
 ok(to('T1').some(x => /Market tomorrow \| Village Market at 8am/.test(x)) && to('T1').some(x => /Hill Market/.test(x)), 'evening before: owner reminded of both markets');
@@ -75,4 +75,21 @@ ctx.patchSetting = (bid, k, v) => patches.push(['setting', { [k]: v }]);
 ctx.learnTick(b);
 ok(patches.some(p => p[0] === 'setting' && /Beeswax comes in 1 kg blocks/.test(p[1].aiLessons)) && patches.some(p => p[0] === 'businesses/b1/voicenotes/n9' && p[1].learn === 'done') && /Never include prices/.test(calls[0].contents[0].parts[0].text), 'each evening, edits become lessons (never prices or recipe amounts), and the notes are marked learnt');
 b.aiLearnt = tomorrow; calls.length = 0; ctx.learnTick(b); ok(calls.length === 0, 'lessons are worked out once a day');
+// ---- summaries: the daily briefing only on days with something on; weekly on Mondays; monthly on the 1st
+ctx.UrlFetchApp.fetch = realFetch; mails.length = 0;
+const mon = '2026-11-16', first = '2026-12-01';
+db['businesses/b1/events'] = [{ _id: 'e9', type: 'market', title: 'Matakana', date: mon, time: '08:00', end: '13:00' }];
+db['businesses/b1/todos'] = []; db['businesses/b1/orders'] = []; db['businesses/b1/sessions'] = [{ _id: 'sx', type: 'market', name: 'Matakana', date: '2026-11-14', reported: true }, { _id: 'sy', type: 'market', name: 'Village', date: '2026-11-15', reported: true }];
+db['businesses/b1/sales'] = [{ date: '2026-11-14', total: 12000, gst: 1565, channel: 'market', lines: [{ name: 'Lip balm', size: '15g', qty: 4, amount: 8000 }], at: 1 }, { date: '2026-11-15', total: 3000, gst: 391, channel: 'market', lines: [{ name: 'Tea', qty: 2, amount: 3000 }], at: 2 },
+  { date: '2026-11-08', total: 10000, gst: 1304, channel: 'market', lines: [], at: 0 }, { date: '2026-11-15', total: 999, voided: true, lines: [], at: 3 }];
+b.settings.summaries = { time: '07:00' }; b.notified = {};
+clock = { day: mon, mins: 6 * 60 + 50 }; ctx.notifyTick(b); ok(mails.length === 0, 'nothing before the chosen time');
+clock = { day: mon, mins: 7 * 60 + 5 }; ctx.notifyTick(b);
+const daily = mails.find(m => /Today/.test(m.subject)), weekly = mails.find(m => /Last week/.test(m.subject));
+ok(daily && /Matakana 8am–1pm/.test(daily.body) && /mum@example\.com/.test(daily.to) && !/sam@/.test(daily.to), 'Monday 7:05: the daily briefing goes to the owners (only), with today\'s market');
+ok(weekly && /\$150\.00/.test(weekly.subject) && /50%/.test(weekly.subject) && /Markets: 2/.test(weekly.body) && /4 × Lip balm 15g/.test(weekly.body), 'and the weekly summary: takings (voids left out), against the week before, markets, best sellers');
+const nm = mails.length; b.notified = patches.filter(p => p[0] === 'businesses/b1').pop()[1].notified; ctx.notifyTick(b); ok(mails.length === nm, 'each is sent once');
+mails.length = 0; db['businesses/b1/events'] = []; b.notified = {}; clock = { day: '2026-11-17', mins: 7 * 60 + 30 }; ctx.notifyTick(b); ok(mails.length === 0, 'no briefing on a day with nothing on');
+clock = { day: first, mins: 8 * 60 }; b.notified = {}; ctx.notifyTick(b); ok(mails.some(m => /Last month: \$250\.00/.test(m.subject)), 'the 1st of the month: last month\'s summary');
+b.settings.summaries = { time: '07:00', monthly: false }; mails.length = 0; b.notified = {}; ctx.notifyTick(b); ok(!mails.some(m => /Last month/.test(m.subject)), 'a summary switched off in the app isn\'t sent');
 console.log(fails ? fails + ' helper check(s) failed' : 'All helper checks passed'); process.exit(fails ? 1 : 0);

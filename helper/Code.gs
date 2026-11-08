@@ -496,6 +496,7 @@ function notifyTick(b) {
   }
   // the market report email, once every till for that market and day is closed
   marketReports(b, devs, once);
+  summariesTick(b, once);
   const keep = {}; Object.keys(sent).forEach(k => { if (now - sent[k] < 4 * 864e5) keep[k] = sent[k]; }); Object.keys(marks).forEach(k => keep[k] = marks[k]);
   if (Object.keys(marks).length) patch('businesses/' + b._id, { notified: keep });
 }
@@ -539,4 +540,74 @@ function marketReports(b, devs, once) {
       g.forEach(s => patch('businesses/' + b._id + '/sessions/' + s._id, { reported: true }));
     });
   }
+}
+
+
+/* ================= Summaries by email (owners only) =================
+   Daily briefing: each morning at the time set in the app (Setup → Summaries, default 7:00), only on days
+   with something on the calendar or a to-do due. Weekly (Mondays), monthly (the 1st) and yearly (the first
+   day of the financial year): sales, products, markets, and how it compares with the one before.
+   Owners can switch each one off or change the time in the app. */
+function summariesTick(b, once) {
+  const st = b.settings || {}, cfg = st.summaries || {}, nz = nzNow(), owners = b.owners || [];
+  if (!owners.length) return;
+  const at = String(cfg.time || '07:00'), mins = Number(at.slice(0, 2)) * 60 + Number(at.slice(3, 5));
+  if (!(nz.mins >= mins && nz.mins < mins + 180)) return;              // a three-hour window after the chosen time
+  const day = nz.day, dt = new Date(day + 'T12:00:00Z'), wd = dt.getUTCDay(), dom = dt.getUTCDate(), mo = dt.getUTCMonth() + 1;
+  if (cfg.daily !== false) once('sum-d-' + day, () => { const m = dailyBriefing(b, day); if (m) mailOwners(b, m); });
+  if (cfg.weekly !== false && wd === Number(cfg.weekday || 1)) once('sum-w-' + day, () => { const to = addDay(day, -1), from = addDay(day, -7); mailOwners(b, periodSummary(b, 'Week', from, to, addDay(from, -7), addDay(from, -1))); });
+  if (cfg.monthly !== false && dom === 1) once('sum-m-' + day.slice(0, 7), () => { const to = addDay(day, -1), from = to.slice(0, 8) + '01', pto = addDay(from, -1), pfrom = pto.slice(0, 8) + '01';
+    mailOwners(b, periodSummary(b, 'Month', from, to, pfrom, pto)); });
+  const fy = Number(st.fyStart || 4);
+  if (cfg.yearly !== false && dom === 1 && mo === fy) once('sum-y-' + day.slice(0, 7), () => { const to = addDay(day, -1), y = Number(day.slice(0, 4)), from = (y - 1) + day.slice(4, 8) + '01',
+    pfrom = (y - 2) + day.slice(4, 8) + '01', pto = addDay(from, -1); mailOwners(b, periodSummary(b, 'Year', from, to, pfrom, pto)); });
+}
+function mailOwners(b, m) {
+  const devs = (b.settings || {}).vapidKey ? devicesOf(b) : [];
+  const to = (b.owners || []).filter(e => { const d = devs.find(x => x._id === e); return !d || (d.prefs || {}).summaries !== false; });
+  if (to.length) MailApp.sendEmail({ to: to.join(','), subject: m.subject, body: m.text, htmlBody: m.html, name: b.name || 'Rata & Smudge' });
+}
+const H = { wrap: (title, sub, inner) => '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f;margin-bottom:4px">' + esc(title) + '</h2><p style="color:#686a5a;margin-top:0">' + esc(sub) + '</p>' + inner + '<p style="color:#686a5a">Open the app for more: ' + APP_URL + '</p></div>',
+  h3: t => '<h3 style="margin:18px 0 6px">' + esc(t) + '</h3>', list: l => '<ul style="margin:0;padding-left:20px">' + l.map(x => '<li style="margin:3px 0">' + esc(x) + '</li>').join('') + '</ul>',
+  table: rows => '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' };
+// today's briefing; nothing is sent on a day with nothing on
+function dailyBriefing(b, day) {
+  const events = listDocs('businesses/' + b._id + '/events').filter(e => occursOn(e, day)).sort((x, y) => (x.time || '').localeCompare(y.time || ''));
+  const todos = listDocs('businesses/' + b._id + '/todos').filter(t => !t.done && t.due && t.due <= day);
+  if (!events.length && !todos.length) return null;
+  const ty = { market: '🧺', brew: '🫙', order: '📦', other: '📌' }, names = {}; (b.members || []).forEach(m => names[m] = m.split('@')[0]);
+  const yest = addDay(day, -1), ys = listDocs('businesses/' + b._id + '/sales').filter(s => !s.voided && s.date === yest), yt = ys.reduce((n, s) => n + s.total, 0);
+  const orders = listDocs('businesses/' + b._id + '/orders').filter(o => o.status !== 'sent' && o.status !== 'cancelled' && o.due && o.due <= addDay(day, 3));
+  const out = events.some(e => e.type === 'market') ? productsOut(b) : [];
+  const evs = events.map(e => (ty[e.type] || '📌') + ' ' + (e.title || '') + (e.time ? ' ' + t12(e.time) + (e.end ? '–' + t12(e.end) : '') : ''));
+  const tds = todos.slice(0, 15).map(t => (t.due < day ? '⚠️ overdue: ' : '') + t.text + (t.who ? ' (' + (names[t.who] || t.who) + ')' : ''));
+  const when = Utilities.formatDate(new Date(day + 'T12:00:00Z'), 'Pacific/Auckland', 'EEEE d MMMM');
+  let html = (evs.length ? H.h3('On today') + H.list(evs) : '') + (tds.length ? H.h3('To do') + H.list(tds) : '')
+    + (out.length ? H.h3('Out of stock before the market') + H.list(out) : '') + (orders.length ? H.h3('Orders due in the next 3 days') + H.list(orders.map(o => ((o.customer || {}).name || 'Order') + ', due ' + o.due)) : '')
+    + (ys.length ? H.h3('Yesterday') + '<p>' + esc(money(yt) + ' from ' + ys.length + ' sale' + (ys.length === 1 ? '' : 's')) + '</p>' : '');
+  const text = [when, evs.length ? 'On today:\n' + evs.join('\n') : '', tds.length ? 'To do:\n' + tds.join('\n') : '', out.length ? 'Out of stock: ' + out.join(', ') : '',
+    orders.length ? 'Orders due soon: ' + orders.map(o => ((o.customer || {}).name || 'Order') + ' ' + o.due).join(', ') : '', ys.length ? 'Yesterday: ' + money(yt) + ' from ' + ys.length + ' sales' : ''].filter(Boolean).join('\n\n');
+  return { subject: '☀️ Today: ' + (evs[0] || tds[0] || '').replace(/^\S+ /, '').slice(0, 60) + (evs.length + tds.length > 1 ? ' and ' + (evs.length + tds.length - 1) + ' more' : ''), html: H.wrap('Today, ' + when, b.name || 'Rata & Smudge', html), text: text };
+}
+// a week, month or year: sales, products and markets, against the one before
+function periodSummary(b, kind, from, to, pfrom, pto) {
+  const sales = listDocs('businesses/' + b._id + '/sales').filter(s => !s.voided), sessions = listDocs('businesses/' + b._id + '/sessions');
+  const crunch = (f, t) => { const l = sales.filter(s => s.date >= f && s.date <= t), items = {}, byDay = {}, ch = {};
+    l.forEach(s => { byDay[s.date] = (byDay[s.date] || 0) + s.total; ch[s.channel || 'other'] = (ch[s.channel || 'other'] || 0) + s.total;
+      (s.lines || []).forEach(x => { const k = x.name + (x.size ? ' ' + x.size : ''); const it = items[k] || (items[k] = { qty: 0, total: 0 }); it.qty += x.qty; it.total += x.amount != null ? x.amount : x.qty * (x.unit || 0); }); });
+    const mk = {}; sessions.filter(x => x.type === 'market' && x.date >= f && x.date <= t).forEach(x => mk[x.date + '|' + (x.name || '')] = 1);
+    return { count: l.length, total: l.reduce((n, s) => n + s.total, 0), gst: l.reduce((n, s) => n + (s.gst || 0), 0), items: items, byDay: byDay, ch: ch, markets: Object.keys(mk).length,
+      days: Object.keys(byDay).length }; };
+  const R = crunch(from, to), P = crunch(pfrom, pto);
+  const vs = (a, c) => c ? (a >= c ? '▲ ' : '▼ ') + Math.round(Math.abs(a - c) / c * 100) + '% on the ' + kind.toLowerCase() + ' before' : '';
+  const top = Object.keys(R.items).sort((x, y) => R.items[y].total - R.items[x].total).slice(0, 8), best = Object.keys(R.byDay).sort((x, y) => R.byDay[y] - R.byDay[x])[0];
+  const chn = { market: 'Markets', farmgate: 'Farm gate', tour: 'Garden tours', shop: 'Shop' };
+  const fmt = d => Utilities.formatDate(new Date(d + 'T12:00:00Z'), 'Pacific/Auckland', 'd MMM yyyy'), range = fmt(from) + ' to ' + fmt(to);
+  const rows = [['Takings (incl GST)', money(R.total)], ['Compared', vs(R.total, P.total) || '—'], ['Sales', String(R.count)], ['Average sale', R.count ? money(Math.round(R.total / R.count)) : '—'],
+    ['Markets', String(R.markets) + (P.markets ? ' (' + P.markets + ' before)' : '')], ['Selling days', String(R.days)], ['GST in the takings', money(R.gst)]]
+    .concat(best ? [['Best day', fmt(best) + ', ' + money(R.byDay[best])]] : []);
+  const html = H.table(rows) + (Object.keys(R.ch).length ? H.h3('Where it sold') + H.list(Object.keys(R.ch).sort((x, y) => R.ch[y] - R.ch[x]).map(k => (chn[k] || k) + ': ' + money(R.ch[k]))) : '')
+    + (top.length ? H.h3('Best sellers') + H.list(top.map(k => R.items[k].qty + ' × ' + k + ' (' + money(R.items[k].total) + ')')) : '') + '<p style="color:#686a5a">Profit and costs: Reports in the app.</p>';
+  const text = range + '\n' + rows.map(r => r[0] + ': ' + r[1]).join('\n') + (top.length ? '\n\nBest sellers:\n' + top.map(k => R.items[k].qty + ' × ' + k).join('\n') : '');
+  return { subject: (kind === 'Week' ? '📊 Last week: ' : kind === 'Month' ? '📊 Last month: ' : '📊 Last year: ') + money(R.total) + (vs(R.total, P.total) ? ' (' + vs(R.total, P.total).split(' on ')[0] + ')' : ''), html: H.wrap(kind === 'Year' ? 'Your year' : 'Your ' + kind.toLowerCase(), range, html), text: text };
 }

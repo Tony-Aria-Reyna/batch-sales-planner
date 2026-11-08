@@ -141,3 +141,13 @@ Set-up (once):
 - `npm test` — screen tests (fake Firebase), screenshots in `test/shots/`.
 - `npx firebase emulators:exec --only firestore "node test/rules.test.js"` — rule tests (needs Java and `npm i --no-save @firebase/rules-unit-testing`).
 - Before calling a phase done: the checklist in the playbook, on the real iPad and the real Android phone.
+
+## Assistant v2 and summaries (business helper version 6)
+
+Paste the latest `helper/Code.gs` into the helper project, then **Deploy → Manage deployments → ✏️ → Version: New version → Deploy** (same web address). Nothing else to set up: it uses the same `GEMINI_API_KEY`.
+
+- Notes are written down first (the words appear in the app), then worked out with a short business summary and the lessons learnt. Thinking is kept low for speed.
+- Replies change the drafts on screen; "yes", "cancel" and "later" work by voice or typing.
+- New kinds: questions, made, stock counts, costs, fill-ups, shops and contacts, ingredient prices, recipes. Photos are read in one go.
+- Each evening after 9 pm it turns what people changed into short lessons (Setup → Voice assistant → What it has learnt). Never costs, pay or recipe amounts.
+- Summaries by email to the owners (Setup → Summaries): a daily briefing only on days with something on, weekly, monthly and yearly. Default 7 am.
