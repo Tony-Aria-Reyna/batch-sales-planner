@@ -539,6 +539,25 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await op2.screenshot({ path: path.join(shots, '21-rules-notice.png') });
   await op2.evaluate(() => localStorage.removeItem('mockdeny')); await op2.close();
 
+  console.log('Calendar on a phone: the day panel clear of the add button, weeks and months swipe and snap');
+  await page.setViewportSize({ width: 412, height: 860 }); await page.evaluate(() => { stack = ['home']; render(); go('calendar'); calView = 'week'; calSnap = 'low'; calSel = nzDay(); drawCal(); }); await page.waitForSelector('#pwSheet'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => { const f = document.querySelector('#calFab').getBoundingClientRect(), h = document.querySelector('#psHead').getBoundingClientRect(); return h.bottom <= f.top; }), 'phone, week view, panel pulled down: the day header (date and ‹ ›) sits above the "Add on" button');
+  const swipe = (sel, dx) => page.evaluate(([sel, dx]) => { const z = document.querySelector(sel), r = z.getBoundingClientRect(), x0 = r.left + r.width / 2, y = r.top + 20;
+    const t = x => new Touch({ identifier: 1, target: z, clientX: x, clientY: y }); z.dispatchEvent(new TouchEvent('touchstart', { touches: [t(x0)], changedTouches: [t(x0)], bubbles: true }));
+    for (let i = 1; i <= 6; i++) z.dispatchEvent(new TouchEvent('touchmove', { touches: [t(x0 + dx * i / 6)], changedTouches: [t(x0 + dx * i / 6)], bubbles: true }));
+    z.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [t(x0 + dx)], bubbles: true })); }, [sel, dx]);
+  const wk0 = await page.evaluate(() => monday(kd(calSel)).getTime());
+  await swipe('#pwDays', -40); await page.waitForTimeout(80);
+  ok(await page.evaluate(w => monday(kd(calSel)).getTime() === w && document.querySelector('#pwDays').style.transform === '', wk0), 'a short drag springs back to the same week');
+  await swipe('#pwDays', -250); await page.waitForTimeout(450);
+  ok(await page.evaluate(w => { const m = monday(kd(calSel)); return m.getTime() - w > 6 * 864e5 && m.getDay() === 1 && document.querySelector('.pw-d small').textContent === 'M'; }, wk0), 'a long drag left slides to next week, snapped with Monday at the left');
+  await page.screenshot({ path: path.join(shots, '23c-phone-week-swipe.png') });
+  await page.evaluate(() => { calView = 'month'; calMode = 'split'; calMonth = null; drawCal(); }); await page.waitForSelector('#pcWrap');
+  const mo0 = await page.evaluate(() => calMonth.getMonth());
+  await swipe('#pcWrap', 250); await page.waitForTimeout(450);
+  ok(await page.evaluate(m => calMonth.getMonth() === (m + 11) % 12, mo0), 'month view: a long drag right goes to the previous month');
+  await page.evaluate(() => { calView = 'month'; calMode = 'split'; calSel = nzDay(); calMonth = null; lsSet('rs.calview', 'month'); lsSet('rs.calsnap', 'split'); stack = ['home']; render(); });
+  await page.setViewportSize({ width: 1180, height: 820 });
   console.log('Each owner sets their own PIN');
   const cp = await ipad.newPage(); cp.on('pageerror', e => errs.push(e.message));
   await cp.goto(url); await cp.waitForSelector('#gIn'); await signIn(cp, 'co@example.com'); await cp.waitForSelector('.tiles'); await cp.waitForTimeout(300);

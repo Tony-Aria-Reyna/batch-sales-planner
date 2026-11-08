@@ -152,7 +152,7 @@ function drawMonth(el){
     <div class="pc-sheet" id="pcSheet"><div class="pc-grab" id="pcGrab"></div>${sheetHead(sel,todayK,'psPrev','psNext')}
       ${T.allday?`<div class="ps-allday">${T.allday}</div>`:''}<div class="ps-scroll" id="psScroll">${T.tl}</div></div>`;
   const H=el.clientHeight, head=el.querySelector('.pc-head').offsetHeight, gridTop=head+el.querySelector('.pc-dow').offsetHeight;
-  calSnaps={day:head, week:gridTop+ROWH+6, split:gridTop+rows*ROWH+6, month:H-96};
+  calSnaps={day:head, week:gridTop+ROWH+6, split:gridTop+rows*ROWH+6, month:H-96-fabRoom()};
   if(calSnaps.month<calSnaps.split+40) calSnaps.month=calSnaps.split+40;
   const layout=(y,anim)=>{ calY=y; const sh=$('#pcSheet'), wrap=$('#pcWrap'), grid=$('#pcGrid'); if(!sh) return;
     const avail=Math.max(0,y-gridTop-6); let rowH=ROWH, off=0;
@@ -166,7 +166,7 @@ function drawMonth(el){
   el.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>{ if(calSuppress) return; const k=b.dataset.pd;
     if(k===calSel&&calMode==='month'){ calMode='split'; lsSet('rs.calmode','split'); drawCal(); return; }
     calSel=k; const d=kd(k); if(d.getMonth()!==calMonth.getMonth()) calMonth=new Date(d.getFullYear(),d.getMonth(),1); drawCal(); });
-  const month=n=>{ calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+n,1); drawCal(); };
+  const month=n=>{ if(!calEnter) calEnter=n>0?'L':'R'; calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+n,1); drawCal(); };
   $('#calPrev').onclick=()=>month(-1); $('#calNext').onclick=()=>month(1);
   const step=n=>{ calSel=dk(addDays(kd(calSel),n)); const d=kd(calSel); if(d.getMonth()!==calMonth.getMonth()) calMonth=new Date(d.getFullYear(),d.getMonth(),1); drawCal(); slideDay($('#pcSheet .ps-scroll'),n>0); };
   $('#psPrev').onclick=e=>{ e.stopPropagation(); step(-1); }; $('#psNext').onclick=e=>{ e.stopPropagation(); step(1); };
@@ -186,7 +186,7 @@ function drawMonth(el){
     zone.addEventListener('pointerup',end); zone.addEventListener('pointercancel',end);
   };
   drag($('#pcGrab'),false); drag($('#psHead'),false); drag($('#pcWrap'),true);
-  swipeX($('#pcWrap'),next=>month(next?1:-1));
+  swipePage($('#pcWrap'),()=>[$('#pcWrap')],next=>month(next?1:-1)); enterSlide([$('#pcWrap')]);
   swipeX($('#pcSheet'),next=>step(next?1:-1));
 }
 
@@ -214,7 +214,7 @@ function drawWeek(el){
     <div class="pc-sheet" id="pwSheet"><div class="pc-grab" id="pwGrab"></div>${sheetHead(sel,todayK,'pwDPrev','pwDNext')}
       ${T.allday?`<div class="ps-allday">${T.allday}</div>`:''}<div class="ps-scroll" id="pwDay">${T.tl}</div></div>`;
   const H=el.clientHeight, topY=$('#pwDays').offsetTop+$('#pwDays').offsetHeight+2;
-  const snaps={top:topY, split:Math.round(topY+(H-topY)*0.42), low:H-96};
+  const snaps={top:topY, split:Math.round(topY+(H-topY)*0.42), low:H-96-fabRoom()};
   const layout=(y,anim)=>{ const sh=$('#pwSheet'), tp=$('#pwTop'); if(!sh) return; calY=y;
     sh.style.transition=anim?'top .26s ease':'none'; sh.style.top=y+'px'; tp.style.height=Math.max(0,y-tp.offsetTop+14)+'px'; };
   layout(snaps[calSnap]??snaps.low,false);
@@ -224,7 +224,7 @@ function drawWeek(el){
   wireItems($('#pwSheet'),calSel); wireItems(sc,calSel); const pa=el.querySelector('.pw-all'); if(pa) wireItems(pa,calSel);
   const setSnap=(s,anim=true)=>{ calSnap=s; lsSet('rs.calsnap',s); layout(snaps[s],anim); };
   const choose=k=>{ calSel=k; if(calSnap==='low') calSnap='split'; calWkScroll=sc.scrollTop; drawCal(); };
-  const week=n=>{ calSel=dk(addDays(kd(calSel),7*n)); calMonth=null; calWkScroll=sc.scrollTop; drawCal(); };
+  const week=n=>{ if(!calEnter) calEnter=n>0?'L':'R'; calSel=dk(addDays(kd(calSel),7*n)); calMonth=null; calWkScroll=sc.scrollTop; drawCal(); };
   $('#pwPrev').onclick=()=>week(-1); $('#pwNext').onclick=()=>week(1);
   $('#pwDPrev').onclick=e=>{ e.stopPropagation(); choose(dk(addDays(kd(calSel),-1))); }; $('#pwDNext').onclick=e=>{ e.stopPropagation(); choose(dk(addDays(kd(calSel),1))); };
   el.querySelectorAll('[data-pwd]').forEach(b=>b.onclick=()=>{ if(!calSuppress) choose(b.dataset.pwd); });
@@ -244,9 +244,31 @@ function drawWeek(el){
   };
   drag($('#pwGrab')); drag($('#psHead'));
   $('#psHead').addEventListener('click',e=>{ if(calSuppress||e.target.closest('button')) return; if(calSnap==='low') setSnap('split'); });
-  swipeX($('#pwTop'),next=>week(next?1:-1)); swipeX($('#pwDays'),next=>week(next?1:-1));
+  const movers=()=>[$('#pwDays'),el.querySelector('.pw-all'),el.querySelector('.pw-cols')];
+  swipePage($('#pwTop'),movers,next=>week(next?1:-1)); swipePage($('#pwDays'),movers,next=>week(next?1:-1)); enterSlide(movers());
   swipeX($('#pwSheet'),next=>choose(dk(addDays(kd(calSel),next?1:-1))));
 }
+// room for the floating "Add on …" button, so the day panel's header (date and ‹ ›) is never under it
+const fabRoom=()=>{ const f=$('#calFab'); return f&&f.offsetHeight?f.offsetHeight+16:0; };
+// weeks and months follow the finger sideways; let go past a quarter of the width (or flick) and it
+// slides on to the next one and snaps there (a week always starts on Monday), otherwise it springs back
+let calEnter=null;
+function swipePage(zone,movers,go){
+  if(!zone) return; let sx=null,sy=0,t0=0,horiz=null,dx=0;
+  const set=(x,anim)=>movers().forEach(m=>{ if(!m) return; m.style.transition=anim?'transform .18s ease-out':'none'; m.style.transform=x?`translateX(${x}px)`:''; });
+  zone.addEventListener('touchstart',e=>{ if(e.touches.length!==1){ sx=null; return; } sx=e.touches[0].clientX; sy=e.touches[0].clientY; t0=Date.now(); horiz=null; dx=0; },{passive:true});
+  zone.addEventListener('touchmove',e=>{ if(sx==null) return; const t=e.touches[0]; dx=t.clientX-sx; const dy=t.clientY-sy;
+    if(horiz==null){ if(Math.abs(dx)<8&&Math.abs(dy)<8) return; horiz=Math.abs(dx)>Math.abs(dy)*1.2; }
+    if(horiz) set(dx,false); },{passive:true});
+  zone.addEventListener('touchend',()=>{ if(sx==null) return; sx=null; if(!horiz) return;
+    const W=zone.clientWidth||innerWidth, fast=Math.abs(dx)>40&&Date.now()-t0<300;
+    if(Math.abs(dx)>W*0.25||fast){ suppressTap(); const next=dx<0; set(next?-W:W,true); setTimeout(()=>{ calEnter=next?'L':'R'; go(next); },170); }
+    else set(0,true); },{passive:true});
+  zone.addEventListener('touchcancel',()=>{ if(sx!=null&&horiz) set(0,true); sx=null; },{passive:true});
+}
+// the new week or month slides in from the side it was swiped towards
+function enterSlide(els){ if(!calEnter) return; const from=calEnter==='L'?'35%':'-35%'; calEnter=null;
+  els.forEach(m=>{ if(!m) return; m.style.transition='none'; m.style.transform=`translateX(${from})`; m.style.opacity='.4'; void m.offsetWidth; m.style.transition='transform .2s ease-out, opacity .2s'; m.style.transform=''; m.style.opacity=''; }); }
 // a sideways swipe (clearly more across than down, and quick) calls go(true) for next, go(false) for previous
 function swipeX(zone,go){
   if(!zone) return; let sx=null,sy=0,t0=0;
