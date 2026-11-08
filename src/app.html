@@ -125,6 +125,13 @@ body:has(.rcal) main{min-height:0}
 .cal-fab b{font-size:30px;font-weight:500;line-height:.8}
 .slideL{animation:slL .22s ease}.slideR{animation:slR .22s ease}
 @keyframes slL{from{transform:translateX(28px);opacity:.4}to{transform:none;opacity:1}}@keyframes slR{from{transform:translateX(-28px);opacity:.4}to{transform:none;opacity:1}}
+.addbar{display:flex;gap:10px}.addbar .txt{flex:1;min-width:0}.addbar .btn{flex:none}
+.lrow{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line);min-height:64px}
+.lrow:first-of-type{border-top:0}
+.tick{width:44px;height:44px;border-radius:12px;border:2.5px solid var(--green2);flex:none;font-size:24px;font-weight:800;color:#fff;display:grid;place-items:center}
+.tick.on{background:var(--green);border-color:var(--green)}
+.lrow .grow{flex:1}.ltxt{text-align:left;min-width:0}.ltxt b{display:block;font-weight:600;overflow-wrap:anywhere}.ltxt small{display:block;color:var(--muted);font-size:15px}
+.isdone .ltxt b{text-decoration:line-through;color:var(--muted)}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -440,7 +447,7 @@ const TILES=[
   {id:'calendar', ic:'📅', h:'Calendar', p:'Markets, brew days, orders, to-dos', all:true},
   {id:'brew', ic:'🫙', h:'Brew', p:'Plan batches and the shopping list', phase:4},
   {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify', phase:4},
-  {id:'lists', ic:'✅', h:'Lists', p:'To do and shopping', phase:4},
+  {id:'lists', ic:'✅', h:'Lists', p:'To do, shopping and ideas', all:true},
   {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', phase:5},
   {id:'setup', ic:'⚙️', h:'Setup', p:'Products, prices, people, PIN', lock:true},
 ];
@@ -469,7 +476,6 @@ SCREENS.home={
 const COMING={
   brew:{ic:'🫙',h:'Brew',phase:4,what:['Pick a recipe and how many batches','See the ingredient shopping list, the cost and how many bottles it fills','Log a batch as made, then bottled']},
   orders:{ic:'📦',h:'Orders',phase:4,what:['Wholesale and custom orders: who, what, when due, paid or not','Shopify orders arrive by themselves, ready to pack, with a notification']},
-  lists:{ic:'✅',h:'Lists',phase:4,what:['To-do and shopping lists, shared between devices, with reminders']},
   reports:{ic:'📈',h:'Reports',phase:5,what:['Takings by day, channel and product','Monthly profit after costs, and break-even','GST collected, for the GST return']},
 };
 for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
