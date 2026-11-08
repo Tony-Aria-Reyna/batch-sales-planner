@@ -23,27 +23,55 @@ const activeProducts=()=>S.products.filter(p=>p.active!==false).sort((a,b)=>(a.n
 const prodName=p=>p?(p.name+(p.size?' · '+p.size:'')):'(deleted product)';
 const swatch=c=>{ const k=COLOURS[c]||COLOURS.other; return `background:${k[0]};color:${k[1]}`; };
 
+// Search that forgives: every word typed must appear (in any order), as part of a word, or with one
+// letter wrong. Case, spaces, punctuation and macrons don't matter: "oil lav 50" finds "Lavender Infused Oil · 50ml".
+const normText=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+function near1(a,b){ if(Math.abs(a.length-b.length)>1) return false; let i=0,j=0,d=0; while(i<a.length&&j<b.length){ if(a[i]===b[j]){ i++; j++; continue; } if(++d>1) return false; if(a.length>b.length) i++; else if(b.length>a.length) j++; else { i++; j++; } } return d+(a.length-i)+(b.length-j)<=1; }
+function fuzzyScore(q,text){ const qs=normText(q).split(' ').filter(Boolean); if(!qs.length) return 1; const t=normText(text), tw=t.split(' '), tj=t.replace(/ /g,''); let score=0;
+  const swap1=(a,b)=>{ if(a.length!==b.length) return false; const d=[]; for(let i=0;i<a.length;i++) if(a[i]!==b[i]) d.push(i); return d.length===2&&d[1]===d[0]+1&&a[d[0]]===b[d[1]]&&a[d[1]]===b[d[0]]; };   // "tae" → "tea"
+  const close=(w,x)=>swap1(w,x)||swap1(w,x.slice(0,w.length))||(w.length>=4&&(near1(w,x)||(x.length>w.length&&near1(w,x.slice(0,w.length)))));
+  for(const w of qs){ if(tw.some(x=>x.startsWith(w))) score+=3; else if(tj.includes(w)) score+=2; else if(w.length>=3&&tw.some(x=>close(w,x))) score+=1; else return 0; }
+  return score; }
+let prodFilter='all', prodQuery='', tillPinUntil=0;
+// putting a product on the till needs an owner's or manager's PIN (one PIN covers the next two minutes here)
+function withTillPin(what,fn){ if(Date.now()<tillPinUntil){ fn(SYNC.me()); return; } approve('put a product on the till',who=>{ tillPinUntil=Date.now()+120e3; fn(who); },what); }
+const needsSetup=p=>!!p.needsSetup||(typeof productIssues==='function'&&role()==='owner'&&productIssues(p).length>0);
 SCREENS.products={
   title:()=>({h:'Products and prices',s:'Prices include GST'}),
   html(){
     const all=S.products.slice().sort((a,b)=>(a.name+' '+a.size).localeCompare(b.name+' '+b.size,'en',{numeric:true}));
+    const hit=prodQuery?all.filter(p=>fuzzyScore(prodQuery,p.name+' '+(p.size||''))>0):all;
+    const show=prodFilter==='on'?hit.filter(p=>p.active!==false):prodFilter==='off'?hit.filter(p=>p.active===false):prodFilter==='setup'?hit.filter(needsSetup):hit;
+    const on=show.filter(p=>p.active!==false), off=show.filter(p=>p.active===false);
+    const row=p=>`<div class="row prodrow ${p.active===false?'offtill':''}"><span class="chip" style="${swatch(p.colour)}">${esc((COLOURS[p.colour]||COLOURS.other)[2])}</span>
+        <div class="grow" data-edit="${p.id}" style="cursor:pointer"><b>${esc(p.name)}</b><small>${esc(p.size||'')}${needsSetup(p)?' · <span class="bad">⚠️ Needs setting up</span>':''}</small></div>
+        <b style="font-size:20px">${money(p.price/100)}</b>
+        <button class="switch ${p.active!==false?'on':''}" data-onoff="${p.id}" role="switch" aria-checked="${p.active!==false}" aria-label="On the till: ${esc(prodName(p))}"><i></i></button></div>`;
+    const counts={all:all.length,on:all.filter(p=>p.active!==false).length,off:all.filter(p=>p.active===false).length,setup:all.filter(needsSetup).length};
     return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0">
         <button class="btn" id="pAdd">＋ Add a product</button><button class="btn alt" id="pPaste">📄 Load a price list</button></div>
-      <p class="note">Only you can change these. Helpers see them as till buttons and can't change a price.</p></div>
-      <div class="card">${all.length?all.map(p=>`<div class="row" data-edit="${p.id}" style="cursor:pointer${p.active===false?';opacity:.5':''}">
-          <span class="chip" style="${swatch(p.colour)}">${esc((COLOURS[p.colour]||COLOURS.other)[2])}</span>
-          <div class="grow"><b>${esc(p.name)}</b><small>${esc(p.size||'')}${p.active===false?' · hidden from the till':''}</small></div>
-          <b style="font-size:22px">${money(p.price/100)}</b></div>`).join('')
-        :'<p class="note">No products yet. Add them one at a time, or paste your price list.</p>'}</div>`;
+      <p class="note">Only you can change these. Helpers see them as till buttons and can't change a price. The switch puts a product on the till or takes it off (putting one on needs a PIN).</p>
+      <input class="txt" id="pQ" type="search" placeholder="🔍 Search products" value="${esc(prodQuery)}" autocomplete="off">
+      <div class="pastnames">${[['all','All'],['on','On the till'],['off','Off the till'],['setup','Needs setting up']].map(([k,l])=>`<button class="chip big ${prodFilter===k?'on':''}" data-pf="${k}">${l} · ${counts[k]}</button>`).join('')}</div></div>
+      ${all.length?'':'<div class="card"><p class="note">No products yet. Add them one at a time, or paste your price list.</p></div>'}
+      ${on.length?`<div class="card"><h3>On the till (${on.length})</h3>${on.map(row).join('')}</div>`:''}
+      ${off.length?`<div class="card"><h3>Off the till (${off.length})</h3><p class="note">Not shown as till buttons. They can still be found with 🔍 Find on the till, with a PIN.</p>${off.map(row).join('')}</div>`:''}
+      ${all.length&&!show.length?'<div class="card"><p class="note">Nothing matches.</p></div>':''}`;
   },
   wire(){
     $('#pAdd').onclick=()=>editProduct(null);
     $('#pPaste').onclick=loadPriceList;
+    const q=$('#pQ'); q.oninput=()=>{ prodQuery=q.value; const at=q.selectionStart; render(); const q2=$('#pQ'); if(q2){ q2.focus(); try{ q2.setSelectionRange(at,at); }catch(e){} } };
+    document.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{ prodFilter=b.dataset.pf; render(); });
     document.querySelectorAll('[data-edit]').forEach(r=>r.onclick=()=>editProduct(S.products.find(p=>p.id===r.dataset.edit)));
+    document.querySelectorAll('[data-onoff]').forEach(b=>b.onclick=()=>{ const p=S.products.find(x=>x.id===b.dataset.onoff); if(!p) return;
+      if(p.active!==false){ p.active=false; p.updated=Date.now(); save(); render(); toast(prodName(p)+' is off the till'); return; }
+      withTillPin(prodName(p),()=>{ p.active=true; p.updated=Date.now(); save(); render(); toast(prodName(p)+' is on the till'); }); });
   }
 };
-function editProduct(p){
+function editProduct(p,done){
   const isNew=!p; p=p||{name:'',size:'',price:0,colour:'',active:true};
+  const wasOff=!isNew&&p.active===false;
   modal((m,close)=>{ let col=p.colour||'';
     const draw=()=>{ const n=m.querySelector('#eN'),z=m.querySelector('#eZ'),pr=m.querySelector('#eP'); const ww=m.querySelector('#eW'); const nw=m.querySelector('#eNW'); const keep=n?{n:n.value,z:z.value,p:pr.value,w:ww?ww.value:'',nw:nw?nw.checked:false}:{n:p.name,z:p.size||'',p:p.price?(p.price/100).toFixed(2):'',w:p.wholesale?(p.wholesale/100).toFixed(2):'',nw:!!p.noWholesale};
       m.innerHTML=`<h2>${isNew?'Add a product':'Edit product'}</h2>
@@ -62,9 +90,10 @@ function editProduct(p){
       m.querySelector('#eS').onclick=()=>{ const name=m.querySelector('#eN').value.trim(), size=m.querySelector('#eZ').value.trim(), c=toCents(m.querySelector('#eP').value);
         if(!name){ toast('Type the product name'); return; } if(!(c>0)){ toast('Type a price, e.g. 25'); return; }
         const wT=m.querySelector('#eW').value.trim(), w=wT?toCents(wT):0; if(wT&&!(w>0)){ toast('Type the wholesale price, e.g. 18'); return; }
-        Object.assign(p,{name,size,price:c,wholesale:w||0,noWholesale:!(w>0)&&m.querySelector('#eNW').checked,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
+const doSave=()=>{         Object.assign(p,{name,size,price:c,wholesale:w||0,noWholesale:!(w>0)&&m.querySelector('#eNW').checked,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
         if(isNew){ p.id=SYNC.newId('products'); S.products.push(p); }
-        save(); close(); render(); toast('Saved '+prodName(p)+' at '+money(c/100)); };
+        save(); close(); render(); toast('Saved '+prodName(p)+' at '+money(c/100)); if(done) done(p); };
+        if(wasOff&&p.active!==false) withTillPin(name,doSave); else doSave(); };
     }; draw(); });
 }
 // delete has to replace the array contents in place (the sync module watches this array)
@@ -218,7 +247,7 @@ function priceCart(cart,disc){
   const lines=[]; let subtotal=0;
   for(const c of cart){ if(c.qty<1) continue;
     if(c.custom){ const u=c.custom; lines.push({pid:c.pid,name:u.name,size:u.size||'',qty:c.qty,unit:u.price,amount:u.price*c.qty,custom:true,approvedBy:u.approvedBy||null}); subtotal+=u.price*c.qty; continue; }
-    const p=S.products.find(x=>x.id===c.pid); if(!p) continue; lines.push({pid:p.id,name:p.name,size:p.size||'',qty:c.qty,unit:p.price,amount:p.price*c.qty}); subtotal+=p.price*c.qty; }
+    const p=S.products.find(x=>x.id===c.pid); if(!p) continue; lines.push(Object.assign({pid:p.id,name:p.name,size:p.size||'',qty:c.qty,unit:p.price,amount:p.price*c.qty},c.approvedBy?{approvedBy:c.approvedBy,offTill:true}:{})); subtotal+=p.price*c.qty; }
   const units=[]; lines.forEach(l=>{ for(let i=0;i<l.qty;i++) units.push({pid:l.pid,price:l.unit,used:false}); });
   units.sort((a,b)=>b.price-a.price);
   const deals=[]; let discount=0;

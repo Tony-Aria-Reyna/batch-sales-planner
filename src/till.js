@@ -124,6 +124,7 @@ function tillHtml(){
       ${undo?`<button class="btn danger" id="tUndo">↩ Undo last sale (${c2(lastSale.total)})</button>`:''}
       ${helper?'':`<button class="btn alt" id="tList">🧾 Sales <span class="lk">🔒</span></button>`}
       ${lock?`<button class="btn alt" id="tUnlock">🔓 Leave till mode <span class="lk">🔒</span></button>`:(helper?'':`<button class="btn alt" id="tLock">🤝 Hand to a helper</button>`)}
+      <button class="btn alt" id="tFind">🔍 Find</button>
       <button class="btn alt" id="tWho">👤 ${esc(servedBy()||'Who is serving?')}</button>
       ${helper?'':`<button class="btn alt" id="tFloat">💵 Float <span class="lk">🔒</span></button>`}
       ${helper?'':`<button class="btn alt" id="tEnd">🏁 End the day <span class="lk">🔒</span></button>`}</div>
@@ -153,7 +154,7 @@ function wireTill(){
   document.querySelectorAll('[data-discx]').forEach(b=>b.onclick=()=>{ cartDisc=null; saveCart(); render(); });
   wireSheet();
   const cc=$('#cCorrX'); if(cc) cc.onclick=()=>confirmBox('Cancel the correction?','The original sale stays as it was.','Cancel correction',()=>{ clearCart(); render(); });
-  $('#tExtra').onclick=addExtraItem;
+  $('#tExtra').onclick=addExtraItem; $("#tFind").onclick=tillFind;
   document.querySelectorAll('[data-pay]').forEach(b=>b.onclick=()=>pay(b.dataset.pay));
   const u=$('#tUndo'); if(u) u.onclick=undoLast;
   const tl=$('#tList'); if(tl) tl.onclick=()=>approve('see the sales',who=>showDaySales(who));
@@ -201,27 +202,59 @@ function giveDiscount(){
     }; draw(); });
 }
 
+/* ---------- 🔍 Find: any product, including ones off the till ----------
+   On-till products add straight to the sale. Off-till ones are greyed and struck through, and need an
+   owner's or manager's PIN: sold once (it stays off the till) or put back on the till. */
+function tillFind(){
+  modal((m,close)=>{ let q='';
+    const list=()=>{ const all=S.products.filter(p=>p.price>0).map(p=>({p,sc:fuzzyScore(q,p.name+' '+(p.size||''))})).filter(x=>x.sc>0)
+        .sort((a,b)=>(a.p.active===false)-(b.p.active===false)||b.sc-a.sc||prodName(a.p).localeCompare(prodName(b.p))).slice(0,40);
+      return all.length?all.map(({p})=>`<button class="frow ${p.active===false?'off':''}" data-fp="${p.id}"><span class="grow"><b>${esc(p.name)}</b><small>${esc(p.size||'')}${p.active===false?' · Not on the till · 🔒 needs a PIN':''}</small></span><b>${c2(p.price)}</b></button>`).join('')
+        :'<p class="note">Nothing matches. Use ＋ Item not on the till for something new.</p>'; };
+    m.innerHTML=`<h2>🔍 Find a product</h2><input class="txt" id="fQ" type="search" placeholder="Type part of the name, e.g. lav oil" autocomplete="off"><div class="findlist" id="fL">${list()}</div>
+      <div class="mact"><button class="btn alt" id="fC">Close</button></div>`;
+    const wireL=()=>m.querySelectorAll('[data-fp]').forEach(b=>b.onclick=()=>{ const p=S.products.find(x=>x.id===b.dataset.fp); if(!p) return;
+      if(p.active!==false){ close(); setQty(p.id,1); toast(prodName(p)+' added'); return; }
+      close(); sellOffTill(p); });
+    m.querySelector('#fQ').oninput=e=>{ q=e.target.value; m.querySelector('#fL').innerHTML=list(); wireL(); };
+    m.querySelector('#fC').onclick=close; wireL();
+    setTimeout(()=>{ const f=m.querySelector('#fQ'); if(f&&!m.contains(document.activeElement)) f.focus(); },50); },{big:true});
+}
+function sellOffTill(p){
+  modal((m,close)=>{ m.innerHTML=`<h2>${esc(prodName(p))} · ${c2(p.price)}</h2><p>This isn't on the till, so an owner or manager approves it with their PIN.</p>
+      <div class="mact"><button class="btn alt" id="oC">Cancel</button>${canManage()?'<button class="btn alt" id="oKeep">Sell and put it on the till</button>':''}<button class="btn" id="oOnce">Sell it once</button></div>`;
+    m.querySelector('#oC').onclick=close;
+    const go=keep=>{ close(); approve(keep?'put a product on the till':'sell an item not on the till',who=>{
+        if(keep){ p.active=true; p.updated=Date.now(); cart.push({pid:p.id,qty:1}); }
+        else { const c=cart.find(x=>x.pid===p.id); if(c){ c.qty++; c.approvedBy=who; } else cart.push({pid:p.id,qty:1,approvedBy:who}); }
+        saveCart(); save(); render(); toast(prodName(p)+(keep?' is back on the till':' added, just this once')+' · approved by '+personName(who)); },
+      prodName(p)+' at '+c2(p.price)+(keep?', put back on the till':', sold once')); };
+    m.querySelector('#oOnce').onclick=()=>go(false); const k=m.querySelector('#oKeep'); if(k) k.onclick=()=>go(true); });
+}
+
 /* ---------- an item that isn't on the till (needs a PIN) ---------- */
 function addExtraItem(){
-  modal((m,close)=>{ let col='other', keep=false;
+  modal((m,close)=>{ let col='other', keep='once';
     const draw=()=>{ const v=k=>{ const e=m.querySelector('#'+k); return e?e.value:''; }, n=v('xN'), z=v('xZ'), pr=v('xP');
       m.innerHTML=`<h2>＋ Item not on the till</h2><p class="note">For something without a button, e.g. a new batch or a market special. An owner or manager approves the price with their PIN.</p>
         <label class="note">What is it?</label><input class="txt" id="xN" autocapitalize="words" value="${esc(n)}">
         <label class="note">Size (optional)</label><input class="txt" id="xZ" value="${esc(z)}">
         <label class="note">Price, including GST</label><input class="txt" id="xP" inputmode="decimal" value="${esc(pr)}" placeholder="e.g. 18">
         <p class="note">Category</p><div class="colours">${Object.entries(COLOURS).map(([k,c])=>`<button data-c="${k}" class="${col===k?'on':''}" style="background:${c[0]};color:${c[1]}">${c[2]}</button>`).join('')}</div>
-        ${canManage()?`<label class="row" style="cursor:pointer"><input type="checkbox" id="xK" ${keep?'checked':''} style="width:26px;height:26px"><div class="grow">Also add it to the till for next time<small>It becomes a normal product button at this price</small></div></label>`:''}
+        ${canManage()?`<p class="note">Afterwards</p><div class="bigseg">${[['once','Just this sale'],['off','Add to products (off the till)'],['on','Add to products and the till']].map(([k,l])=>`<button data-keep="${k}" class="${keep===k?'on':''}">${l}</button>`).join('')}</div>
+          ${keep!=='once'?'<p class="note">It goes on the owners\' to-do list as "Finish setting up", to add its recipe, packaging and wholesale price.</p>':''}`:''}
         <div class="mact"><button class="btn alt" id="xC">Cancel</button><button class="btn" id="xOk">Approve with PIN</button></div>`;
       m.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{ col=b.dataset.c; draw(); });
-      const kk=m.querySelector('#xK'); if(kk) kk.onchange=()=>{ keep=kk.checked; };
+      m.querySelectorAll('[data-keep]').forEach(b=>b.onclick=()=>{ keep=b.dataset.keep; draw(); });
       m.querySelector('#xC').onclick=close;
       m.querySelector('#xOk').onclick=()=>{ const name=v('xN').trim(), size=v('xZ').trim(), price=toCents(v('xP'));
         if(!name){ toast('Say what the item is'); return; } if(!(price>0)){ toast('Type the price'); return; } close();
         approve('add an item not on the till',who=>{
-          if(keep){ const p={id:SYNC.newId('products'),name,size,price,colour:col,active:true,updated:Date.now(),addedAtTill:true,approvedBy:who}; S.products.push(p); cart.push({pid:p.id,qty:1}); }
+          if(keep!=='once'){ const p={id:SYNC.newId('products'),name,size,price,colour:col,active:keep==='on',updated:Date.now(),addedAtTill:true,approvedBy:who,needsSetup:true}; S.products.push(p);
+            cart.push(keep==='on'?{pid:p.id,qty:1}:{pid:p.id,qty:1,approvedBy:who}); setupTodo(p,who); }
           else cart.push({pid:'x-'+Date.now().toString(36),qty:1,custom:{name,size,price,colour:col,approvedBy:who}});
           saveCart(); save(); render(); toast(name+' added · approved by '+personName(who)); },
-          name+(size?' '+size:'')+' at '+c2(price)+(keep?', added to the till':', one-off')); };
+          name+(size?' '+size:'')+' at '+c2(price)+(keep==='on'?', added to the till':keep==='off'?', added to products (off the till)':', one-off')); };
     }; draw(); setTimeout(()=>{ if(!m.contains(document.activeElement)) m.querySelector('#xN').focus(); },50); });
 }
 

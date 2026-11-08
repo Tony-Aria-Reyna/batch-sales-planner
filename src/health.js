@@ -9,7 +9,7 @@ const sizeUnit=p=>{ const m=String((p&&p.size)||'').toLowerCase().match(/\d\s*(m
 const noPrice=i=>!!i&&!(i.price>0)&&!i.free;          // an ingredient or packaging at $0 that isn't ticked free
 
 function productIssues(p){
-  const out=[]; if(!p||p.active===false) return out;
+  const out=[]; if(!p) return out;
   const r=recipeOf(p);
   if(!(p.price>0)) out.push({t:'No till price',fix:'product'});
   if(p.recipe&&!r) out.push({t:'Its recipe has been deleted',fix:'link'});
@@ -38,7 +38,7 @@ function inputIssues(i){
 function healthIssues(){
   if(role()!=='owner') return [];
   const g=[];
-  S.products.filter(p=>p.active!==false).sort((a,b)=>prodName(a).localeCompare(prodName(b))).forEach(p=>{ const l=productIssues(p); if(l.length) g.push({kind:'product',id:p.id,name:prodName(p),issues:l}); });
+  S.products.filter(p=>p.active!==false||p.needsSetup).sort((a,b)=>prodName(a).localeCompare(prodName(b))).forEach(p=>{ const l=productIssues(p); if(l.length) g.push({kind:'product',id:p.id,name:prodName(p),issues:l}); });
   S.recipes.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{ const l=recipeIssues(r); if(l.length) g.push({kind:'recipe',id:r.id,name:r.name,issues:l}); });
   S.inputs.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(i=>{ const l=inputIssues(i); if(l.length) g.push({kind:'input',id:i.id,name:i.name,issues:l}); });
   return g;
@@ -68,4 +68,27 @@ function attentionCard(){
   const g=healthIssues(); if(!g.length) return '';
   const n=g.reduce((a,x)=>a+x.issues.length,0);
   return `<div class="card attncard"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>⚠️ ${n} thing${n===1?'':'s'} need${n===1?'s':''} attention</b><small>${esc(g[0].name)}: ${esc(g[0].issues[0].t)}${g.length>1?' · and '+(g.length-1)+' more':''}</small></div><button class="btn small" id="hAttn">Show</button></div></div>`;
+}
+
+/* ---------- "Finish setting up" a product added at the till ----------
+   A to-do on the owners' list. Tapping it opens each window that's still needed, one after another
+   (price and wholesale, then which recipe and how much, then packaging, adding any new ingredient or
+   packaging on the way), skipping what's done. It ticks itself off once nothing is missing. */
+function setupTodo(p,who){
+  if(S.todos.some(t=>t.setup===p.id&&!t.done)) return;
+  S.todos.push({id:SYNC.newId('todos'),text:'Finish setting up '+prodName(p),setup:p.id,who:who||SYNC.me(),done:false,due:'',by:SYNC.me(),at:Date.now()});
+}
+function setupDone(p){
+  p.needsSetup=false; p.updated=Date.now();
+  S.todos.filter(t=>t.setup===p.id&&!t.done).forEach(t=>Object.assign(t,{done:true,doneAt:Date.now(),doneBy:SYNC.me()}));
+}
+function finishSetup(pid,seen){
+  seen=seen||new Set(); const p=S.products.find(x=>x.id===pid);
+  if(!p){ S.todos.filter(t=>t.setup===pid&&!t.done).forEach(t=>t.done=true); save(); render(); toast('That product has been deleted'); return; }
+  if(role()!=='owner'){ toast('Recipes and costs are for owners: an owner finishes this one'); return; }
+  const left=productIssues(p), next=left.find(x=>x.fix==='product'&&!seen.has(x.fix))||left.find(x=>!seen.has(x.fix));   // prices first, then the recipe link
+  if(!left.length){ setupDone(p); save(); render(); toast('✓ '+prodName(p)+' is all set up'); return; }
+  if(!next){ save(); render(); toast('Still missing: '+left.map(x=>x.t.replace(/ \(or .*\)$/,'').toLowerCase()).join(', ')+'. It stays on the to-do list.'); return; }
+  seen.add(next.fix); const go=()=>finishSetup(pid,seen);
+  if(next.fix==='product') editProduct(p,go); else editLink(p,go);
 }

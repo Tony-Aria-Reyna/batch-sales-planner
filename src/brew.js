@@ -265,38 +265,41 @@ function inputsHtml(){
     ${['ingredient','packaging'].map(c=>{ const g=l.filter(i=>(i.cat||'ingredient')===c); return g.length?`<h3 style="margin-top:14px">${c==='ingredient'?'Ingredients':'Packaging'}</h3>`+g.map(i=>{ const st=inputStock(i.id);
       return `<button class="row prow" data-in="${i.id}"><div class="grow">${esc(i.name)}${inputIssues(i).map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${i.free&&!(i.price>0)?'Free · packs of '+fmtQty(i.pack,i.unit):`${c2(i.price)} for ${fmtQty(i.pack,i.unit)}${i.unit==='each'?' each':''} · ${c2(inputCost(i)*(i.unit==='each'?1:(i.unit==='g'||i.unit==='ml'?100:1)))} per ${i.unit==='each'?'one':'100 '+i.unit}`}${st!=null?' · have '+fmtQty(st,i.unit):''}</small></div><span class="chev">›</span></button>`; }).join(''):''; }).join('')||'<p class="note">None yet.</p>'}</div>`;
 }
-function editInput(src){
+function editInput(src,done){
   const isNew=!src.id, i=Object.assign({name:'',cat:'ingredient',price:0,pack:1,unit:'g',supplier:''},src);
   modal((m,close)=>{ m.innerHTML=`<h2>${isNew?'Add an ingredient or packaging':esc(i.name)}</h2>
       <label class="note" for="iN">Name</label><input class="txt" id="iN" value="${esc(i.name)}" autocapitalize="sentences">
       <div class="bigseg"><button data-cat="ingredient" class="${i.cat!=='packaging'?'on':''}">🌿 Ingredient</button><button data-cat="packaging" class="${i.cat==='packaging'?'on':''}">🫙 Packaging</button></div>
       <div class="formrow"><div><label class="note" for="iP">Price you pay for a pack, ex GST ($)</label><input class="txt" id="iP" inputmode="decimal" value="${i.price?(i.price/100).toFixed(2):''}"></div>
         <div><label class="note" for="iK">Pack size (in the unit below)</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
-      <label class="tickrow"><input type="checkbox" id="iFree" ${i.free?'checked':''}><span>Yes, this is free <small class="note">(e.g. grown at home), so $0 is right</small></span></label>
+      <label class="tickrow freebox ${i.free?'green':'red'}" id="iFreeBox" style="${i.price>0?'display:none':''}"><input type="checkbox" id="iFree" ${i.free?'checked':''}><span><b>Yes, this is free</b> <small>(e.g. grown at home), so $0 is right</small></span></label>
       <label class="note" for="iU">Measured</label><select class="txt" id="iU">${UNITS.map(u=>`<option value="${u}" ${i.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select>
       <label class="note" for="iS">Supplier (optional)</label><input class="txt" id="iS" value="${esc(i.supplier||'')}">
-      <label class="note" for="iH">How much you have now (optional, starts tracking it)</label><input class="txt" id="iH" type="number" min="0" step="any" placeholder="${inputStock(i.id)!=null?inputStock(i.id):'not tracked'}">
+      <label class="note" for="iH">How much you have now (optional, starts tracking it)</label><input class="txt" id="iH" type="number" min="0" step="any" placeholder="${i.id&&inputStock(i.id)!=null?inputStock(i.id):'not tracked'}">
       <div class="mact">${isNew?'':'<button class="btn danger" id="iD">Delete</button>'}<button class="btn alt" id="iC">Cancel</button><button class="btn" id="iOk">Save</button></div>`;
+    // the "free" tick only appears at $0: red until it's ticked, then green
+    const fb=m.querySelector('#iFreeBox'), fr=m.querySelector('#iFree'), paint=()=>{ const zero=!(toCents(m.querySelector('#iP').value||'0')>0); fb.style.display=zero?'':'none'; fb.classList.toggle('green',zero&&fr.checked); fb.classList.toggle('red',zero&&!fr.checked); };
+    m.querySelector('#iP').oninput=paint; fr.onchange=paint; paint();
     let cat=i.cat; m.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{ cat=b.dataset.cat; m.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on',x===b)); });
     m.querySelector('#iC').onclick=close;
     const d=m.querySelector('#iD'); if(d) d.onclick=()=>{ if(S.recipes.some(r=>(r.lines||[]).some(l=>l.input===i.id))||S.products.some(p=>(p.pack||[]).some(l=>l.input===i.id))){ toast('It\'s used in a recipe or product: take it out there first'); return; }
       const k=S.inputs.findIndex(x=>x.id===i.id); if(k>=0) S.inputs.splice(k,1); save(); close(); render(); };
     m.querySelector('#iOk').onclick=()=>{ const name=m.querySelector('#iN').value.trim(), price=toCents(m.querySelector('#iP').value||'0'), pack=+m.querySelector('#iK').value, unit=m.querySelector('#iU').value;
-      if(!name){ toast('Type the name'); return; } if(!(pack>0)){ toast('Type the pack size'); return; } const free=m.querySelector('#iFree').checked;
+      if(!name){ toast('Type the name'); return; } if(!(pack>0)){ toast('Type the pack size'); return; } const free=!(price>0)&&m.querySelector('#iFree').checked;
       if(!(price>0)&&!free){ toast('Type the price, or tick "Yes, this is free"'); return; }
       const changed=!isNew&&(price!==i.price||pack!==i.pack);
       Object.assign(i,{name:name.slice(0,80),cat,price:price>0?price:0,free:free&&!(price>0),pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),updated:Date.now()});
       if(isNew){ i.id=SYNC.newId('inputs'); S.inputs.push(i); } else Object.assign(S.inputs.find(x=>x.id===i.id),i);
       if(isNew||changed) S.prices.push({id:SYNC.newId('prices'),input:i.id,item:i.name,cents:price,pack,unit,date:nzDay(),at:Date.now(),by:SYNC.me(),from:'setup'});
       const h=m.querySelector('#iH').value; if(h!=='') moveStock({kind:'count',input:i.id,qty:Math.max(0,+h)});
-      save(); close(); render(); toast('Saved'); }; });
+      save(); close(); render(); toast('Saved'); if(done) done(i); }; });
 }
 function recipesHtml(){
   return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="addRec">＋ Add a recipe</button></div>
     ${S.recipes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>`<button class="row prow" data-rec="${r.id}"><div class="grow">${esc(r.name)}<small>Makes ${fmtQty(r.yield,r.unit)} · ${(r.lines||[]).length} ingredient${(r.lines||[]).length===1?'':'s'} · ${c2(recipeCost(r))} a batch</small></div><span class="chev">›</span></button>`).join('')||'<p class="note">No recipes yet.</p>'}
     <p class="note">Recipes are only ever seen by owners.</p></div>`;
 }
-function editRecipe(src){
+function editRecipe(src,done){
   const isNew=!src.id, r=JSON.parse(JSON.stringify(Object.assign({name:'',yield:1000,unit:'ml',lines:[]},src)));
   const ins=S.inputs.filter(i=>i.cat!=='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ m.innerHTML=`<h2>${isNew?'Add a recipe':esc(r.name)}</h2>
@@ -305,20 +308,21 @@ function editRecipe(src){
         <div><label class="note" for="rU">Measured</label><select class="txt" id="rU">${UNITS.map(u=>`<option value="${u}" ${r.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select></div></div>
       ${recipeIssues(r).filter(x=>!/batch size|ingredients/.test(x.t)).map(x=>`<p class="note clash">⚠️ ${esc(x.t)}</p>`).join('')}
       <h3>In one batch</h3>${r.lines.map((l,k)=>{ const i=S.inputs.find(x=>x.id===l.input); return `<div class="lrow"><select class="txt grow" data-li="${k}">${ins.map(x=>`<option value="${x.id}" ${x.id===l.input?'selected':''}>${esc(x.name)}</option>`).join('')}</select><input class="txt qty" type="number" min="0" step="any" data-lq="${k}" value="${l.qty}"><span class="unit">${i?esc(i.unit):''}</span><button class="qb rm" data-lx="${k}">✕</button></div>`; }).join('')}
-      ${ins.length?'<button class="btn alt small" id="rAdd">＋ Add an ingredient</button>':'<p class="note">Add ingredients first.</p>'}
+      <div class="mact" style="justify-content:flex-start;margin-top:6px">${ins.length?'<button class="btn alt small" id="rAdd">＋ Add an ingredient</button>':''}<button class="btn alt small" id="rNewI">＋ New ingredient</button></div>
       <p class="note">Batch cost ${c2(recipeCost(r))} ex GST.</p>
       <div class="mact">${isNew?'':'<button class="btn danger" id="rD">Delete</button>'}<button class="btn alt" id="rC">Cancel</button><button class="btn" id="rOk">Save</button></div>`;
       const grab=()=>{ r.name=m.querySelector('#rN').value; r.yield=+m.querySelector('#rY').value||0; r.unit=m.querySelector('#rU').value;
         m.querySelectorAll('[data-li]').forEach(s=>r.lines[+s.dataset.li].input=s.value); m.querySelectorAll('[data-lq]').forEach(s=>r.lines[+s.dataset.lq].qty=+s.value||0); };
       m.querySelectorAll('[data-li],[data-lq],#rY').forEach(x=>x.onchange=()=>{ grab(); draw(); });
       const a=m.querySelector('#rAdd'); if(a) a.onclick=()=>{ grab(); r.lines.push({input:ins[0].id,qty:0}); draw(); };
+      m.querySelector('#rNewI').onclick=()=>{ grab(); close(); editInput({cat:'ingredient',unit:r.unit==='each'?'g':r.unit},i2=>{ r.lines.push({input:i2.id,qty:0}); editRecipe(r,done); }); };
       m.querySelectorAll('[data-lx]').forEach(b=>b.onclick=()=>{ grab(); r.lines.splice(+b.dataset.lx,1); draw(); });
       m.querySelector('#rC').onclick=close;
       const d=m.querySelector('#rD'); if(d) d.onclick=()=>{ if(S.products.some(p=>p.recipe===r.id)){ toast('Products use this recipe: unlink them first'); return; } const k=S.recipes.findIndex(x=>x.id===r.id); if(k>=0) S.recipes.splice(k,1); save(); close(); render(); };
       m.querySelector('#rOk').onclick=()=>{ grab(); r.name=r.name.trim(); if(!r.name){ toast('Type the name'); return; } if(!(r.yield>0)){ toast('Type what one batch makes'); return; }
         r.lines=r.lines.filter(l=>l.qty>0); r.updated=Date.now(); delete r.unitGuessed;
         if(isNew){ r.id=SYNC.newId('recipes'); S.recipes.push(r); } else { const o=S.recipes.find(x=>x.id===r.id); delete o.unitGuessed; Object.assign(o,r); }
-        save(); close(); render(); toast('Saved'); }; };
+        save(); close(); render(); toast('Saved'); if(done) done(r); }; };
     draw(); },{big:true});
 }
 function linksHtml(){
@@ -327,29 +331,32 @@ function linksHtml(){
       const iss=productIssues(p).filter(x=>x.fix==='link');
       return `<button class="row prow" data-link="${p.id}"><div class="grow">${esc(prodName(p))}${iss.map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${r?esc(r.name)+(p.fill>0?' · '+fmtQty(p.fill,r.unit)+' each':'')+(c!=null?' · costs '+c2(c)+' · sells '+c2(Math.round(p.price/1.15))+' ex GST · margin '+Math.round((1-c/(p.price/1.15))*100)+'%':''):p.noRecipe?'Bought in, not made here':''}</small></div><span class="chev">›</span></button>`; }).join('')}</div>`;
 }
-function editLink(p){
-  const v=JSON.parse(JSON.stringify({recipe:p.recipe||(p.noRecipe?'-':''),fill:p.fill||'',pack:p.pack||[],noPack:!!p.noPack})), packs=S.inputs.filter(i=>i.cat==='packaging').sort((a,b)=>a.name.localeCompare(b.name));
+function editLink(p,done,keepV){
+  const v=keepV||JSON.parse(JSON.stringify({recipe:p.recipe||(p.noRecipe?'-':''),fill:p.fill||'',pack:p.pack||[],noPack:!!p.noPack})), packs=S.inputs.filter(i=>i.cat==='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ const r=S.recipes.find(x=>x.id===v.recipe);
       m.innerHTML=`<h2>${esc(prodName(p))}</h2>
         <label class="note" for="lR">Made from</label><select class="txt" id="lR"><option value="" ${v.recipe===''?'selected':''}>Choose a recipe…</option><option value="-" ${v.recipe==='-'?'selected':''}>Bought in, not made here</option>${S.recipes.map(x=>`<option value="${x.id}" ${x.id===v.recipe?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+        <p style="margin:6px 0 0"><button class="linkb" id="lNewR">＋ A new recipe</button></p>
         ${v.recipe===''?'<p class="note clash">⚠️ Choose its recipe, or "Bought in, not made here"</p>':''}
         ${r?`<label class="note" for="lF">How much goes in each one</label><div class="unitin"><input class="txt" id="lF" type="number" min="0" step="any" value="${v.fill}" placeholder="e.g. ${r.unit==='g'?'15':'30'}"><span class="u">${esc(r.unit)}</span></div>
           ${!(v.fill>0)?'<p class="note clash">⚠️ Needed for brew amounts and the cost of each one</p>':''}
           ${r.unit==='each'&&sizeUnit(p)?`<p class="note clash">⚠️ ${esc(r.name)} is measured in "each", but this is a ${esc(sizeUnit(p))} product. <button class="linkb" id="lRU">Change the recipe's unit</button></p>`:''}`:''}
         <h3>Packed in (each)</h3>${v.pack.map((l,k)=>`<div class="lrow"><select class="txt grow" data-pi="${k}">${packs.map(x=>`<option value="${x.id}" ${x.id===l.input?'selected':''}>${esc(x.name)}</option>`).join('')}</select><input class="txt qty" type="number" min="0" step="any" data-pq="${k}" value="${l.qty}"><button class="qb rm" data-px="${k}">✕</button></div>`).join('')}
-        ${packs.length?'<button class="btn alt small" id="lAdd">＋ Add packaging</button>':'<p class="note">Add packaging items first.</p>'}
+        <div class="mact" style="justify-content:flex-start;margin-top:6px">${packs.length?'<button class="btn alt small" id="lAdd">＋ Add packaging</button>':''}<button class="btn alt small" id="lNewP">＋ New packaging item</button></div>
         ${v.recipe&&v.recipe!=='-'&&!v.pack.length?`<label class="tickrow"><input type="checkbox" id="lNP" ${v.noPack?'checked':''}><span>No packaging needed</span></label>`:''}
         <div class="mact"><button class="btn alt" id="lC">Cancel</button><button class="btn" id="lOk">Save</button></div>`;
       const grab=()=>{ v.recipe=m.querySelector('#lR').value; const f=m.querySelector('#lF'); if(f) v.fill=+f.value||0; const np=m.querySelector('#lNP'); if(np) v.noPack=np.checked;
         m.querySelectorAll('[data-pi]').forEach(s=>v.pack[+s.dataset.pi].input=s.value); m.querySelectorAll('[data-pq]').forEach(s=>v.pack[+s.dataset.pq].qty=+s.value||0); };
       m.querySelector('#lR').onchange=()=>{ grab(); draw(); }; const lf=m.querySelector('#lF'); if(lf) lf.onchange=()=>{ grab(); draw(); };
       const ru=m.querySelector('#lRU'); if(ru) ru.onclick=()=>{ close(); editRecipe(r); };
+      m.querySelector('#lNewR').onclick=()=>{ grab(); close(); editRecipe({name:p.name},r2=>{ v.recipe=r2.id; editLink(p,done,v); }); };
+      m.querySelector('#lNewP').onclick=()=>{ grab(); close(); editInput({cat:'packaging',unit:'each',pack:1},i2=>{ v.pack.push({input:i2.id,qty:1}); editLink(p,done,v); }); };
       const a=m.querySelector('#lAdd'); if(a) a.onclick=()=>{ grab(); v.pack.push({input:packs[0].id,qty:1}); draw(); };
       m.querySelectorAll('[data-px]').forEach(b=>b.onclick=()=>{ grab(); v.pack.splice(+b.dataset.px,1); draw(); });
       m.querySelector('#lC').onclick=close;
       m.querySelector('#lOk').onclick=()=>{ grab(); const made=v.recipe&&v.recipe!=='-'; if(made&&!(v.fill>0)){ toast('Type how much goes in each one'); return; }
         const pk=v.pack.filter(l=>l.qty>0);
-        Object.assign(p,{recipe:made?v.recipe:'',noRecipe:v.recipe==='-',fill:made?v.fill:0,pack:pk,noPack:!pk.length&&!!v.noPack,updated:Date.now()}); save(); close(); render(); toast('Saved'); }; };
+        Object.assign(p,{recipe:made?v.recipe:'',noRecipe:v.recipe==='-',fill:made?v.fill:0,pack:pk,noPack:!pk.length&&!!v.noPack,updated:Date.now()}); save(); close(); render(); toast('Saved'); if(done) done(p); }; };
     draw(); });
 }
 

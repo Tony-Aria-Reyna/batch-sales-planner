@@ -45,7 +45,7 @@ function wireTodo(){
     S.todos.push({id:SYNC.newId('todos'),text,who,done:false,due:'',by:SYNC.me(),at:Date.now()}); save(); render(); });
   document.querySelectorAll('[data-tw]').forEach(b=>b.onclick=()=>{ todoWho=b.dataset.tw; lsSet('rs.todowho',todoWho); render(); });
   document.querySelectorAll('[data-tick]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.tick); if(!t) return; t.done=!t.done; t.doneAt=t.done?Date.now():null; t.doneBy=t.done?SYNC.me():null; save(); render(); });
-  document.querySelectorAll('.ltxt[data-todo]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.todo); if(t) openTodo(t); });
+  document.querySelectorAll('.ltxt[data-todo]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.todo); if(!t) return; if(t.setup&&!t.done&&typeof finishSetup==='function') finishSetup(t.setup); else openTodo(t); });
 }
 // change a to-do (also opened from the Calendar). Helpers can change only their own and can't hand it on.
 function openTodo(src){
