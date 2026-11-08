@@ -122,7 +122,8 @@ export function start(businessId, state, changed) {
     const d = snap.data(); members = d.members || []; owners = d.owners || []; mainOwner = d.owner || null; roles = d.roles || {};
     S.name = d.name || ''; S.settings = Object.assign(S.settings || {}, d.settings || {});
     S.receiptHelper = d.receiptHelper || null;
-    S.aiUsage = d.aiUsage || null;                // written by the helper: voice notes worked out this month   // written by the Google helper script: last run, account, errors
+    S.aiUsage = d.aiUsage || null;
+    S.shopifyHelper = d.shopifyHelper || null;     // written by the helper: last Shopify check                // written by the helper: voice notes worked out this month   // written by the Google helper script: last run, account, errors
     synced.biz = JSON.stringify(bizOf(S));
     onChange('business');
     if (first) { first = false; listenCols(); }                   // the role decides which collections we may read

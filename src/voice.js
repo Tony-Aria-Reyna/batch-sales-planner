@@ -91,11 +91,14 @@ function waitForNote(id,opts){
   },{sticky:true});
 }
 // what to call a draft, and whether this person may save it
-const DRAFT_ICON={event:'📅',todo:'✅',shopping:'🛒',idea:'💡'};
-const draftAllowed=d=>canManage()?true:(d.kind==='shopping'||(d.kind==='todo'&&(!d.todo.who||d.todo.who===SYNC.me())));
+const DRAFT_ICON={event:'📅',todo:'✅',shopping:'🛒',idea:'💡',order:'📦'};
+const normName=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const findProduct=n=>S.products.find(p=>normName(prodName(p))===normName(n)||normName(p.name+' '+(p.size||''))===normName(n))||S.products.find(p=>normName(n).includes(normName(p.name))&&normName(p.name).length>3);
+const draftAllowed=d=>canManage()?true:d.kind==='order'?false:(d.kind==='shopping'||(d.kind==='todo'&&(!d.todo.who||d.todo.who===SYNC.me())));
 function draftLine(d){
   if(d.kind==='event'){ const e=d.event; return `${calType(e).t}: ${e.title||'?'}, ${e.date?nzDate(kd(e.date),{weekday:'short',day:'numeric',month:'short'}):'no date'}${e.time?' '+t12(e.time)+(e.end?'–'+t12(e.end):''):''}`; }
   if(d.kind==='todo') return 'To do: '+d.todo.text+(d.todo.due?', '+nzDate(kd(d.todo.due),{weekday:'short',day:'numeric',month:'short'}):'');
+  if(d.kind==='order') return 'Order: '+(d.order.customer||'?')+', '+d.order.lines.map(l=>l.qty+' × '+l.product).join(', ')+(d.order.due?', send by '+nzDate(kd(d.order.due),{weekday:'short',day:'numeric',month:'short'}):'');
   if(d.kind==='shopping') return 'Buy: '+[d.shopping.qty>1?d.shopping.qty+' ×':'',d.shopping.item,d.shopping.size].filter(Boolean).join(' ');
   return (IDEA_KINDS[d.idea.kind]||'💡 Idea')+': '+d.idea.text;
 }
@@ -123,6 +126,8 @@ function reviewNote(n,opts={}){
       if(d.kind==='todo') body=field(d,i,'text','What')+`<div class="formrow"><div>${field(d,i,'due','Date','date')}</div><div>${field(d,i,'time','Time','time')}</div></div>`
         +(canManage()?`<label class="note" for="d${i}who">Whose</label><select class="txt" id="d${i}who" data-di="${i}" data-dk="who">${[...new Set([SYNC.me(),...SYNC.getMembers()])].map(p=>`<option value="${esc(p)}" ${(d.todo.who||SYNC.me())===p?'selected':''}>${esc(p===SYNC.me()?'Mine':personName(p))}</option>`).join('')}</select>`:'');
       if(d.kind==='shopping') body=field(d,i,'item','What')+`<div class="formrow"><div>${field(d,i,'qty','How many','number','min="1"')}</div><div>${field(d,i,'size','Size')}</div></div>`;
+      if(d.kind==='order') body=field(d,i,'customer','Customer')+field(d,i,'due','Send by','date')
+        +d.order.lines.map((l,k)=>{ const p=findProduct(l.product); return `<div class="lrow"><input class="txt qty" type="number" min="0" data-ol="${i}:${k}" value="${l.qty}"><div class="grow ltxt"><b>${esc(p?prodName(p):l.product)}</b><small>${p?'':'Not a till product: it will be kept as typed'}</small></div></div>`; }).join('');
       if(d.kind==='idea') body=`<div class="pastnames">${Object.entries(IDEA_KINDS).map(([k,v])=>`<button class="chip ${d.idea.kind===k?'on':''}" data-ik2="${i}:${k}">${v}</button>`).join('')}</div>`+field(d,i,'text','Note');
       return `<div class="card draft ${done?'settled':''}" id="dc${i}"><h3>${DRAFT_ICON[d.kind]} ${esc(draftLine(d))}</h3>
         ${blocked?'<p class="note">Only owners and managers can add this. Ask them, or add it to your own to-dos.</p>':state[i]==='saved'?'<p class="note">✓ Saved</p>':state[i]==='dropped'?'<p class="note">Left out</p>':body+`<div class="mact"><button class="btn alt" data-drop="${i}">Leave out</button><button class="btn" data-save1="${i}">✓ Save</button></div>`}</div>`; };
@@ -136,6 +141,7 @@ function reviewNote(n,opts={}){
       m.querySelectorAll('[data-dk]').forEach(el=>{ const d=drafts[+el.dataset.di], o=d[d.kind], k=el.dataset.dk; if(el.tagName!=='SELECT') el.value=o[k]==null?'':o[k];
         el.oninput=el.onchange=()=>{ o[k]=el.type==='number'?Math.max(1,+el.value||1):el.value; el.classList.remove('unsure');
           if(d.kind==='event'){ const c=m.querySelector('#d'+el.dataset.di+'clash'); if(c) c.textContent=clashOf(o); } }; });
+      m.querySelectorAll('[data-ol]').forEach(el=>el.onchange=()=>{ const [i,k]=el.dataset.ol.split(':'); drafts[+i].order.lines[+k].qty=Math.max(0,Math.floor(+el.value||0)); });
       m.querySelectorAll('[data-ety]').forEach(b=>b.onclick=()=>{ const [i,k]=b.dataset.ety.split(':'); drafts[+i].event.type=k; draw(); });
       m.querySelectorAll('[data-ik2]').forEach(b=>b.onclick=()=>{ const [i,k]=b.dataset.ik2.split(':'); drafts[+i].idea.kind=k; draw(); });
       m.querySelectorAll('[data-drop]').forEach(b=>b.onclick=()=>{ state[+b.dataset.drop]='dropped'; draw(); });
@@ -161,6 +167,10 @@ function saveDraft(d){
   if(d.kind==='todo'){ const t=d.todo; if(!t.text) return 'Add what to do'; const who=canManage()&&SYNC.getMembers().concat(me).includes(t.who)?t.who:me;
     S.todos.push({id:SYNC.newId('todos'),text:t.text.slice(0,200),who,due:t.due||'',time:t.due?t.time||'':'',done:false,by:me,at:Date.now(),from:'voice'}); }
   if(d.kind==='shopping'){ const x=d.shopping; if(!x.item) return 'Add what to buy'; S.shopping.push({id:SYNC.newId('shopping'),item:x.item.slice(0,120),qty:Math.max(1,+x.qty||1),size:(x.size||'').slice(0,40),done:false,by:me,at:Date.now(),from:'voice'}); }
+  if(d.kind==='order'){ const x=d.order; if(!x.customer) return 'Add who the order is for'; const lines=x.lines.filter(l=>l.qty>0).map(l=>{ const p=findProduct(l.product); return {pid:p?p.id:'',name:p?prodName(p):l.product,qty:l.qty,unit:p?(p.wholesale||p.price):0}; });
+    if(!lines.length) return 'Add what they ordered'; const shop=S.places.find(p=>!p.gone&&p.channel==='wholesale'&&normName(p.name)===normName(x.customer));
+    const o={id:SYNC.newId('orders'),source:shop?'wholesale':'custom',customer:{name:x.customer,email:'',phone:'',address:''},place:shop?shop.id:'',lines,due:x.due||'',paid:false,note:x.note||'',discount:0,shipping:0,status:'new',at:Date.now(),date:nzDay(),by:me,from:'voice'};
+    o.total=orderTotal(o); o.gst=Math.round(o.total*3/23); S.orders.push(o); }
   if(d.kind==='idea'){ const x=d.idea; if(!x.text) return 'Add the idea'; S.ideas.push({id:SYNC.newId('ideas'),text:x.text.slice(0,200),kind:x.kind||'idea',by:me,at:Date.now(),done:false,from:'voice'}); }
   return '';
 }

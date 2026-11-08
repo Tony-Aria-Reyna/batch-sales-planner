@@ -156,6 +156,10 @@ body:has(.rcal) main{min-height:0}
 .stockhead{font-size:14px;color:var(--muted);padding-bottom:6px}.stockhead b,.stockrow b{text-align:center}
 .stockrow{width:100%;text-align:left;padding:12px 0;border-top:1px solid var(--line);font-size:18px}.stockrow b{font-size:20px}.stockrow b.zero{color:var(--danger)}
 .ptile .pout{position:absolute;left:10px;top:10px;background:rgba(255,255,255,.85);color:var(--danger);font-size:12px;font-weight:800;border-radius:99px;padding:2px 8px}
+.orow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 0;border-top:1px solid var(--line);min-height:72px}.orow:first-child{border-top:0}
+.orow .grow{flex:1;min-width:0}.orow b{display:block;font-weight:600}.orow small{display:block;color:var(--muted);font-size:15px}
+.ost{flex:none;border-radius:99px;padding:5px 12px;font-weight:700;font-size:14px;background:#efe7d6}.ost.new{background:#fbe9c9;color:#8a5a0a}.ost.packed{background:#e2ecf7;color:#2a5a8a}.ost.sent{background:#e3efdb;color:var(--ok)}.ost.cancelled{background:#eee;color:#888}
+.pqty{flex:none;font-size:22px;min-width:52px}.packslip{background:#fbfaf5}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -400,7 +404,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -470,7 +474,7 @@ const TILES=[
   {id:'sell', ic:'🧺', h:'Sell', p:'Market, farm gate, tour or shop', all:true},
   {id:'calendar', ic:'📅', h:'Calendar', p:'Markets, brew days, orders, to-dos', all:true},
   {id:'brew', ic:'🫙', h:'Brew', p:'What to make, batches and stock', all:true},
-  {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify', phase:4},
+  {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify'},
   {id:'lists', ic:'✅', h:'Lists', p:'To do, shopping and ideas', all:true},
   {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', phase:5},
   {id:'setup', ic:'⚙️', h:'Setup', p:'Products, prices, people, PIN', lock:true},
@@ -485,7 +489,7 @@ SCREENS.home={
         <div><span>Today's takings</span>${canManage()&&!tillLock()?(Date.now()<moneyUntil?`<b>${c2(taken)}</b>`:`<b><button class="linkb" id="showMoney" style="font-size:22px;color:var(--green)">🔒 Show</button></b>`):'<b>—</b>'}</div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
         <div><span>Batches due</span><b>${S.plans.filter(p=>p.status!=='made'&&p.date<=dk(addDays(kd(nzDay()),7))).length}</b></div>
-        <div><span>Orders due</span><b>0</b></div>
+        <div><span>Orders to send</span><b>${canManage()?openOrders().length:'—'}</b></div>
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
@@ -501,7 +505,6 @@ SCREENS.home={
 
 /* ---------- screens still to build: say what they will do ---------- */
 const COMING={
-  orders:{ic:'📦',h:'Orders',phase:4,what:['Wholesale and custom orders: who, what, when due, paid or not','Shopify orders arrive by themselves, ready to pack, with a notification']},
   reports:{ic:'📈',h:'Reports',phase:5,what:['Takings by day, channel and product','Monthly profit after costs, and break-even','GST collected, for the GST return']},
 };
 for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
@@ -513,7 +516,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=3;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=4;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -557,6 +560,11 @@ SCREENS.setup={
       <label class="note" for="vUrl">Helper web address (makes replies near-instant; from the helper's Deploy → Web app)</label><input class="txt" id="vUrl" inputmode="url" autocapitalize="none" value="${esc(S.settings.voiceUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
       <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div></div>`:''}
 
+    ${role()==='owner'?`<div class="card"><h3>🛍️ Shopify</h3>
+      <p class="note">Online orders are copied into Orders every 15 minutes by the business helper, using a read-only app made in Shopify's Dev Dashboard. Its keys stay in the helper, never in the app.</p>
+      <label class="note" for="shShop">Shop address</label><input class="txt" id="shShop" autocapitalize="none" value="${esc(S.settings.shopifyShop||'')}" placeholder="yourshop.myshopify.com">
+      <div class="row"><div class="grow"><b>Last check</b><small>${S.shopifyHelper&&S.shopifyHelper.lastRun?agoText(S.shopifyHelper.lastRun)+(S.shopifyHelper.error?' · ⚠️ '+esc(S.shopifyHelper.error):' · OK'):'Not yet'}</small></div></div></div>`:''}
+
     <div class="card"><h3>💌 Customer contacts</h3>
       <div class="row"><div class="grow"><b>Loyalty programme and receipt-only emails</b><small>${(()=>{ const l=contactList(); return l.filter(c=>c.loyalty).length+' in the Loyalty programme · '+l.filter(c=>!c.loyalty).length+' receipt only'; })()}</small></div><button class="btn small" id="goContacts">Open</button></div></div>
 
@@ -592,6 +600,7 @@ SCREENS.setup={
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
+    const ss=$('#shShop'); if(ss) ss.onchange=()=>{ const v=ss.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if(v&&!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v)){ toast('Use the address ending in .myshopify.com'); ss.value=S.settings.shopifyShop||''; return; } S.settings.shopifyShop=v; save(); toast('Saved'); };
     const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
@@ -847,6 +856,7 @@ function syncChanged(what,err){
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
   clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
     const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);
+    if(what==='orders'||what==='business') try{ settleOrders(); }catch(e){}
     if(!typing) render(); gate(null); },60);
 }
 let IS_ADMIN=false;

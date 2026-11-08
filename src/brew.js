@@ -344,10 +344,10 @@ async function importWorkbook(file){
   const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const unitOf=u=>{ u=String(u||'').toLowerCase(); return /^ml|mls|millil/.test(u)?'ml':/^g|gram|kg/.test(u)?'g':'each'; };
   const guess=name=>{ const n=norm(name); let best=null,score=0; for(const p of S.products){ const a=norm(prodName(p)), b=norm(p.name); const s=a===n||b===n?3:(n.includes(b)||b.includes(n))?2:0; if(s>score){ score=s; best=p; } } return best; };
-  const plan=prods.map(o=>({name:o['Product'],recipe:o['Base Recipe'],fill:+o['Fill per Unit (ml/g)']||0,match:(guess(o['Product'])||{}).id||''}));
+  const plan=prods.map(o=>({name:o['Product'],recipe:o['Base Recipe'],fill:+o['Fill per Unit (ml/g)']||0,ws:+o['Wholesale Price ($)']||0,match:(guess(o['Product'])||{}).id||''}));
   modal((m,close)=>{ m.innerHTML=`<h2>Import from the workbook</h2>
       <p>Found ${inputs.length} ingredients and packaging items, ${recipes.length} recipes (${lines.length} ingredient lines), ${packs.length} packaging lines and ${prods.length} products.</p>
-      <p class="note">Names already here are updated (a new price is kept with today's date); new ones are added. Till prices aren't changed.</p>
+      <p class="note">Names already here are updated (a new price is kept with today's date); new ones are added. Till prices aren't changed; a wholesale price is added (plus GST) where a product hasn't got one.</p>
       ${plan.length?'<h3>Which till product is each one?</h3>'+plan.map((x,k)=>`<label class="note" for="im${k}">${esc(x.name)}</label><select class="txt" id="im${k}" data-im="${k}"><option value="">Skip</option>${S.products.map(p=>`<option value="${p.id}" ${p.id===x.match?'selected':''}>${esc(prodName(p))}</option>`).join('')}</select>`).join(''):''}
       <div class="mact"><button class="btn alt" id="imC">Cancel</button><button class="btn" id="imOk">Import</button></div>`;
     m.querySelector('#imC').onclick=close;
@@ -364,7 +364,7 @@ async function importWorkbook(file){
         if(r) Object.assign(r,v); else { const n=Object.assign({id:SYNC.newId('recipes')},v); S.recipes.push(n); recByName[norm(name)]=n; } recs++; }
       let linked=0; for(const x of plan){ if(!x.match) continue; const p=S.products.find(y=>y.id===x.match), r=recByName[norm(x.recipe)]; if(!p) continue;
         const pk=packs.filter(o=>norm(o['Product'])===norm(x.name)).map(o=>{ const i=byName[norm(o['Packaging Item'])]; if(!i) missing.add(String(o['Packaging Item'])); return i?{input:i.id,qty:+o['Qty per Unit']||1}:null; }).filter(Boolean);
-        Object.assign(p,{recipe:r?r.id:(p.recipe||''),fill:x.fill||p.fill||0,pack:pk.length?pk:(p.pack||[]),updated:Date.now()}); linked++; }
+        Object.assign(p,{recipe:r?r.id:(p.recipe||''),fill:x.fill||p.fill||0,pack:pk.length?pk:(p.pack||[]),updated:Date.now()},x.ws>0&&!p.wholesale?{wholesale:Math.round(x.ws*115)}:{}); linked++; }
       save(); close(); render();
       modal((m2,c2)=>{ m2.innerHTML=`<h2>Imported</h2><p>${added} new and ${updated} re-priced ingredients and packaging, ${recs} recipes, ${linked} products linked.</p>
           ${missing.size?`<p class="note">Not found in the Inputs sheet (check the spelling there): ${[...missing].map(esc).join(', ')}.</p>`:''}<div class="mact"><button class="btn" id="iOk2">OK</button></div>`;

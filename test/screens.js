@@ -321,6 +321,39 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); document.querySelector('[data-pk="' + p.id + '"]').value = '5'; }); await page.click('#kOk'); await page.waitForTimeout(80);
   ok(await page.evaluate(() => { const st = stockOf(S.products.find(x => x.name === 'Test Oil').id); return st.out === 5 && st.home === 15 && st.total === 20; }), 'packing for a market moves 5 to "Out with me"');
   await page.screenshot({ path: path.join(shots, '31-stock.png') });
+  // ---- orders: a wholesale order by hand, a Shopify order as the helper would write it, and one from a voice note
+  await page.click('#bk'); await page.waitForSelector('.tiles');
+  await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.wholesale = 2300; save(); });
+  await page.click('[data-go="orders"]'); await page.waitForSelector('#oNew'); await page.click('#oNew'); await page.waitForSelector('#oOk');
+  await page.fill('#oN', 'Test Corner Store'); await page.fill('#oD', await page.evaluate(() => dk(addDays(kd(nzDay()), 2))));
+  await page.selectOption('#oAdd', { label: await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); return prodName(p) + ' · ' + c2(2300); }) });
+  await page.fill('[data-oq="0"]', '3'); await page.dispatchEvent('[data-oq="0"]', 'change'); await page.waitForTimeout(40);
+  ok(/\$69\.00/.test(await text(page)) && /\$60\.00 ex GST/.test(await text(page)), 'wholesale order priced at the wholesale price, with the ex-GST total');
+  await page.click('#oOk'); await page.waitForTimeout(60);
+  const oil = () => page.evaluate(() => stockOf(S.products.find(x => x.name === 'Test Oil').id).total);
+  const before = await oil();
+  await page.click('[data-ord]'); await page.waitForSelector('#oPack'); await page.click('#oPack'); await page.waitForTimeout(60);
+  ok(await oil() === before - 3 && await page.evaluate(() => S.orders[0].status === 'packed'), 'packing the order takes 3 off stock');
+  await page.click('#oSend'); await page.waitForTimeout(40);
+  ok(await oil() === before - 3 && await page.evaluate(() => S.orders[0].status === 'sent'), 'sending it doesn\'t take stock twice');
+  await page.click('#oC');
+  await page.evaluate(() => { S.orders.push({ id: 'shopify-1001', source: 'shopify', status: 'new', paid: true, at: Date.now(), date: nzDay(), by: 'shopify', customer: { name: 'Web Buyer', email: 'buyer@example.com', phone: '', address: '1 Test St' },
+    lines: [{ pid: '', name: 'Lovely Oil 50 mL', qty: 2, unit: 3000, shopifyProduct: '555' }], discount: 0, shipping: 800, total: 6800, gst: 887, note: '', due: '', shopify: { id: '1001', name: '#1001' } }); save(); render(); });
+  await page.locator('[data-ord]', { hasText: 'Web Buyer' }).click(); await page.waitForSelector('[data-linkl]');
+  ok(/not linked to a till product/.test(await text(page)), 'a Shopify line that doesn\'t match by name asks to be linked');
+  await page.click('[data-linkl]'); await page.selectOption('#lkP', { label: await page.evaluate(() => prodName(S.products.find(x => x.name === 'Test Oil'))) }); await page.click('#lkOk'); await page.waitForTimeout(40);
+  ok(await page.evaluate(() => S.products.find(x => x.name === 'Test Oil').shopifyIds.includes('555')), 'linking remembers the Shopify product for next time');
+  await page.click('#oC');
+  await page.evaluate(() => { const o = S.orders.find(x => x.id === 'shopify-1001'); o.status = 'sent'; o.sentBy = 'shopify'; settleOrders(); });
+  ok(await oil() === before - 5, 'an order Shopify says was sent takes its stock off too');
+  await page.screenshot({ path: path.join(shots, '32-orders.png') });
+  await page.evaluate(() => { const v = { id: 'vorder1', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'Corner store wants four test oil by Friday', say: '',
+    drafts: [{ kind: 'order', unsure: [], order: { customer: 'Test Corner Store', due: dk(addDays(kd(nzDay()), 5)), note: '', lines: [{ product: 'Test Oil 50ml', qty: 4 }] } }] }; S.voicenotes.push(v); reviewNote(v); });
+  await page.waitForSelector('#rYes'); await page.click('#rYes'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => { const o = S.orders.find(x => x.from === 'voice'); return o && o.lines[0].pid && o.lines[0].qty === 4 && o.lines[0].unit === 2300 && o.status === 'new'; }), 'a voice note can make an order, matched to the till product at the wholesale price');
+  await page.click('#bk'); await page.click('[data-go="calendar"]'); await page.waitForSelector('#pcSheet');
+  ok(await page.evaluate(() => calItems(dk(addDays(kd(nzDay()), 5))).some(i => /Send: Test Corner Store/.test(i.title))), 'an order\'s send-by date shows on the calendar');
+  await page.click('#bk'); await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt]');
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); S.plans.push({ id: 'plantest', batch: 'nobatch', date: nzDay(), status: 'planned', items: [{ pid: p.id, units: 12 }], at: Date.now() }); save(); });
   await page.click('#bk');
   await page.click('[data-go="setup"]'); await pin(page, '2580');

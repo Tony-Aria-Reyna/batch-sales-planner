@@ -72,6 +72,21 @@ Set-up (once, after the GST receipt helper is working, because it is the same sc
    **🎙 Talk**. (Apple doesn't let home-screen web apps use live speech recognition, which is why the note is
    recorded and sent to Gemini.)
 
+## Shopify orders
+
+The business helper copies new Shopify orders into **Orders** every 15 minutes (read-only: it never changes
+Shopify). Lines are matched to till products by name; anything that doesn't match is linked once in the app and
+remembered. Stock comes off when an order is packed in the app, or when Shopify says it was sent.
+
+Set-up (once), in her Shopify admin:
+1. Store name (top left) → **Dev Dashboard** → **Create app**, name "Rata & Smudge orders". App URL:
+   `https://shopify.dev/apps/default-app-home`. Access scopes: `read_orders`, `read_products`. Release the version,
+   then **Install** it on her store. (It must be in the same Shopify organisation as the store.)
+2. From the app's **Settings**, copy the **Client ID** and **Client secret** into the helper script's Script
+   properties as `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`. (Optional: `SHOPIFY_API_VERSION`, default 2026-07.)
+3. In the app: **Setup → Shopify** → type the shop address ending in `.myshopify.com`.
+4. In the script editor, run `checkShopifyNow()` once; the last check shows in Setup → Shopify and on Orders.
+
 ## Files
 
 | File | What it is |

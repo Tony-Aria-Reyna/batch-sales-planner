@@ -5,6 +5,7 @@
  *    the business's own Gemini API key (kept in this script's Script properties, never in the app or on
  *    GitHub). The app calls this helper's web address the moment a note is recorded, so drafts come back
  *    in a few seconds; the 5-minute check picks up anything missed (for example, a note made offline).
+ *  - Shopify: every 15 minutes, copies new online orders into the app (read-only; it never changes Shopify).
  *
  * Set-up (once): see "Emailed GST receipts" in the README.
  *   1. Signed in as the business Gmail, open script.google.com → New project → name it "Rata & Smudge receipts".
@@ -15,7 +16,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 3;   // 2: welcome line for new Loyalty programme members · 3: voice notes
+const HELPER_VERSION = 4;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -44,6 +45,7 @@ function tick() {
   const now = Date.now();
   for (const b of myBusinesses()) {
     try { voiceTick(b); } catch (e) { Logger.log('Voice notes: ' + e); }
+    try { shopifyTick(b); } catch (e) { Logger.log('Shopify: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -158,7 +160,7 @@ function del(path) {
 /* ================= Voice notes ================= */
 // Script properties (Project Settings → Script properties): GEMINI_API_KEY (required), GEMINI_MODEL (optional),
 // VOICE_MONTHLY_LIMIT (optional, notes a month, default 600). Nothing here is ever sent to the app.
-const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea'];
+const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea', 'order'];
 function prop(k, d) { return PropertiesService.getScriptProperties().getProperty(k) || d; }
 
 // the app calls this the moment a note is saved: { bid, id }. The note itself is read from the database,
@@ -206,11 +208,12 @@ function processNote(b, id) {
   const names = {}; listDocs('businesses/' + b._id + '/pins').forEach(p => { if (p.name) names[p._id] = p.name; });
   const people = (b.members || []).map(m => ({ email: m, name: names[m] || m.split('@')[0] }));
   const places = listDocs('businesses/' + b._id + '/places').filter(p => !p.gone).map(p => p.name);
+  const products = listDocs('businesses/' + b._id + '/products').filter(p => p.active !== false).map(p => p.name + (p.size ? ' ' + p.size : ''));
   const now = new Date(), todayK = today();
   const context = {
     today: todayK, weekday: Utilities.formatDate(now, 'Pacific/Auckland', 'EEEE'), time: Utilities.formatDate(now, 'Pacific/Auckland', 'HH:mm'),
     speaker: { email: note.by, name: (people.find(p => p.email === note.by) || {}).name || note.by, role: role },
-    people: people, markets_and_places: places
+    people: people, markets_and_places: places, products: products
   };
   const allowed = role === 'helper' ? ['todo', 'shopping'] : VOICE_KINDS;
   const instructions = [
@@ -222,12 +225,13 @@ function processNote(b, id) {
     'todo: a task. who is the email of the person it is for (the speaker unless they name someone). due is a date or "".',
     'shopping: something to buy. qty is a number, size like "1 kg" or "500 ml" or "".',
     'idea: kind is idea, call (a person to call) or product (a product idea).',
+    'order: a wholesale or custom order from a customer or shop. customer is their name (a shop name from markets_and_places if it matches). lines are {product, qty}, with product copied exactly from products when it matches. due is the send-by date or "".',
     'Dates are YYYY-MM-DD in New Zealand, worked out from today (' + todayK + ', ' + context.weekday + '). Times are 24-hour HH:MM or "".',
     'Never invent details. Leave anything not said as "" and list the field names you guessed or were unsure of in "unsure".',
     '"say" is one or two short sentences read aloud back to the speaker, listing what you drafted, e.g. "I\'ve drafted the Matakana market on Saturday from 8 to 1, and beeswax on the shopping list."',
     'Reply with JSON only, in this shape: {"heard": string, "say": string, "drafts": [{"kind": string, "unsure": [string], ' +
       '"event": {"type","title","date","time","end","days","place","attendees","note"}, "todo": {"text","due","time","who"}, ' +
-      '"shopping": {"item","qty","size"}, "idea": {"text","kind"}}]}. Include only the object matching each draft\'s kind.',
+      '"shopping": {"item","qty","size"}, "idea": {"text","kind"}, "order": {"customer","lines":[{"product","qty"}],"due","note"}}]}. Include only the object matching each draft\'s kind.',
     'Context: ' + JSON.stringify(context)
   ].join('\n');
 
@@ -262,6 +266,79 @@ function cleanDraft(d) {
     days: Math.max(1, Math.min(7, Number(e.days) || 1)), place: str(e.place, 80), attendees: (Array.isArray(e.attendees) ? e.attendees : []).map(x => str(x, 100).toLowerCase()).slice(0, 10), note: str(e.note, 500) };
   if (d.kind === 'todo') o.todo = { text: str(t.text), due: date(t.due), time: time(t.time), who: str(t.who, 100).toLowerCase() };
   if (d.kind === 'shopping') o.shopping = { item: str(s.item, 120), qty: Math.max(1, Math.min(999, Number(s.qty) || 1)), size: str(s.size, 40) };
+  if (d.kind === 'order') { const r = d.order || {}; o.order = { customer: str(r.customer, 80), due: date(r.due), note: str(r.note, 500),
+    lines: (Array.isArray(r.lines) ? r.lines : []).slice(0, 30).map(l => ({ product: str((l || {}).product, 120), qty: Math.max(1, Math.min(9999, Number((l || {}).qty) || 1)) })) }; }
   if (d.kind === 'idea') o.idea = { text: str(i.text), kind: ['idea', 'call', 'product'].indexOf(i.kind) >= 0 ? i.kind : 'idea' };
   return o;
 }
+
+/* ================= Shopify orders (read-only) ================= */
+// Script properties: SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET from the app made in Shopify's Dev Dashboard
+// (inside her store's own organisation, with read_orders and read_products, installed on her store).
+// The shop's address (name.myshopify.com) is typed into the app: Setup → Shopify.
+const SHOPIFY_EVERY_MIN = 15;
+function shopifyToken(shop) {
+  const props = PropertiesService.getScriptProperties(), cached = JSON.parse(props.getProperty('SHOPIFY_TOKEN') || '{}');
+  if (cached.shop === shop && cached.token && cached.expires > Date.now() + 10 * 60000) return cached.token;
+  const r = UrlFetchApp.fetch('https://' + shop + '/admin/oauth/access_token', { method: 'post', muteHttpExceptions: true,
+    payload: { grant_type: 'client_credentials', client_id: prop('SHOPIFY_CLIENT_ID', ''), client_secret: prop('SHOPIFY_CLIENT_SECRET', '') } });
+  if (r.getResponseCode() !== 200) throw new Error('Shopify sign-in ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 120));
+  const j = JSON.parse(r.getContentText());
+  props.setProperty('SHOPIFY_TOKEN', JSON.stringify({ shop: shop, token: j.access_token, expires: Date.now() + (j.expires_in || 86399) * 1000 }));
+  return j.access_token;
+}
+function shopifyTick(b, force) {
+  const shop = String((b.settings || {}).shopifyShop || '').toLowerCase().trim();
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)) return;
+  if (!prop('SHOPIFY_CLIENT_ID', '') || !prop('SHOPIFY_CLIENT_SECRET', '')) { patch('businesses/' + b._id, { shopifyHelper: { lastRun: Date.now(), error: 'No Shopify keys in the helper yet', version: HELPER_VERSION } }); return; }
+  const props = PropertiesService.getScriptProperties(), last = Number(props.getProperty('SHOPIFY_LAST_RUN') || 0);
+  if (!force && Date.now() - last < SHOPIFY_EVERY_MIN * 60000 - 30000) return;
+  props.setProperty('SHOPIFY_LAST_RUN', String(Date.now()));
+  let err = '', added = 0;
+  try {
+    const since = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+    const q = '{ orders(first: 50, sortKey: CREATED_AT, reverse: true, query: "created_at:>=' + since + '") { edges { node { id legacyResourceId name createdAt cancelledAt displayFinancialStatus displayFulfillmentStatus note ' +
+      'totalPriceSet { shopMoney { amount } } totalDiscountsSet { shopMoney { amount } } totalShippingPriceSet { shopMoney { amount } } ' +
+      'customer { displayName email phone } shippingAddress { name address1 address2 city zip } ' +
+      'lineItems(first: 50) { edges { node { title variantTitle quantity sku originalUnitPriceSet { shopMoney { amount } } product { legacyResourceId } } } } } } } }';
+    const r = UrlFetchApp.fetch('https://' + shop + '/admin/api/' + prop('SHOPIFY_API_VERSION', '2026-07') + '/graphql.json', { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'X-Shopify-Access-Token': shopifyToken(shop) }, payload: JSON.stringify({ query: q }) });
+    if (r.getResponseCode() !== 200) throw new Error('Shopify ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 120));
+    const j = JSON.parse(r.getContentText()); if (j.errors) throw new Error('Shopify: ' + JSON.stringify(j.errors).slice(0, 160));
+    const prods = listDocs('businesses/' + b._id + '/products');
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cents = x => Math.round(Number(x || 0) * 100);
+    for (const e of (((j.data || {}).orders || {}).edges || [])) {
+      const n = e.node, id = 'shopify-' + n.legacyResourceId, path = 'businesses/' + b._id + '/orders/' + id, existing = getDoc(path);
+      const fulfilled = /FULFILLED/.test(n.displayFulfillmentStatus || '') && !/UNFULFILLED|PARTIALLY/.test(n.displayFulfillmentStatus || '');
+      const paid = /PAID/.test(n.displayFinancialStatus || '') && !/UNPAID|PARTIALLY/.test(n.displayFinancialStatus || '');
+      if (existing) {   // only Shopify's own facts are updated; whatever was done in the app is kept
+        const ch = {};
+        if (n.cancelledAt && existing.status !== 'cancelled') ch.status = 'cancelled';
+        else if (fulfilled && (existing.status === 'new' || existing.status === 'packed')) { ch.status = 'sent'; ch.sentAt = Date.now(); ch.sentBy = 'shopify'; }
+        if (paid && !existing.paid) ch.paid = true;
+        if (Object.keys(ch).length) patch(path, ch);
+        continue;
+      }
+      if (n.cancelledAt) continue;
+      const lines = (((n.lineItems || {}).edges) || []).map(x => x.node).map(l => {
+        const spid = String((l.product || {}).legacyResourceId || ''), name = l.title + (l.variantTitle && l.variantTitle !== 'Default Title' ? ' ' + l.variantTitle : '');
+        const p = prods.find(p => (p.shopifyIds || []).indexOf(spid) >= 0) || prods.find(p => norm(p.name + (p.size || '')) === norm(name) || norm(p.name) === norm(l.title));
+        return { pid: p ? p._id : '', name: String(name).slice(0, 120), qty: Number(l.quantity) || 0, unit: cents((l.originalUnitPriceSet || {}).shopMoney && l.originalUnitPriceSet.shopMoney.amount), shopifyProduct: spid };
+      });
+      const a = n.shippingAddress || {}, c = n.customer || {};
+      const o = { source: 'shopify', status: fulfilled ? 'sent' : 'new', paid: paid, at: Date.parse(n.createdAt) || Date.now(), date: String(n.createdAt || '').slice(0, 10), by: 'shopify',
+        customer: { name: String(c.displayName || a.name || 'Shopify customer').slice(0, 80), email: String(c.email || '').slice(0, 120), phone: String(c.phone || '').slice(0, 40),
+          address: [a.address1, a.address2, a.city, a.zip].filter(Boolean).join(', ').slice(0, 200) },
+        lines: lines, discount: cents(((n.totalDiscountsSet || {}).shopMoney || {}).amount), shipping: cents(((n.totalShippingPriceSet || {}).shopMoney || {}).amount),
+        total: cents(((n.totalPriceSet || {}).shopMoney || {}).amount), note: String(n.note || '').slice(0, 500), due: '', shopify: { id: String(n.legacyResourceId), name: n.name } };
+      o.gst = Math.round(o.total * 3 / 23);
+      if (fulfilled) { o.sentAt = Date.now(); o.sentBy = 'shopify'; }
+      patch(path, o); added++;
+    }
+  } catch (e) { err = String(e && e.message || e).slice(0, 200); }
+  const prev = b.shopifyHelper || {};
+  patch('businesses/' + b._id, { shopifyHelper: { lastRun: Date.now(), error: err, added: (prev.added || 0) + added, version: HELPER_VERSION } });
+}
+// run by hand from the script editor to check the Shopify connection straight away
+function checkShopifyNow() { myBusinesses().forEach(b => shopifyTick(b, true)); Logger.log('Checked Shopify. See the Orders screen in the app.'); }

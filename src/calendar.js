@@ -45,6 +45,8 @@ function calItems(key){
   for(const s of S.sessions) if(s.date===key&&!(s.eventId&&out.some(o=>o.attr.includes('"'+s.eventId+'"')))){
     const nm=(s.name||(DAY_TYPES[s.type]||'').replace(/^\S+ /,''));
     out.push({kind:'day',time:nzHM(s.openedAt),end:s.closedAt?nzHM(s.closedAt):'',title:'💵 '+nm,sub:s.status==='open'?'Selling now':'Selling day',bg:'#d6e8cf',attr:`data-sess="${s.id}"`}); }
+  for(const o of S.orders) if(o.due===key&&(o.status==='new'||o.status==='packed'))
+    out.push({kind:'order',time:'',end:'',title:'📦 Send: '+((o.customer||{}).name||'order'),sub:(ORDER_STATUS[o.status]||'')+' · '+orderUnits(o)+' items',bg:CAL_TYPES.order.bg,attr:`data-order="${o.id}"`});
   for(const t of S.todos) if(t.due===key)
     out.push({kind:'todo',time:t.time||'',end:'',title:(t.done?'✅ ':'☐ ')+t.text,sub:t.who?personName(t.who):'',bg:'#eef0e4',done:!!t.done,attr:`data-todo="${t.id}"`});
   return out.sort((a,b)=>(a.time||'00:00').localeCompare(b.time||'00:00'));
@@ -83,6 +85,7 @@ function timelineHTML(key){
 function wireItems(box,key){
   box.querySelectorAll('[data-ev]').forEach(b=>b.onclick=()=>{ if(calSuppress) return; const e=S.events.find(x=>x.id===b.dataset.ev); if(e) openEvent(e,b.dataset.occ); });
   box.querySelectorAll('[data-sess]').forEach(b=>b.onclick=()=>{ if(calSuppress) return; const s=S.sessions.find(x=>x.id===b.dataset.sess); if(s) openSession(s); });
+  box.querySelectorAll('[data-order]').forEach(b=>b.onclick=()=>{ if(calSuppress) return; openOrder(S.orders.find(o=>o.id===b.dataset.order)); });
   box.querySelectorAll('[data-todo]').forEach(b=>b.onclick=()=>{ if(calSuppress) return; const t=S.todos.find(x=>x.id===b.dataset.todo); if(t&&typeof openTodo==='function') openTodo(t); });
   const tl=box.querySelector('.tl');
   if(tl&&canManage()) tl.onclick=e=>{ if(calSuppress||(e.target!==tl&&!e.target.classList.contains('tl-h'))) return; const r=tl.getBoundingClientRect(), m=Math.max(0,Math.min(1425,Math.floor((e.clientY-r.top)/HOUR*4)*15));
