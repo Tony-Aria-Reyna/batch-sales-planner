@@ -437,6 +437,45 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
     drafts: [{ kind: 'order', unsure: [], order: { customer: 'Test Corner Store', due: dk(addDays(kd(nzDay()), 5)), note: '', lines: [{ product: 'Test Oil 50ml', qty: 4 }] } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('#rYes'); await page.click('#rYes'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => { const o = S.orders.find(x => x.from === 'voice'); return o && o.lines[0].pid && o.lines[0].qty === 4 && o.lines[0].unit === 2300 && o.status === 'new'; }), 'a voice note can make an order, matched to the till product at the wholesale price');
+
+  console.log('Assistant v2: steps, questions, new kinds, replies and lessons');
+  await page.evaluate(() => { S.voicenotes.push({ id: 'vstep1', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'working', stage: 'thinking', heard: 'Buy beeswax and labels', mime: 'audio/mp4', chunks: 1 }); waitForNote('vstep1', {}); });
+  await page.waitForSelector('#vS li'); await page.waitForTimeout(500);
+  ok(await page.evaluate(() => { const li = [...document.querySelectorAll('#vS li')]; return li.length === 5 && li[2].classList.contains('done') && li[3].classList.contains('now') && /Buy beeswax/.test(document.querySelector('#vHeard').textContent) && /Working it out… \d+ s/.test(document.querySelector('#vH').textContent); }), 'waiting: each step shown as it happens, the words on screen while it thinks, and a timer');
+  await page.screenshot({ path: path.join(shots, '28b-voice-steps.png') });
+  await page.click('#vL'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => S.voicenotes.find(x => x.id === 'vstep1').notify === true), '"Carry on, tell me when it\'s ready" asks for a notification');
+  await page.evaluate(() => { Object.assign(S.voicenotes.find(x => x.id === 'vstep1'), { status: 'ready', drafts: [] }); }); await page.waitForSelector('.notebanner', { timeout: 4000 });
+  ok(true, 'a banner says when it\'s ready'); await page.evaluate(() => document.querySelector('.notebanner').remove());
+  await page.evaluate(() => typedText('how many test oil have we got?')); await page.waitForSelector('#aOk');
+  ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)), 'a typed question is answered at once from the app (stock)'); await page.click('#aOk');
+  await page.evaluate(() => typedText("what's on tomorrow?")); await page.waitForSelector('#aOk');
+  ok(/Tomorrow:|Nothing on tomorrow/.test(await text(page)), 'what\'s on tomorrow is answered'); await page.click('#aOk');
+  await page.evaluate(() => typedText('how much did we sell this week?')); await page.waitForSelector('#aOk');
+  ok(/Sales this week: \$|No sales this week/.test(await text(page)), 'sales this week is answered'); await page.screenshot({ path: path.join(shots, '28c-answer.png') }); await page.click('#aOk');
+  const stockBefore = await page.evaluate(() => stockOf(S.products.find(x => x.name === 'Test Oil').id).total);
+  await page.evaluate(() => { const v = { id: 'vkinds', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'made ten test oils, paid the stall fee, filled up, how many test oil', say: 'Done.',
+    drafts: [{ kind: 'question', unsure: [], question: { ask: 'stock', product: 'Test Oil 50ml', text: 'How many test oil?' } },
+             { kind: 'made', unsure: [], made: { product: 'Test Oil 50ml', qty: 10 } },
+             { kind: 'cost', unsure: ['cents'], cost: { what: 'Stall fee', cents: 4500, date: nzDay(), place: 'Village Market' } },
+             { kind: 'fuel', unsure: [], fuel: { litres: 42.1, cents: 11840, odometer: 84210, date: nzDay() } }] }; S.voicenotes.push(v); reviewNote(v); });
+  await page.waitForSelector('#rTx');
+  ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)) && !!(await page.$('[data-save1="1"]')) && !(await page.$('[data-save1="0"]')), 'a question in a note is answered in place; the other drafts wait to be saved');
+  await page.fill('[data-di="1"][data-dk="qty"]', '12'); await page.dispatchEvent('[data-di="1"][data-dk="qty"]', 'input');
+  await page.fill('[data-di="2"][data-dk="cents"]', '50'); await page.dispatchEvent('[data-di="2"][data-dk="cents"]', 'input');
+  await page.screenshot({ path: path.join(shots, '28d-voice-kinds.png') });
+  await page.fill('#rTx', 'yes'); await page.click('#rTxGo'); await page.waitForTimeout(150);
+  ok(await page.evaluate(sb => { const p = S.products.find(x => x.name === 'Test Oil'); return stockOf(p.id).total === sb + 12 && S.costs.some(c => c.note === 'Stall fee' && c.cents === 5000 && c.from === 'voice') && S.fuel.some(f => f.cents === 11840 && f.odo === 84210); }, stockBefore), 'saying "yes" saves them all: 12 made into stock, the stall fee (fixed by hand to $50), the fill-up');
+  ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.id === 'vkinds'); return n.status === 'done' && n.learn === 'todo' && n.edits.length === 1 && n.edits[0].kind === 'made' && n.edits[0].after.qty === 12; }), 'what was changed is kept for the assistant to learn from (but never the cost)');
+  await page.evaluate(() => { for (const c of ['fuel', 'costs', 'stockmoves']) for (let i = S[c].length - 1; i >= 0; i--) if (S[c][i].from === 'voice') S[c].splice(i, 1); save(); });
+  await page.evaluate(() => { const v = { id: 'vfollow', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'buy beeswax', say: '', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 1, size: '' } }] }; S.voicenotes.push(v); reviewNote(v); });
+  await page.waitForSelector('#rTx'); await page.fill('#rTx', 'make it 3'); await page.click('#rTxGo'); await page.waitForSelector('#vS');
+  ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); return n && n.text === 'make it 3' && n.prev.length === 1 && n.prev[0].shopping.item === 'Beeswax'; }), 'a typed change goes back to the assistant with the drafts on screen');
+  await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); Object.assign(n, { status: 'ready', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 3, size: '' } }] }); });
+  await page.waitForTimeout(900);
+  ok(await page.evaluate(() => document.querySelector('[data-dk="qty"]').value === '3' && S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced'), 'the changed drafts replace the old ones');
+  await page.fill('#rTx', 'cancel'); await page.click('#rTxGo'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => !document.querySelector('#rTx') && !S.shopping.some(x => x.item === 'Beeswax' && x.qty === 3)), '"cancel" throws it away');
   await page.click('#bk'); await page.click('[data-go="calendar"]'); await page.waitForSelector('#pcSheet');
   ok(await page.evaluate(() => calItems(dk(addDays(kd(nzDay()), 5))).some(i => /Send: Test Corner Store/.test(i.title))), 'an order\'s send-by date shows on the calendar');
   // ---- reports: takings, GST and real profit

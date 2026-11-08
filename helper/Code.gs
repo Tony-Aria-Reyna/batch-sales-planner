@@ -17,7 +17,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 5;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email
+const HELPER_VERSION = 6;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -48,6 +48,7 @@ function tick() {
     try { voiceTick(b); } catch (e) { Logger.log('Voice notes: ' + e); }
     try { shopifyTick(b); } catch (e) { Logger.log('Shopify: ' + e); }
     try { notifyTick(b); } catch (e) { Logger.log('Notifications: ' + e); }
+    try { learnTick(b); } catch (e) { Logger.log('Lessons: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -159,10 +160,14 @@ function del(path) {
   if (r.getResponseCode() !== 200 && r.getResponseCode() !== 404) throw new Error('Deleting ' + path + ': ' + r.getResponseCode());
 }
 
-/* ================= Voice notes ================= */
+/* ================= Voice notes, typed notes and photos (the assistant) ================= */
 // Script properties (Project Settings → Script properties): GEMINI_API_KEY (required), GEMINI_MODEL (optional),
 // VOICE_MONTHLY_LIMIT (optional, notes a month, default 600). Nothing here is ever sent to the app.
-const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea', 'order'];
+// Steps, each written to the note so the app can show them: 'listening' (writing down what was said),
+// 'thinking' (working out what to do, with the words already on screen), 'looking' (reading a photo), then ready.
+const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea', 'order', 'question', 'made', 'count', 'cost', 'fuel', 'contact', 'price', 'recipe'];
+// what each role may draft. Helpers: their own to-dos and shopping, questions, and stock news (sent to the owners to confirm).
+function kindsFor(role) { return role === 'helper' ? ['todo', 'shopping', 'question', 'made', 'count'] : role === 'manager' ? VOICE_KINDS.filter(k => k !== 'recipe') : VOICE_KINDS; }
 function prop(k, d) { return PropertiesService.getScriptProperties().getProperty(k) || d; }
 
 // the app calls this the moment a note is saved: { bid, id }. The note itself is read from the database,
@@ -185,9 +190,40 @@ function voiceTick(b) {
   const waiting = runQuery(b._id, 'status', 'new', 10, 'voicenotes');
   const stuck = runQuery(b._id, 'status', 'working', 10, 'voicenotes').filter(n => Date.now() - (n.workingAt || 0) > 5 * 60000);
   waiting.concat(stuck).forEach(n => { try { processNote(b, n._id); } catch (e) { Logger.log(e); } });
-  // tidy: any recording pieces left more than a day are deleted
+  // tidy: any recording or photo pieces left more than a day are deleted
   runQuery(b._id, 'kind', 'chunk', 50, 'voicenotes').filter(c => Date.now() - (c.at || 0) > 24 * 3600000)
     .forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));
+}
+
+// one call to Gemini. Thinking is kept low (these are quick jobs); a model that doesn't take that setting is asked again without it.
+function gemini(parts, json, level) {
+  const model = prop('GEMINI_MODEL', 'gemini-3.8-flash');
+  const call = withThinking => {
+    const gc = { temperature: 0.2 }; if (json) gc.responseMimeType = 'application/json'; if (withThinking) gc.thinkingConfig = { thinkingLevel: level || 'low' };
+    return UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-goog-api-key': prop('GEMINI_API_KEY', '') },
+      payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: gc }) });
+  };
+  let r = call(true);
+  if (r.getResponseCode() === 400 && /think/i.test(r.getContentText())) r = call(false);
+  if (r.getResponseCode() !== 200) { const e = new Error('Gemini ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 160)); e.gemini = true; throw e; }
+  const j = JSON.parse(r.getContentText());
+  return { text: ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || '').join(''), usage: j.usageMetadata || {} };
+}
+
+// what the assistant knows before it starts: names it must match, the next fortnight, and what it has learnt.
+// Only what the person speaking may see (a helper's note never carries costs, pay or recipes).
+function businessSummary(b, role) {
+  const names = {}; listDocs('businesses/' + b._id + '/pins').forEach(p => { if (p.name) names[p._id] = p.name; });
+  const people = (b.members || []).map(m => ({ email: m, name: names[m] || m.split('@')[0] }));
+  const places = listDocs('businesses/' + b._id + '/places').filter(p => !p.gone).map(p => ({ name: p.name, kind: p.group || '' }));
+  const products = listDocs('businesses/' + b._id + '/products').map(p => p.name + (p.size ? ' ' + p.size : '') + (p.active === false ? ' (off the till)' : ''));
+  const todayK = today(), soon = addDay(todayK, 14);
+  const events = listDocs('businesses/' + b._id + '/events').filter(e => e.date && e.date <= soon && (e.date >= todayK || e.rpt)).slice(0, 40)
+    .map(e => ({ type: e.type, title: e.title, date: e.date, time: e.time || '', repeats: e.rpt || '' }));
+  const out = { people: people, markets_and_places: places, products: products, calendar_next_14_days: events };
+  if (role !== 'helper') out.ingredients_and_packaging = listDocs('businesses/' + b._id + '/inputs').map(i => i.name);
+  return out;
 }
 
 function processNote(b, id) {
@@ -197,81 +233,122 @@ function processNote(b, id) {
   const st = b.settings || {}, month = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM');
   const use = (b.aiUsage && b.aiUsage.month === month) ? b.aiUsage : { month: month, notes: 0, inTok: 0, outTok: 0 };
   const fail = msg => patch(path, { status: 'failed', error: msg, doneAt: Date.now() });
-  if (st.aiPaused) return fail('The voice assistant is paused in Setup.');
-  if (use.notes >= Number(prop('VOICE_MONTHLY_LIMIT', '600'))) return fail('This month\'s voice note limit has been reached.');
-  if (!prop('GEMINI_API_KEY', '')) return fail('The voice assistant has no Gemini key yet (Script properties).');
-  patch(path, { status: 'working', workingAt: Date.now() });
+  if (st.aiPaused) return fail('The assistant is paused in Setup.');
+  if (use.notes >= Number(prop('VOICE_MONTHLY_LIMIT', '600'))) return fail('This month\'s assistant limit has been reached.');
+  if (!prop('GEMINI_API_KEY', '')) return fail('The assistant has no Gemini key yet (Script properties).');
+  const isPhoto = /^image\//.test(note.mime || '');
+  patch(path, { status: 'working', workingAt: Date.now(), stage: isPhoto ? 'looking' : note.text ? 'thinking' : 'listening' });
 
   const pieces = runQuery(b._id, 'note', id, 40, 'voicenotes').filter(c => c.kind === 'chunk').sort((x, y) => x.i - y.i);
-  const audio = pieces.map(c => c.data || '').join('');
-  if (!audio && !note.text) return fail('The recording did not arrive. Please try again.');
-
-  const role = (b.owners || []).indexOf(note.by) >= 0 ? 'owner' : ((b.roles || {})[note.by] || 'helper');
-  const names = {}; listDocs('businesses/' + b._id + '/pins').forEach(p => { if (p.name) names[p._id] = p.name; });
-  const people = (b.members || []).map(m => ({ email: m, name: names[m] || m.split('@')[0] }));
-  const places = listDocs('businesses/' + b._id + '/places').filter(p => !p.gone).map(p => p.name);
-  const products = listDocs('businesses/' + b._id + '/products').filter(p => p.active !== false).map(p => p.name + (p.size ? ' ' + p.size : ''));
-  const now = new Date(), todayK = today();
-  const context = {
-    today: todayK, weekday: Utilities.formatDate(now, 'Pacific/Auckland', 'EEEE'), time: Utilities.formatDate(now, 'Pacific/Auckland', 'HH:mm'),
-    speaker: { email: note.by, name: (people.find(p => p.email === note.by) || {}).name || note.by, role: role },
-    people: people, markets_and_places: places, products: products
-  };
-  const allowed = role === 'helper' ? ['todo', 'shopping'] : VOICE_KINDS;
-  const instructions = [
-    'You help a small New Zealand natural-products business (balms, oils, teas) that sells at markets.',
-    'Listen to the voice note (or read the typed note) and turn it into draft actions. Use New Zealand English.',
-    'Allowed kinds for this speaker: ' + allowed.join(', ') + '. If they ask for something else, leave it out and say so in "say".',
-    'event: something for the calendar. type is one of market, brew (a day to make products), order (an order due to be sent), other.',
-    '  For a market, set place to the exact name from markets_and_places when it matches, else "". attendees are emails from people.',
-    'todo: a task. who is the email of the person it is for (the speaker unless they name someone). due is a date or "".',
-    'shopping: something to buy. qty is a number, size like "1 kg" or "500 ml" or "".',
-    'idea: kind is idea, call (a person to call) or product (a product idea).',
-    'order: a wholesale or custom order from a customer or shop. customer is their name (a shop name from markets_and_places if it matches). lines are {product, qty}, with product copied exactly from products when it matches. due is the send-by date or "".',
-    'Dates are YYYY-MM-DD in New Zealand, worked out from today (' + todayK + ', ' + context.weekday + '). Times are 24-hour HH:MM or "".',
-    'Never invent details. Leave anything not said as "" and list the field names you guessed or were unsure of in "unsure".',
-    '"say" is one or two short sentences read aloud back to the speaker, listing what you drafted, e.g. "I\'ve drafted the Matakana market on Saturday from 8 to 1, and beeswax on the shopping list."',
-    'Reply with JSON only, in this shape: {"heard": string, "say": string, "drafts": [{"kind": string, "unsure": [string], ' +
-      '"event": {"type","title","date","time","end","days","place","attendees","note"}, "todo": {"text","due","time","who"}, ' +
-      '"shopping": {"item","qty","size"}, "idea": {"text","kind"}, "order": {"customer","lines":[{"product","qty"}],"due","note"}}]}. Include only the object matching each draft\'s kind.',
-    'Context: ' + JSON.stringify(context)
-  ].join('\n');
-
-  const parts = [{ text: instructions }];
-  if (audio) parts.push({ inline_data: { mime_type: geminiMime(note.mime), data: audio } });
-  if (note.text) parts.push({ text: 'Typed note: ' + String(note.text).slice(0, 2000) });
-  const model = prop('GEMINI_MODEL', 'gemini-3.8-flash');
-  const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
-    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    headers: { 'x-goog-api-key': prop('GEMINI_API_KEY', '') },
-    payload: JSON.stringify({ contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.2 } })
-  });
-  if (r.getResponseCode() !== 200) {
-    patch(path, { status: 'new', error: 'Gemini ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 160), workingAt: 0 });
-    throw new Error('Gemini ' + r.getResponseCode());
+  const media = pieces.map(c => c.data || '').join('');
+  if (!media && !note.text) return fail(isPhoto ? 'The photo did not arrive. Please try again.' : 'The recording did not arrive. Please try again.');
+  let inTok = 0, outTok = 0; const count = u => { inTok += u.promptTokenCount || 0; outTok += u.candidatesTokenCount || 0; };
+  try {
+    // 1. a voice note: write down the words first, so they're on screen while the rest is worked out
+    let heard = note.text ? String(note.text).slice(0, 4000) : '';
+    if (media && !isPhoto) {
+      const t = gemini([{ text: 'Write down exactly what is said in this voice note, in New Zealand English. Plain text only, no comments. If nothing is said, reply with nothing.' },
+        { inline_data: { mime_type: geminiMime(note.mime), data: media } }], false, 'low');
+      count(t.usage); heard = String(t.text || '').trim().slice(0, 4000);
+      patch(path, { stage: 'thinking', heard: heard });
+      if (!heard) { patch(path, { status: 'ready', stage: 'ready', say: 'I didn\'t hear anything. Try again a bit closer to the iPad.', drafts: [], doneAt: Date.now(), error: '' }); pieces.forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id)); return; }
+    }
+    // 2. work out what to do
+    const role = (b.owners || []).indexOf(note.by) >= 0 ? 'owner' : ((b.roles || {})[note.by] || 'helper');
+    const allowed = kindsFor(role), now = new Date(), todayK = today();
+    const context = Object.assign({ today: todayK, weekday: Utilities.formatDate(now, 'Pacific/Auckland', 'EEEE'), time: Utilities.formatDate(now, 'Pacific/Auckland', 'HH:mm'),
+      speaker: { email: note.by, role: role } }, businessSummary(b, role));
+    const lessons = String(st.aiLessons || '').slice(0, 3000);
+    const instructions = [
+      'You are the assistant for a small New Zealand natural-products business (balms, oils, teas) that sells at markets, from its farm shop, online and wholesale to shops.',
+      'Turn the ' + (isPhoto ? 'photo' : 'note') + ' into draft actions for a person to check. Use New Zealand English. Never invent details.',
+      'Allowed kinds for this person: ' + allowed.join(', ') + '. If they ask for something else, leave it out and say so in "say".',
+      'event: something for the calendar. type is market, brew (a day to make products), order (an order due to go), or other. For a market, place is the exact name from markets_and_places if it matches. attendees are emails from people.',
+      'todo: a task. who is the email of the person it is for (the speaker unless they name someone). due is a date or "".',
+      'shopping: something to buy. qty is a number, size like "1 kg" or "".',
+      'idea: kind is idea, call (someone to call) or product (a product idea).',
+      'order: an order from a shop or customer. customer is their name (a place name if it matches). lines are {product, qty}, product copied exactly from products when it matches. due is the send-by date or "". Whenever there is an order, also add a todo to send it, due a day before the send-by date (or "" if none).',
+      'question: they are asking something. ask is one of sales (takings), profit, whatson (calendar and to-dos), stock (how many of a product), other. from and to are the dates it covers (YYYY-MM-DD; "today" means both are today; "this week" is Monday to Sunday). product is copied exactly from products when about one product. text is the question in their words.',
+      'made: products just made. product copied exactly from products, qty a number.',
+      'count: a stock count. lines are {product, qty}.',
+      'cost: money spent by the business (a stall fee, equipment, postage). what, cents (the amount in cents INCLUDING GST), date, place (exact name from markets_and_places or "").',
+      'fuel: filling up the vehicle. litres, cents (total paid, in cents), odometer (km, a whole number or 0), date.',
+      'contact: a shop or person to remember. business, person, phone, email, note.',
+      'price: a new price for an ingredient or packaging item (from an invoice or receipt). item copied exactly from ingredients_and_packaging when it matches, cents (price for one pack, EXCLUDING GST, in cents; take GST off if the invoice shows it), pack (pack size as a number), unit (g, ml or each), supplier.',
+      'recipe: a recipe (e.g. a handwritten card). name, yield (a number), unit (ml, g or each), lines {item, qty} with item copied from ingredients_and_packaging when it matches.',
+      'If the whole ' + (isPhoto ? 'photo' : 'note') + ' is only a command about drafts already on screen, set command to one of confirm, cancel, later, and give no drafts.',
+      'Dates are YYYY-MM-DD in New Zealand, worked out from today (' + todayK + ', ' + context.weekday + '). Times are 24-hour HH:MM or "".',
+      'Leave anything not said as "" and list the field names you guessed or were unsure of in "unsure".',
+      '"say" is one or two short sentences read aloud, listing what you drafted, e.g. "I\'ve drafted the Matakana market on Saturday from 8 to 1, and beeswax on the shopping list."',
+      'Reply with JSON only: {"heard": string, "say": string, "command": string, "drafts": [{"kind": string, "unsure": [string], "<kind>": {...fields above}}]}. Each draft has one object named after its kind.',
+      lessons ? 'Lessons learnt from this business (follow these):\n' + lessons : '',
+      'Context: ' + JSON.stringify(context)
+    ].filter(Boolean).join('\n');
+    const parts = [{ text: instructions }];
+    if (note.prev && note.prev.length) parts.push({ text: 'This note changes the drafts already on screen. Return the complete new list of drafts with the change made and everything else kept the same. Drafts on screen: ' + JSON.stringify(note.prev).slice(0, 6000) });
+    if (isPhoto) parts.push({ inline_data: { mime_type: note.mime, data: media } }, { text: 'Read the photo. ' + (note.text ? 'They added: ' + String(note.text).slice(0, 500) : '') });
+    else parts.push({ text: (note.text ? 'Typed note: ' : 'What they said: ') + heard });
+    const g = gemini(parts, true, 'low'); count(g.usage);
+    let ans = {}; try { ans = JSON.parse(g.text); } catch (e) { ans = {}; }
+    const drafts = (Array.isArray(ans.drafts) ? ans.drafts : []).filter(d => d && allowed.indexOf(d.kind) >= 0).slice(0, 20).map(cleanDraft);
+    const command = ['confirm', 'cancel', 'later'].indexOf(ans.command) >= 0 ? ans.command : '';
+    patch(path, { status: 'ready', stage: 'ready', heard: isPhoto ? String(ans.heard || '').slice(0, 2000) : heard, say: String(ans.say || '').slice(0, 500), command: command, drafts: drafts, doneAt: Date.now(), error: '' });
+    pieces.forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));      // the recording or photo is not kept
+    patch('businesses/' + b._id, { aiUsage: { month: month, notes: use.notes + 1, inTok: use.inTok + inTok, outTok: use.outTok + outTok } });
+    // "tell me when it's ready": a notification to that person's devices
+    if (note.notify && st.vapidKey) { try { DEV_CACHE = null; pushTo(b, [note.by], 'todos', '🎙 Ready to check', String(ans.say || 'Your note has been worked out.').slice(0, 160), 'note-' + id); } catch (e) { Logger.log(e); } }
+  } catch (e) {
+    if (e.gemini) { patch(path, { status: 'new', stage: '', error: String(e.message).slice(0, 200), workingAt: 0 }); throw e; }
+    throw e;
   }
-  const j = JSON.parse(r.getContentText()), u = j.usageMetadata || {};
-  let ans = {};
-  try { ans = JSON.parse((((j.candidates || [])[0] || {}).content || {}).parts.map(p => p.text || '').join('')); } catch (e) { ans = {}; }
-  const drafts = (Array.isArray(ans.drafts) ? ans.drafts : []).filter(d => d && allowed.indexOf(d.kind) >= 0).slice(0, 12).map(cleanDraft);
-  patch(path, { status: 'ready', heard: String(ans.heard || '').slice(0, 4000), say: String(ans.say || '').slice(0, 500), drafts: drafts, doneAt: Date.now(), error: '' });
-  pieces.forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));      // the recording is not kept
-  patch('businesses/' + b._id, { aiUsage: { month: month, notes: use.notes + 1, inTok: use.inTok + (u.promptTokenCount || 0), outTok: use.outTok + (u.candidatesTokenCount || 0) } });
 }
 function geminiMime(m) { m = String(m || '').split(';')[0]; return m === 'audio/mp4' || m === 'audio/x-m4a' ? 'audio/m4a' : (m || 'audio/webm'); }
 function str(x, n) { return String(x == null ? '' : x).slice(0, n || 200); }
 function cleanDraft(d) {
-  const date = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '', time = x => /^\d{2}:\d{2}$/.test(x || '') ? x : '';
+  const date = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '', time = x => /^\d{2}:\d{2}$/.test(x || '') ? x : '', num = (x, max) => Math.max(0, Math.min(max, Number(x) || 0));
   const o = { kind: d.kind, unsure: (Array.isArray(d.unsure) ? d.unsure : []).map(x => str(x, 30)).slice(0, 10) };
-  const e = d.event || {}, t = d.todo || {}, s = d.shopping || {}, i = d.idea || {};
-  if (d.kind === 'event') o.event = { type: ['market', 'brew', 'order', 'other'].indexOf(e.type) >= 0 ? e.type : 'other', title: str(e.title, 80), date: date(e.date), time: time(e.time), end: time(e.end),
-    days: Math.max(1, Math.min(7, Number(e.days) || 1)), place: str(e.place, 80), attendees: (Array.isArray(e.attendees) ? e.attendees : []).map(x => str(x, 100).toLowerCase()).slice(0, 10), note: str(e.note, 500) };
-  if (d.kind === 'todo') o.todo = { text: str(t.text), due: date(t.due), time: time(t.time), who: str(t.who, 100).toLowerCase() };
-  if (d.kind === 'shopping') o.shopping = { item: str(s.item, 120), qty: Math.max(1, Math.min(999, Number(s.qty) || 1)), size: str(s.size, 40) };
-  if (d.kind === 'order') { const r = d.order || {}; o.order = { customer: str(r.customer, 80), due: date(r.due), note: str(r.note, 500),
-    lines: (Array.isArray(r.lines) ? r.lines : []).slice(0, 30).map(l => ({ product: str((l || {}).product, 120), qty: Math.max(1, Math.min(9999, Number((l || {}).qty) || 1)) })) }; }
-  if (d.kind === 'idea') o.idea = { text: str(i.text), kind: ['idea', 'call', 'product'].indexOf(i.kind) >= 0 ? i.kind : 'idea' };
+  const x = d[d.kind] || {}, lines = (l, key) => (Array.isArray(l) ? l : []).slice(0, 40).map(y => ({ [key]: str((y || {})[key], 120), qty: num((y || {}).qty, 99999) }));
+  if (d.kind === 'event') o.event = { type: ['market', 'brew', 'order', 'other'].indexOf(x.type) >= 0 ? x.type : 'other', title: str(x.title, 80), date: date(x.date), time: time(x.time), end: time(x.end),
+    days: Math.max(1, Math.min(7, Number(x.days) || 1)), place: str(x.place, 80), attendees: (Array.isArray(x.attendees) ? x.attendees : []).map(a => str(a, 100).toLowerCase()).slice(0, 10), note: str(x.note, 500) };
+  if (d.kind === 'todo') o.todo = { text: str(x.text), due: date(x.due), time: time(x.time), who: str(x.who, 100).toLowerCase() };
+  if (d.kind === 'shopping') o.shopping = { item: str(x.item, 120), qty: Math.max(1, Math.min(999, Number(x.qty) || 1)), size: str(x.size, 40) };
+  if (d.kind === 'order') o.order = { customer: str(x.customer, 80), due: date(x.due), note: str(x.note, 500), lines: lines(x.lines, 'product').map(l => Object.assign(l, { qty: Math.max(1, l.qty) })) };
+  if (d.kind === 'idea') o.idea = { text: str(x.text), kind: ['idea', 'call', 'product'].indexOf(x.kind) >= 0 ? x.kind : 'idea' };
+  if (d.kind === 'question') o.question = { ask: ['sales', 'profit', 'whatson', 'stock', 'other'].indexOf(x.ask) >= 0 ? x.ask : 'other', from: date(x.from), to: date(x.to), product: str(x.product, 120), text: str(x.text, 300) };
+  if (d.kind === 'made') o.made = { product: str(x.product, 120), qty: num(x.qty, 9999) };
+  if (d.kind === 'count') o.count = { lines: lines(x.lines, 'product') };
+  if (d.kind === 'cost') o.cost = { what: str(x.what, 120), cents: Math.round(num(x.cents, 10000000)), date: date(x.date), place: str(x.place, 80) };
+  if (d.kind === 'fuel') o.fuel = { litres: num(x.litres, 500), cents: Math.round(num(x.cents, 100000)), odometer: Math.round(num(x.odometer, 9999999)), date: date(x.date) };
+  if (d.kind === 'contact') o.contact = { business: str(x.business, 80), person: str(x.person, 80), phone: str(x.phone, 40), email: str(x.email, 100).toLowerCase(), note: str(x.note, 300) };
+  if (d.kind === 'price') o.price = { item: str(x.item, 80), cents: Math.round(num(x.cents, 10000000)), pack: num(x.pack, 1000000), unit: ['g', 'ml', 'each'].indexOf(x.unit) >= 0 ? x.unit : 'each', supplier: str(x.supplier, 80) };
+  if (d.kind === 'recipe') o.recipe = { name: str(x.name, 80), yield: num(x.yield, 1000000), unit: ['g', 'ml', 'each'].indexOf(x.unit) >= 0 ? x.unit : 'ml', lines: lines(x.lines, 'item') };
   return o;
+}
+
+/* ---------- lessons learnt: each evening, what people changed in the drafts becomes short rules ---------- */
+// The app marks a note it saved after someone edited the drafts (learn: 'todo', with before and after).
+// Lessons are kept in Setup → Assistant → What it has learnt, where an owner can read, change or delete them.
+// They are never emailed. Costs, pay and recipe amounts are never made into lessons.
+function learnTick(b) {
+  const nz = nzNow(); if (nz.mins < 21 * 60) return;
+  if ((b.aiLearnt || '') === nz.day) return;
+  const notes = runQuery(b._id, 'learn', 'todo', 30, 'voicenotes');
+  patch('businesses/' + b._id, { aiLearnt: nz.day });
+  if (!notes.length || !prop('GEMINI_API_KEY', '')) return;
+  const changes = notes.map(n => ({ heard: str(n.heard, 400), edits: n.edits || [] }));
+  const old = String((b.settings || {}).aiLessons || '');
+  const g = gemini([{ text: 'An assistant turns notes from a small New Zealand natural-products business into drafts (calendar entries, to-dos, shopping, orders and so on). ' +
+    'Below are notes, what it drafted, and what the person changed before saving. Write short lessons (one per line, at most 15 words each, New Zealand English) that would have avoided the changes, ' +
+    'e.g. "\'lav oil\' means Lavender Infused Oil 50ml" or "Matakana is a Saturday market, 8 am to 1 pm". Merge them with the existing lessons, drop duplicates and anything contradicted, at most 40 lines. ' +
+    'Never include prices, costs, pay or recipe amounts. Reply with the lessons only.\nExisting lessons:\n' + old + '\nChanges:\n' + JSON.stringify(changes).slice(0, 20000) }], false, 'low');
+  const lessons = String(g.text || '').split('\n').map(l => l.replace(/^[-*•\d.\s]+/, '').trim()).filter(Boolean).slice(0, 40).join('\n').slice(0, 3000);
+  if (lessons) patchSetting(b._id, 'aiLessons', lessons);
+  notes.forEach(n => patch('businesses/' + b._id + '/voicenotes/' + n._id, { learn: 'done', edits: [] }));
+}
+// change one setting without touching the others
+function patchSetting(bid, key, value) {
+  const body = { fields: { settings: { mapValue: { fields: { [key]: enc(value) } } } } };
+  check(UrlFetchApp.fetch(BASE + '/businesses/' + bid + '?updateMask.fieldPaths=' + encodeURIComponent('settings.' + key), { method: 'patch', contentType: 'application/json', payload: JSON.stringify(body), headers: headers(), muteHttpExceptions: true }), 'Saving a setting');
 }
 
 /* ================= Shopify orders (read-only) ================= */

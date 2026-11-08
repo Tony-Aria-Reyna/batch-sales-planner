@@ -135,7 +135,7 @@ body:has(.rcal) main{min-height:0}
 .vbar{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px}
 .vtalk,.vdrive{min-height:84px;border-radius:22px;font-size:24px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 1px 0 var(--line)}
 .vtalk{background:var(--rata);color:#fff}.vtalk span{font-size:34px}.vtalk small{font-size:14px;background:#fff;color:var(--rata);border-radius:99px;padding:3px 10px}
-.vdrive{background:var(--card);color:var(--ink);font-size:20px}
+.vdrive{background:var(--card);color:var(--ink);font-size:20px;flex-direction:column;gap:2px}.vdrive .vlbl{font-size:14px;font-weight:700;color:var(--muted)}
 .vrec{text-align:center;padding:10px 0}
 .vdot{width:120px;height:120px;border-radius:50%;margin:6px auto 14px;display:grid;place-items:center;font-size:56px;background:#efe7d6}
 .vdot.on{background:#f6d4cf;animation:vpulse 1.2s ease-in-out infinite}.vdot.work{animation:vpulse 1.6s ease-in-out infinite}
@@ -156,6 +156,11 @@ body:has(.rcal) main{min-height:0}
 .practicebar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:#806092;color:#fff;font-weight:800;font-size:16px;padding:12px 16px calc(12px + var(--sab));text-align:center;width:100%}
 body.practicing #main{padding-bottom:80px}
 .homesearch{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;margin:4px 0 14px;padding:0 18px;border-radius:16px;background:#fff;border:2px solid var(--line);font-size:19px;color:var(--muted);text-align:left}
+.vsteps{list-style:none;padding:0;margin:8px auto 10px;max-width:360px;text-align:left}.vsteps li{padding:7px 0;font-size:18px;color:var(--muted)}.vsteps li.done{color:var(--ok);font-weight:700}.vsteps li.now{color:var(--ink);font-weight:800}
+.notebanner{position:fixed;left:50%;transform:translateX(-50%);top:calc(84px + var(--sat));z-index:70;background:var(--rata);color:#fff;font-weight:800;font-size:17px;border-radius:99px;padding:14px 22px;box-shadow:0 10px 30px rgba(43,44,34,.3)}
+.vreply small{display:block;margin:2px 0 8px}.vreply .vrow{display:flex;gap:8px}.vreply .vrow .txt{flex:1}
+.answer{font-size:20px;line-height:1.4;background:#eef3e6;border-radius:14px;padding:12px 16px}
+.vbar.three{grid-template-columns:2fr 1fr 1fr 1fr}
 .tickrow{display:flex;align-items:center;gap:10px;margin:10px 0;cursor:pointer}.tickrow input{width:26px;height:26px;flex:none}
 .drive{display:flex;flex-direction:column;gap:16px;padding-top:6px}
 .dbtn{min-height:120px;border-radius:26px;font-size:34px;font-weight:800;color:#fff;width:100%}
@@ -540,7 +545,7 @@ SCREENS.home={
         <div><span>Batches due</span><b>${S.plans.filter(p=>p.status!=='made'&&p.date<=dk(addDays(kd(nzDay()),7))).length}</b></div>
         <div><span>Orders to send</span><b>${canManage()?openOrders().length:'—'}</b></div>
       </section>
-      ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
+      ${voiceReady()&&!tillLock()?`<section class="vbar three"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hType" aria-label="Type a note or question">⌨️<small class="vlbl">Type</small></button><button class="vdrive" id="hPhoto" aria-label="Photo">📷<small class="vlbl">Photo</small></button><button class="vdrive" id="hDrive">🚗<small class="vlbl">Drive</small></button></section>`:''}
       ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
       ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything…</span></button>'}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
@@ -550,7 +555,7 @@ SCREENS.home={
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
-    const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive');
+    const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
     const hp=$('#hPush'); if(hp) hp.onclick=()=>go('notify'); const hN=$('#hNotify'); if(hN) hN.onclick=()=>go('notify'); const hn=$('#hPushNo'); if(hn) hn.onclick=()=>{ lsSet('rs.pushNo','1'); render(); };
     const sm=$('#showMoney'); if(sm) sm.onclick=()=>approve('see the takings',()=>{ moneyUntil=Date.now()+60e3; render(); setTimeout(render,60.5e3); });
     document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else go(id); }); }
@@ -607,11 +612,13 @@ SCREENS.setup={
       <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
 
     ${role()==='owner'?`<div class="card"><h3>🎙 Voice assistant</h3>
-      <p class="note">Talk instead of typing: notes become draft calendar entries, to-dos, shopping and ideas to check before saving. It uses the business's own Gemini key, kept in the business helper (never in the app). Recordings are deleted once understood.</p>
+      <p class="note">Talk, type or take a photo: it drafts calendar entries, to-dos, shopping, orders, stock, costs, fill-ups, shops, prices and recipes to check before saving, and answers questions about sales, profit, what's on and stock. It uses the business's own Gemini key, kept in the business helper (never in the app). Recordings and photos are deleted once understood. <button class="linkb" id="aiHelp">❓ How to use it</button></p>
       <div class="row"><div class="grow"><b>Voice assistant</b><small>${S.settings.aiPaused?'Paused: notes are kept but not worked out':S.settings.voiceOn?'On':'Off'}</small></div>
         <button class="btn small ${S.settings.voiceOn&&!S.settings.aiPaused?'alt':''}" id="aiOn">${S.settings.voiceOn&&!S.settings.aiPaused?'Pause':'Switch on'}</button></div>
       <label class="note" for="vUrl">Helper web address (makes replies near-instant; from the helper's Deploy → Web app)</label><input class="txt" id="vUrl" inputmode="url" autocapitalize="none" value="${esc(S.settings.voiceUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
-      <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div></div>`:''}
+      <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div>
+      <label class="note" for="aiLessons"><b>What it has learnt</b> · from the changes people make to its drafts, worked out each evening. Change or delete any line; it's never emailed.</label>
+      <textarea class="txt" id="aiLessons" rows="5" placeholder="Nothing yet">${esc(S.settings.aiLessons||'')}</textarea></div>`:''}
 
     ${role()==='owner'?`<div class="card"><h3>🛍️ Shopify</h3>
       <p class="note">Online orders are copied into Orders every 15 minutes by the business helper, using a read-only app made in Shopify's Dev Dashboard. Its keys stay in the helper, never in the app.</p>
@@ -658,6 +665,8 @@ SCREENS.setup={
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
     const ss=$('#shShop'); if(ss) ss.onchange=()=>{ const v=ss.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if(v&&!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v)){ toast('Use the address ending in .myshopify.com'); ss.value=S.settings.shopifyShop||''; return; } S.settings.shopifyShop=v; save(); toast('Saved'); };
     const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
+    const al=$('#aiLessons'); if(al) al.onchange=()=>{ S.settings.aiLessons=al.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40).join('\n').slice(0,3000); save(); toast('Saved'); };
+    const ah=$('#aiHelp'); if(ah) ah.onclick=assistantHelp;
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };
