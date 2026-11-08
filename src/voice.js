@@ -7,7 +7,7 @@
    Helpers can only make their own to-dos and shopping. "What's on today" is read aloud by the iPad itself:
    no AI and no cost. */
 const VOICE_MAX_SECS=120, CHUNK=600000;   // two minutes at most; pieces stay well under the database's 1 MB a document
-const voiceReady=()=>!!(S.settings.voiceUrl||S.settings.voiceOn)&&!S.settings.aiPaused;
+const voiceReady=()=>!!(S.settings.voiceUrl||S.settings.voiceOn)&&!S.settings.aiPaused&&!(typeof practice!=='undefined'&&practice);   // off while viewing as someone
 const canRecord=()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
 let voiceWatch=null;
 

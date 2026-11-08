@@ -14,7 +14,8 @@ export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sale
 const OWNER_ONLY = ['recipes', 'pay'];                                     // recipes are the business's secret; pay is private
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans', 'stockmoves', 'shopping', 'todos', 'voicenotes'];
 const MINE_ONLY = { todos: 'who', voicenotes: 'by' };                       // a helper sees only their own of these
-export const readableCols = role => role === 'helper' ? HELPER_COLS.slice() : role === 'manager' ? COLS.filter(c => !OWNER_ONLY.includes(c)) : COLS.slice();
+// managers see recipes (and costs worked out from them) only when an owner switches that on; pay stays owners-only
+export const readableCols = (role, mgrCosts) => role === 'helper' ? HELPER_COLS.slice() : role === 'manager' ? COLS.filter(c => !OWNER_ONLY.includes(c) || (mgrCosts && c === 'recipes')) : COLS.slice();
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
 let app, auth, db, bid = null, unsub = [], S = null, onChange = () => {}, synced = null, user = null;
@@ -63,7 +64,11 @@ export async function testSignIn(email) { // emulator and mock only
   await signInWithCredential(auth, cred);
 }
 export function signOut() { stop(); return fbSignOut(auth); }
-export const me = () => user && user.email && user.email.toLowerCase();
+// practice mode ("View as"): the app behaves as another person or role, nothing is sent to the cloud,
+// and leaving it reloads the app from the cloud, so everything done in practice is thrown away
+let asMe = null, asRole = null, readOnly = false;
+export const inPractice = () => readOnly;
+export const me = () => asMe || (user && user.email && user.email.toLowerCase());
 // when this account last signed in with Google (used to reset a forgotten PIN by signing in again)
 export const lastSignIn = () => { try { return Date.parse(user.metadata.lastSignInTime) || 0; } catch (e) { return 0; } };
 
@@ -86,7 +91,15 @@ export const getMembers = () => members.slice();
 export const getOwners = () => owners.slice();
 export const getMainOwner = () => mainOwner;   // created the business; can never be removed or demoted
 export const roleOf = email => !email ? null : owners.includes(email) ? 'owner' : (roles[email] || 'helper');
-export const myRole = () => roleOf(me());
+export const myRole = () => asRole || roleOf(me());
+export function startPractice(email, role) {
+  const keepBid = bid; stop(); bid = keepBid; readOnly = true; asMe = email || ('practice-' + role + '@example.invalid'); asRole = role;
+  const allowed = readableCols(role, !!(S.settings && S.settings.mgrCosts));
+  for (const c of COLS) {
+    if (!allowed.includes(c)) { S[c].length = 0; continue; }
+    if (role === 'helper' && MINE_ONLY[c]) { const keep = S[c].filter(x => x[MINE_ONLY[c]] === asMe); S[c].length = 0; keep.forEach(x => S[c].push(x)); }
+  }
+}
 // One write sets a person's role: owners go in the "owners" list, everyone else in the roles map.
 // Emails contain dots, so the lists and the map are always written whole rather than by field path.
 // The main owner can never be changed or removed, and there are at most 2 owners (the rules enforce both).
@@ -98,16 +111,16 @@ function peopleWith(email, role) {
   if (o.length > 2) { const err = new Error('A business can have at most 2 owners.'); err.code = 'too-many-owners'; throw err; }
   return { owners: o, roles: r };
 }
-export const addMember = (email, role) => { const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
-export const setRole = (email, role) => updateDoc(doc(db, 'businesses', bid), peopleWith(email, role));
+export const addMember = (email, role) => { if (readOnly) return Promise.resolve(); const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
+export const setRole = (email, role) => readOnly ? Promise.resolve() : updateDoc(doc(db, 'businesses', bid), peopleWith(email, role));
 // Hand the main owner role to the co-owner. Only the main owner can do this (the rules enforce it);
 // afterwards the old main owner is co-owner and the new main owner can never be removed by anyone else.
-export const handOver = email => {
+export const handOver = email => { if (readOnly) return Promise.resolve();
   if (me() !== mainOwner) { const e = new Error('Only the main owner can hand the business over.'); e.code = 'not-main-owner'; return Promise.reject(e); }
   if (!owners.includes(email)) { const e = new Error('Make them co-owner first.'); e.code = 'not-co-owner'; return Promise.reject(e); }
   return updateDoc(doc(db, 'businesses', bid), { owner: email });
 };
-export const removeMember = email => updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayRemove(email) }, peopleWith(email, null)));
+export const removeMember = email => readOnly ? Promise.resolve() : updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayRemove(email) }, peopleWith(email, null)));
 
 /* ---------- live data ---------- */
 function markPending(key, v) { if (!!pending[key] === v) return; pending[key] = v; onPending(Object.values(pending).some(Boolean)); }
@@ -131,7 +144,7 @@ export function start(businessId, state, changed) {
   }, err => onChange('error', err)));
 }
 function listenCols() {
-  const role = myRole(), allowed = readableCols(role);
+  const role = myRole(), allowed = readableCols(role, !!(S.settings && S.settings.mgrCosts));
   for (const c of allowed) {
     const ref = role === 'helper' && MINE_ONLY[c] ? query(collection(db, 'businesses', bid, c), where(MINE_ONLY[c], '==', me())) : collection(db, 'businesses', bid, c);
     unsub.push(onSnapshot(ref, { includeMetadataChanges: true }, snap => {
@@ -149,7 +162,7 @@ const bizOf = s => clean({ name: s.name || '', settings: s.settings || {} });
 // Write whatever changed since the last sync. Called after every edit; cheap when nothing changed.
 // Works offline: Firestore keeps the writes on the device and sends them when the signal returns.
 export function push() {
-  if (!bid || !S) return;
+  if (readOnly || !bid || !S) return;
   const ops = [];
   if (myRole() !== 'helper') {
     const st = JSON.stringify(bizOf(S));
@@ -193,8 +206,8 @@ export async function isInvited() {
   try { const d = await getDoc(doc(db, 'invites', me())); return d.exists(); } catch (e) { return false; }
 }
 export async function listInvites() { const r = await getDocs(collection(db, 'invites')); return r.docs.map(d => Object.assign({ email: d.id }, d.data())); }
-export const addInvite = email => setDoc(doc(db, 'invites', email.trim().toLowerCase()), { by: me(), at: Date.now() });
-export const removeInvite = email => deleteDoc(doc(db, 'invites', email));
+export const addInvite = email => readOnly ? Promise.resolve() : setDoc(doc(db, 'invites', email.trim().toLowerCase()), { by: me(), at: Date.now() });
+export const removeInvite = email => readOnly ? Promise.resolve() : deleteDoc(doc(db, 'invites', email));
 export async function useInvite() { try { await deleteDoc(doc(db, 'invites', me())); } catch (e) {} }
 
 /* ---------- a business's own data: download and delete ---------- */
@@ -205,6 +218,7 @@ export async function exportBusiness() {
   return out;
 }
 export async function deleteBusiness() {
+  if (readOnly) return;
   const id = bid;
   for (const c of COLS) { const r = await getDocs(collection(db, 'businesses', id, c)); for (let i = 0; i < r.docs.length; i += 400) { const b = writeBatch(db); r.docs.slice(i, i + 400).forEach(d => b.delete(d.ref || doc(db, 'businesses', id, c, d.id))); await b.commit(); } }
   stop(); await deleteDoc(doc(db, 'businesses', id));
@@ -216,4 +230,4 @@ export const businessId = () => bid;
 export async function pushSupported() { try { return await isSupported(); } catch (e) { return false; } }
 export async function pushToken(vapidKey, reg) { return getToken(getMessaging(app), { vapidKey, serviceWorkerRegistration: reg }); }
 export async function getMyDevices() { const d = await getDoc(doc(db, 'businesses', bid, 'devices', me())); return d.exists() ? d.data() : { tokens: {}, prefs: {} }; }
-export const saveMyDevices = data => setDoc(doc(db, 'businesses', bid, 'devices', me()), data);
+export const saveMyDevices = data => readOnly ? Promise.resolve() : setDoc(doc(db, 'businesses', bid, 'devices', me()), data);

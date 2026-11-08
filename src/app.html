@@ -153,6 +153,9 @@ body:has(.rcal) main{min-height:0}
 .prodrow{gap:12px}.prodrow.offtill .grow b{text-decoration:line-through;color:var(--muted)}.prodrow.offtill{opacity:.75}
 .findlist .frow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 6px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;min-height:56px;cursor:pointer}.findlist .frow.off{color:var(--muted)}.findlist .frow.off b{text-decoration:line-through}.findlist .frow small{display:block}
 .freebox{border-radius:14px;padding:12px 14px;border:2px solid}.freebox.red{background:#fbe4e1;border-color:var(--danger);color:var(--danger)}.freebox.green{background:#e3efdb;border-color:var(--ok);color:var(--ok)}
+.practicebar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:#806092;color:#fff;font-weight:800;font-size:16px;padding:12px 16px calc(12px + var(--sab));text-align:center;width:100%}
+body.practicing #main{padding-bottom:80px}
+.homesearch{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;margin:4px 0 14px;padding:0 18px;border-radius:16px;background:#fff;border:2px solid var(--line);font-size:19px;color:var(--muted);text-align:left}
 .tickrow{display:flex;align-items:center;gap:10px;margin:10px 0;cursor:pointer}.tickrow input{width:26px;height:26px;flex:none}
 .drive{display:flex;flex-direction:column;gap:16px;padding-top:6px}
 .dbtn{min-height:120px;border-radius:26px;font-size:34px;font-weight:800;color:#fff;width:100%}
@@ -424,6 +427,32 @@ const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], se
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
+// recipes and the costs worked out from them: owners, and managers when an owner switches it on
+const seesCosts=()=>role()==='owner'||(role()==='manager'&&!!S.settings.mgrCosts);
+/* ---------- View as (practice mode) ----------
+   An owner sees the app exactly as a role or a person would: only what they can read and do. Nothing is
+   sent to the cloud, and leaving reloads the app from the cloud, so every sale, edit or tick is thrown away.
+   What's kept on this device (the open sale, till mode) is put back as it was. */
+const PRACTICE_KEYS=['rs.cart','rs.tillMode','rs.servedBy'];
+let practice=null;
+try{ const b=sessionStorage.getItem('rs.practiceBackup'); if(b){ const o=JSON.parse(b); PRACTICE_KEYS.forEach(k=>{ if(o[k]==null) localStorage.removeItem(k); else localStorage.setItem(k,o[k]); }); sessionStorage.removeItem('rs.practiceBackup'); } }catch(e){}
+function startPractice(email,r,label){
+  const o={}; PRACTICE_KEYS.forEach(k=>o[k]=localStorage.getItem(k)); try{ sessionStorage.setItem('rs.practiceBackup',JSON.stringify(o)); }catch(e){}
+  PRACTICE_KEYS.forEach(k=>localStorage.removeItem(k));
+  practice={role:r,email:email||null,label}; SYNC.startPractice(email||null,r); setupOpen=false;
+  if(typeof loadCart==='function') loadCart(); stack=['home']; render(); toast('Viewing as '+label+'. Nothing is saved.');
+}
+function endPractice(){ location.reload(); }
+function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">👁 Viewing as ${esc(practice.label)} · nothing is saved · <u>Tap to go back</u></button>`:''; }
+function viewAsPicker(){
+  modal((m,close)=>{ const others=SYNC.getMembers().filter(e=>e!==SYNC.me());
+    m.innerHTML=`<h2>👁 View as</h2><p class="note">See the app exactly as they would: only what they can see and do. Practice freely: nothing you do is saved, and it's all thrown away when you go back.</p>
+      <h3>A role</h3><div class="mact" style="justify-content:flex-start"><button class="btn alt" data-va="manager|">Manager</button><button class="btn alt" data-va="helper|">Helper</button></div>
+      ${others.length?`<h3>A person</h3>${others.map(e=>`<div class="row"><div class="grow"><b>${esc(personName(e))}</b><small>${esc(e)} · ${esc(ROLE_TXT[SYNC.roleOf(e)]||'Co-owner')}</small></div><button class="btn small" data-va="${esc(SYNC.roleOf(e))}|${esc(e)}">View as</button></div>`).join('')}`:''}
+      <div class="mact"><button class="btn alt" id="vaC">Cancel</button></div>`;
+    m.querySelector('#vaC').onclick=close;
+    m.querySelectorAll('[data-va]').forEach(b=>b.onclick=()=>{ const [r,e]=b.dataset.va.split('|'); close(); startPractice(e||null,r,e?personName(e)+' ('+(ROLE_TXT[r]||'Co-owner')+')':'a '+(ROLE_TXT[r]||r).toLowerCase()); }); });
+}
 
 /* ================= pop-ups ================= */
 let modalStack=[];
@@ -471,6 +500,9 @@ function render(){
   const bk=$('#bk'); if(bk) bk.onclick=back;
   const cg=$('#cog'); if(cg) cg.onclick=()=>requirePin(()=>go('setup'));
   drawSync();
+  let pb=$('#practiceWrap'); if(practice&&!pb){ pb=document.createElement('div'); pb.id='practiceWrap'; document.body.appendChild(pb); }
+  if(pb){ pb.innerHTML=practiceBar(); const b=$('#practiceBar'); if(b) b.onclick=()=>confirmBox('Go back to your own view?','Everything done while viewing as '+esc(practice.label)+' is thrown away.','Go back',endPractice); }
+  document.body.classList.toggle('practicing',!!practice);
   $('#main').innerHTML=sc.html();
   sc.wire&&sc.wire();
 }
@@ -492,12 +524,13 @@ const TILES=[
   {id:'brew', ic:'🫙', h:'Brew', p:'What to make, batches and stock', all:true},
   {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify'},
   {id:'lists', ic:'✅', h:'Lists', p:'To do, shopping and ideas', all:true},
+  {id:'recipes', ic:'🧪', h:'Products & recipes', p:'Recipes, ingredients, costs', costs:true},
   {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', owner:true},
   {id:'setup', ic:'⚙️', h:'Setup', p:'Products, prices, people, PIN', lock:true},
 ];
 SCREENS.home={
   html(){
-    const tiles=TILES.filter(t=>t.all||(t.owner?role()==='owner':canManage())), d=openDay();
+    const tiles=TILES.filter(t=>t.all||(t.costs?seesCosts()&&!tillLock():t.owner?role()==='owner':canManage())), d=openDay();
     const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
     const pinNag=canManage()&&!tillLock()&&!myPin()&&!missingCols.has('pins')?`<div class="card" style="border:2px solid var(--green2)"><b>🔒 Set your own PIN</b><p class="note">${esc(SYNC.me())} hasn't got a PIN yet. You'll need it to approve discounts, see sales and end the day.</p><button class="btn" id="nagPin">Choose my PIN</button></div>`:'';
     return rulesNotice()+pinNag+(typeof attentionCard==='function'?attentionCard():'')+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
@@ -509,12 +542,13 @@ SCREENS.home={
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hDrive">🚗 Drive mode</button></section>`:''}
       ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
+      ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything…</span></button>'}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
-      ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
+      ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
-    const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention');
+    const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive');
     const hp=$('#hPush'); if(hp) hp.onclick=()=>go('notify'); const hN=$('#hNotify'); if(hN) hN.onclick=()=>go('notify'); const hn=$('#hPushNo'); if(hn) hn.onclick=()=>{ lsSet('rs.pushNo','1'); render(); };
@@ -558,7 +592,7 @@ SCREENS.setup={
     <div class="card"><h3>🧾 What you sell</h3>
       <div class="row"><div class="grow"><b>Products and prices</b><small>${S.products.length} product${S.products.length===1?'':'s'} · the till buttons · prices include GST</small></div><button class="btn small" id="goProd">Open</button></div>
       <div class="row"><div class="grow"><b>🔔 Notifications</b><small>${S.settings.vapidKey?'Choose what you get on this device':'Needs the web push key from Firebase'}</small></div><button class="btn small" id="goNotify">Open</button></div>
-      <div class="row"><div class="grow"><b>Ingredients and recipes</b><small>${S.inputs.length} ingredients and packaging${role()==='owner'?' · '+S.recipes.length+' recipes (owners only)':''} · import from the workbook</small></div><button class="btn small" id="goRecipes">Open</button></div>
+      <div class="row"><div class="grow"><b>Products, recipes and ingredients</b><small>${S.inputs.length} ingredients and packaging${seesCosts()?' · '+S.recipes.length+' recipes':''} · costs and margins · import from the workbook</small></div><button class="btn small" id="goRecipes">Open</button></div>
       <div class="row"><div class="grow"><b>Markets and places</b><small>${S.places.filter(p=>!p.gone).length} · markets, Farm Shop, online, shops · fees and distances</small></div><button class="btn small" id="goPlaces">Open</button></div>
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
       <div class="row"><div class="grow"><b>Usual cash float</b><small>Filled in for you when a selling day starts</small></div><input class="txt" id="defFloat" inputmode="decimal" style="width:130px;min-height:48px" value="${st.defaultFloat?(st.defaultFloat/100).toFixed(2):''}" placeholder="200.00"></div>
@@ -591,7 +625,8 @@ SCREENS.setup={
       <p class="note">Only these Google accounts can open ${esc(S.name||'the business')}. The <b>main owner</b> set the business up and can never be removed. A <b>co-owner</b> can do everything except change the main owner or delete the business. <b>Managers</b> can change everything except people. <b>Helpers</b> can only sell.</p>
       ${mem.map(e=>{ const r=SYNC.roleOf(e), main=e===SYNC.getMainOwner(); return `<div class="row"><div class="grow"><b>${esc(e)}</b>${e===SYNC.me()?'<small>This is you</small>':''}</div>
         <span class="chip ${r}">${main?'Main owner':r==='owner'?'Co-owner':ROLE_TXT[r]}</span>${own&&!main?`<button class="btn alt small" data-role="${esc(e)}">Change</button>`:''}</div>`; }).join('')}
-      <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button></div></div>
+      <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button>${own&&!practice?'<button class="btn alt" id="viewAs">👁 View as…</button>':''}</div>
+      ${own?`<div class="row"><div class="grow"><b>Managers can see recipes and costs</b><small>${st.mgrCosts?'On: managers see recipes, costs and margins, and can plan brews. Only owners change recipes.':'Off: recipes and costs are for owners only'}</small></div><button class="switch ${st.mgrCosts?'on':''}" id="mgrCosts" role="switch" aria-checked="${!!st.mgrCosts}" aria-label="Managers can see recipes and costs"><i></i></button></div>`:''}</div>
 
     <div class="card"><h3>🔒 PINs and approvals</h3>
       <p class="note">Each owner and manager has their <b>own</b> 4-digit PIN. A PIN is needed to open Setup, see sales, give a discount, add an item that isn't on the till, correct or void a sale, end the day and leave till mode. Every approval is logged with who approved it and when. Helpers never see the PINs.</p>
@@ -616,6 +651,8 @@ SCREENS.setup={
     const n=$('#bizName'); n.onchange=()=>{ const v=n.value.trim(); if(!v){ n.value=S.name; return; } S.name=v; save(); toast('Saved'); };
     n.onkeydown=e=>{ if(e.key==='Enter') n.blur(); };
     $('#addPerson').onclick=addPerson;
+    const va=$('#viewAs'); if(va) va.onclick=viewAsPicker;
+    const mc=$('#mgrCosts'); if(mc) mc.onclick=()=>{ S.settings.mgrCosts=!S.settings.mgrCosts; save(); render(); toast(S.settings.mgrCosts?'Managers can now see recipes and costs (from their next app open)':'Recipes and costs are owners-only again'); };
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };

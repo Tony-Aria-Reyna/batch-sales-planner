@@ -75,7 +75,7 @@ SCREENS.brew={
 };
 function needSetupHtml(){
   return `<div class="card"><h3>First, the recipes</h3><p class="note">Add the ingredients, recipes and which products each recipe fills, or import them from the Batch Planning workbook.</p>
-    <div class="mact" style="justify-content:flex-start">${role()==='owner'?'<button class="btn" id="goRec">Ingredients and recipes</button>':'<p class="note">An owner sets up the recipes.</p>'}</div></div>`;
+    <div class="mact" style="justify-content:flex-start">${role()==='owner'?'<button class="btn" id="goRec">Products, recipes and ingredients</button>':'<p class="note">An owner sets up the recipes.</p>'}</div></div>`;
 }
 function nextHtml(){
   if(!S.products.some(p=>p.recipe)) return needSetupHtml();
@@ -96,8 +96,8 @@ function wireNext(){
 function planLines(r,mult){ return (r.lines||[]).map(l=>{ const i=S.inputs.find(x=>x.id===l.input)||{name:'(missing ingredient)',unit:'',pack:0,price:0}; const need=(+l.qty||0)*mult, have=inputStock(l.input);
   return {i,need,have,short:have==null?null:Math.max(0,need-have),cost:need*inputCost(i)}; }); }
 function planHtml(){
-  const recs=role()==='owner'?S.recipes:[];
-  if(role()!=='owner') return plansHtml()+`<div class="card"><p class="note">Recipes are owners-only, so planning a brew is done by an owner.</p></div>`;
+  const recs=seesCosts()?S.recipes:[];
+  if(!seesCosts()) return plansHtml()+`<div class="card"><p class="note">Recipes are owners-only, so planning a brew is done by an owner.</p></div>`;
   if(!recs.length) return needSetupHtml();
   const pl=brewPlan=brewPlan||{recipe:recs[0].id,mult:1,date:nzDay(),fill:{}}, r=S.recipes.find(x=>x.id===pl.recipe)||recs[0]; pl.recipe=r.id;
   const prods=S.products.filter(p=>p.recipe===r.id&&p.active!==false), total=r.yield*pl.mult;
@@ -108,7 +108,7 @@ function planHtml(){
       <div class="formrow"><div><label class="note" for="bR">Recipe</label><select class="txt" id="bR">${recs.map(x=>`<option value="${x.id}" ${x.id===r.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
         <div><label class="note" for="bM">How many batches</label><input class="txt" id="bM" type="number" min="0.25" step="0.25" value="${pl.mult}"></div></div>
       <label class="note" for="bD">Brew day</label><input class="txt" id="bD" type="date" value="${pl.date}">
-      <p class="note">Makes ${fmtQty(total,r.unit)}${prods.length?'. How many of each:':'. No products use this recipe yet: link them under Ingredients and recipes → Products.'}</p>
+      <p class="note">Makes ${fmtQty(total,r.unit)}${prods.length?'. How many of each:':'. No products use this recipe yet: link them under Products, recipes and ingredients → 🔗 Products.'}</p>
       ${recipeIssues(r).map(x=>`<p class="note clash">⚠️ ${esc(x.t)} <button class="linkb" data-fixrec="${r.id}">Fix it now</button></p>`).join('')}
       ${prods.map(p=>{ const st=stockOf(p.id), nf=!(p.fill>0); return `<div class="lrow"><div class="grow ltxt"><b>${esc(prodName(p))}</b>${nf?'<small class="bad">⚠️ No fill set, so the amounts and cost are wrong</small>':`<small>${fmtQty(p.fill,r.unit)} each${st?' · '+st.total+' in stock':''}</small>`}</div>${nf?`<button class="btn small" data-fixlink="${p.id}">Fix it now</button>`:''}<input class="txt qty" type="number" min="0" data-fill="${p.id}" value="${pl.fill[p.id]||''}" placeholder="0"></div>`; }).join('')}
       ${prods.length?`<p class="note ${used>total?'clash':''}" id="bUse">${used>total?'⚠️ ':''}Uses ${fmtQty(used,r.unit)} of ${fmtQty(total,r.unit)}${used<total&&pf&&total-used>=pf.fill?` · ${fmtQty(total-used,r.unit)} left (about ${Math.floor((total-used)/pf.fill)} more ${esc(prodName(pf))})`:''}</p>`:''}</div>
@@ -241,9 +241,9 @@ function fixStock(p){
 /* ---------- Setup → Ingredients and recipes ---------- */
 let recTab=lsGet('rs.rectab','inputs');
 SCREENS.recipes={
-  title:()=>({h:'Ingredients and recipes',s:'Costs are ex GST'}),
+  title:()=>({h:'Products, recipes and ingredients',s:'Costs are ex GST'}),
   html(){
-    const tabs=[['inputs','🧴 Ingredients and packaging']].concat(role()==='owner'?[['recipes','📖 Recipes'],['links','🔗 Products']]:[]);
+    const tabs=[['inputs','🧴 Ingredients and packaging']].concat(seesCosts()?[['recipes','📖 Recipes'],['links','🔗 Products']]:[]);
     if(!tabs.some(t=>t[0]===recTab)) recTab='inputs';
     return rulesNotice()+`<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${recTab===k?'on':''}" data-rt="${k}">${v}</button>`).join('')}</div>
       ${role()==='owner'?`<div class="card"><div class="row" style="border:0"><div class="grow"><b>Import from the Batch Planning workbook</b><small>Brings in the ingredients, recipes and packaging. Till prices aren't changed.</small></div><label class="btn small" style="cursor:pointer">📂 Choose<input type="file" id="wbF" accept=".xlsx,.xlsm" hidden></label></div></div>`:''}`
@@ -319,7 +319,7 @@ function editRecipe(src,done){
       m.querySelectorAll('[data-lx]').forEach(b=>b.onclick=()=>{ grab(); r.lines.splice(+b.dataset.lx,1); draw(); });
       m.querySelector('#rC').onclick=close;
       const d=m.querySelector('#rD'); if(d) d.onclick=()=>{ if(S.products.some(p=>p.recipe===r.id)){ toast('Products use this recipe: unlink them first'); return; } const k=S.recipes.findIndex(x=>x.id===r.id); if(k>=0) S.recipes.splice(k,1); save(); close(); render(); };
-      m.querySelector('#rOk').onclick=()=>{ grab(); r.name=r.name.trim(); if(!r.name){ toast('Type the name'); return; } if(!(r.yield>0)){ toast('Type what one batch makes'); return; }
+      m.querySelector('#rOk').onclick=()=>{ if(role()!=='owner'){ toast('Only owners change recipes'); return; } grab(); r.name=r.name.trim(); if(!r.name){ toast('Type the name'); return; } if(!(r.yield>0)){ toast('Type what one batch makes'); return; }
         r.lines=r.lines.filter(l=>l.qty>0); r.updated=Date.now(); delete r.unitGuessed;
         if(isNew){ r.id=SYNC.newId('recipes'); S.recipes.push(r); } else { const o=S.recipes.find(x=>x.id===r.id); delete o.unitGuessed; Object.assign(o,r); }
         save(); close(); render(); toast('Saved'); if(done) done(r); }; };

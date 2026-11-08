@@ -60,6 +60,9 @@ service cloud.firestore {
                     && request.resource.data.members.hasAll(request.resource.data.owners)
                     && request.resource.data.members.size() <= 20
                     && request.resource.data.get('roles', {}).values().hasOnly(['manager', 'helper'])
+                    // only an owner can let managers see recipes and costs
+                    && (roleIn(resource.data) == 'owner'
+                        || request.resource.data.get('settings', {}).get('mgrCosts', false) == resource.data.get('settings', {}).get('mgrCosts', false))
                     && (roleIn(resource.data) == 'owner'
                         || (request.resource.data.owners == resource.data.owners
                             && request.resource.data.members.hasAll(resource.data.members)
@@ -78,9 +81,12 @@ service cloud.firestore {
                     || (isMember(bid) && col in everyone());
         allow write: if canManage(bid) && col in managed();
       }
-      // Recipes and staff pay rates: owners only (recipes are the business's secret; pay is private)
+      // Recipes and staff pay rates: owners only (recipes are the business's secret; pay is private).
+      // An owner can let managers read the recipes (to see costs and plan brews); only owners change them.
       match /recipes/{id} {
-        allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
+        allow read: if isMember(bid) && (roleIn(biz(bid)) == 'owner'
+                    || (roleIn(biz(bid)) == 'manager' && biz(bid).get('settings', {}).get('mgrCosts', false) == true));
+        allow write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
       }
       match /pay/{id} {
         allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
