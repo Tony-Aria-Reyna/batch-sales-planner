@@ -91,6 +91,10 @@ service cloud.firestore {
       match /pay/{id} {
         allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
       }
+      // the owners' time clock and helpers' hours: owners only
+      match /clock/{id} {
+        allow read, write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
+      }
       // Stock movements (made, packed for a market, sold, returned, fixed). Everyone sees stock, so the till
       // can hint "sold out". Anyone can add a movement in their own name; a helper's fix must carry the
       // owner or manager who approved it with their PIN. Movements are never edited or deleted.

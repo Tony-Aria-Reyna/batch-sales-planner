@@ -10,8 +10,8 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 
 // every sub-collection the rules allow, and which ones each role may read
 export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts',
-  'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'voicenotes', 'pay'];
-const OWNER_ONLY = ['recipes', 'pay'];                                     // recipes are the business's secret; pay is private
+  'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'voicenotes', 'pay', 'clock'];
+const OWNER_ONLY = ['recipes', 'pay', 'clock'];                                     // recipes are the business's secret; pay is private
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans', 'stockmoves', 'shopping', 'todos', 'voicenotes'];
 const MINE_ONLY = { todos: 'who', voicenotes: 'by' };                       // a helper sees only their own of these
 // managers see recipes (and costs worked out from them) only when an owner switches that on; pay stays owners-only

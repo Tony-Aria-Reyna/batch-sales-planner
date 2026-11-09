@@ -70,7 +70,7 @@ function crunch(from,to,chan){
     const pl=S.places.find(p=>p.id===w.place), fee=pl?feeOf(pl.id):null, dfee=S.costs.find(c=>c.id==='dayfee-'+ses.id), day=dfee?dfee.cents:ses.fee!=null?ses.fee:(fee&&fee.cents?Math.round(fee.cents/Math.max(1,fee.days||1)):0);
     const feeEx=Math.round(day/1.15), km=pl&&pl.km?pl.km:0, mil=Math.round(km*vc.perKm);
     const hours=Math.max(0,((ses.closedAt||ses.openedAt)-ses.openedAt)/3600000), names=[...new Set(S.sales.filter(x=>x.sessionId===ses.id&&x.servedBy).map(x=>x.servedBy))];
-    const staff=names.reduce((n,nm)=>{ const r=pay.find(p=>(p.name||'').toLowerCase()===nm.toLowerCase()); return n+(r?(r.day?r.day:Math.round((r.hourly||0)*hours)):0); },0);
+    const staff=names.reduce((n,nm)=>{ const r=pay.find(p=>(p.name||'').toLowerCase()===nm.toLowerCase()), rec=(S.clock||[]).find(c=>c.kind==='helper'&&c.session===ses.id&&(c.who||'').toLowerCase()===nm.toLowerCase()); return n+(r?(r.day?r.day:Math.round((r.hourly||0)*(rec?rec.mins/60:hours))):0); },0);
     R.fees+=feeEx; R.mileage+=mil; R.staff+=staff; R.days.add(ses.date);
     const p=w.placeName&&R.byPlace[w.place||w.placeName]; if(p){ p.fees+=feeEx; p.mileage+=mil; p.staff+=staff; p.days++; } }
   for(const c of S.costs){ if(c.kind==='other'&&inRange(c.date||'')&&(chan==='all'||c.place===chan.slice(2))) R.otherCosts+=Math.round((c.cents||0)/(c.gst===false?1:1.15)); }
@@ -101,7 +101,7 @@ SCREENS.reports={
     const x=$('#rCsv'); if(x) x.onclick=exportSales;
     const ac=$('#rAddCost'); if(ac) ac.onclick=addCost;
     document.querySelectorAll('[data-delcost]').forEach(b=>b.onclick=()=>{ const i=S.costs.findIndex(c=>c.id===b.dataset.delcost); if(i>=0){ S.costs.splice(i,1); save(); render(); } });
-    const pr=$('#rPay'); if(pr) pr.onclick=editPay;
+    const pr=$('#rPay'); if(pr) pr.onclick=editPay; wireHelperHours();
     const vh=$('#rVeh'); if(vh) vh.onclick=()=>go('vehicle');
     const fy=$('#rFy'); if(fy) fy.onchange=()=>{ S.settings.fyStart=+fy.value; save(); render(); };
     const gm=$('#rGm'); if(gm) gm.onchange=()=>{ S.settings.gstMonths=+gm.value; save(); render(); };
@@ -152,6 +152,7 @@ function costsRep(R){
     <div class="card"><h3>Staff pay</h3><p class="note">Used for staff cost on selling days, matched to the name picked as "who's serving". Only owners see this.</p>
       ${(S.pay||[]).map(p=>`<div class="lrow"><div class="grow ltxt"><b>${esc(p.name)}</b><small>${[p.day?c2(p.day)+' a day':'',p.hourly?c2(p.hourly)+' an hour':''].filter(Boolean).join(' · ')||'no rate'}</small></div></div>`).join('')}
       <div class="mact" style="justify-content:flex-start"><button class="btn alt" id="rPay">Change pay rates</button></div></div>
+    ${helperHoursCard()}
     <div class="card"><h3>Years and GST</h3><div class="formrow"><div><label class="note" for="rFy">Financial year starts</label><select class="txt" id="rFy">${['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=>`<option value="${i+1}" ${fyStartMonth()===i+1?'selected':''}>${m}</option>`).join('')}</select></div>
       <div><label class="note" for="rGm">GST return every</label><select class="txt" id="rGm">${[[1,'month'],[2,'2 months'],[6,'6 months']].map(([n,t])=>`<option value="${n}" ${+(S.settings.gstMonths||2)===n?'selected':''}>${t}</option>`).join('')}</select></div></div></div>`;
 }

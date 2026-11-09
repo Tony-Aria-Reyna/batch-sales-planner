@@ -512,7 +512,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.selectOption('#rP', 'today'); await page.waitForTimeout(80);
   ok(await page.evaluate(() => { const R = crunch(nzDay(), nzDay(), 'all'); const sales = S.sales.filter(s => !s.voided && s.date === nzDay()).reduce((n, s) => n + s.total, 0), orders = S.orders.filter(o => o.status !== 'cancelled' && o.date === nzDay()).reduce((n, o) => n + (o.total != null ? o.total : orderTotal(o)), 0);
     return R.revenue === sales + orders && R.gst === Math.round(R.gst) && /Takings/.test(document.querySelector('#main').innerText); }), 'reports: today\'s takings = till sales + orders, with GST');
-  await page.click('[data-rtab="costs"]'); await page.waitForSelector('#rVeh'); await page.click('#rVeh'); await page.waitForSelector('#vAdd');
+  await page.click('[data-rtab="costs"]'); await page.waitForSelector('#rVeh');
+  ok(/Helpers' hours/.test(await text(page)), 'Reports → Costs: helpers\' hours kept with their pay');
+  ok(await page.evaluate(() => { S.pay.push({ id: 'pz', name: 'Sam', hourly: 2500 }); const s = S.sessions[0]; const had = S.sales.some(x => x.sessionId === s.id && x.servedBy === 'Sam'); const l = helperShifts(400); S.pay.pop(); return !had || (l.some(x => x.name === 'Sam' && x.est > 0)); }), 'helpers\' shifts come from who served on the till, with the hours estimated'); await page.click('#rVeh'); await page.waitForSelector('#vAdd');
   await page.fill('#vR', '76'); await page.dispatchEvent('#vR', 'change'); await page.waitForTimeout(40);
   for (const [l, t, o] of [['60', '150', '100000'], ['50', '125', '100500']]) { await page.click('#vAdd'); await page.waitForSelector('#fOk'); await page.fill('#fL', l); await page.fill('#fT', t); await page.fill('#fO', o); await page.click('#fOk'); await page.waitForTimeout(40); }
   ok(await page.evaluate(() => { const v = vehicleCost(); return Math.round(v.l100) === 10 && Math.round(v.perL) === 250 && Math.abs(v.perKm - (0.1 * 250 + 7.6) / 1.15) < 0.01; }), 'vehicle: real L/100 km from fill-ups, fuel price and RUC give the cost a km');
@@ -647,6 +649,18 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   if (await page.$('.pinpad')) await pin(page, '2580'); await page.waitForTimeout(150);
   ok(await page.evaluate(() => cur() === 'places'), 'tapping a result goes straight there (after the Setup PIN)');
   await page.screenshot({ path: path.join(shots, '40-search.png') });
+  // the owners' time clock
+  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('#hClock');
+  await page.click('#hClock'); await page.waitForSelector('[data-clk="brewing"]'); await page.click('[data-clk="brewing"]'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => clockRunning() && clockRunning().code === 'brewing'), 'time clock: Brewing started');
+  await page.click('[data-clk="admin"]'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => S.clock.filter(c => c.kind === 'owner').length === 2 && S.clock.find(c => c.code === 'brewing').end && clockRunning().code === 'admin'), 'tapping another job stops the first');
+  await page.evaluate(() => { const r = clockRunning(); r.start = Date.now() - 11 * 3600e3; stack = ['home']; render(); }); await page.waitForSelector('#clkStop');
+  ok(/over 10 hours\. Still working\?/.test(await text(page)), 'after 10 hours the home screen asks if you\'re still working');
+  await page.screenshot({ path: path.join(shots, '41-clock-10h.png') });
+  await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && !!(await page.$('#clkStop')), '"Yes, still going" keeps it running');
+  await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.every(c => c.end)), 'Stop stops it');
+  ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.mgrCosts === true), 'an owner can let managers see recipes and costs');

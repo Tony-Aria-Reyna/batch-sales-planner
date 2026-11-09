@@ -72,6 +72,9 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('an owner switches it off again', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { settings: { mgrCosts: false } })));
   await t('and the manager can no longer read them', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/recipes/r1'))));
   await t('owner can set a staff pay rate', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/pay/' + HELPER), { hourly: 2500 })));
+  await t('owner can use the time clock', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/clock/c1'), { code: 'brewing', mins: 60 })));
+  await t('manager cannot see the time clock', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/clock/c1'))));
+  await t('helper cannot see the time clock', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/clock/c1'))));
   await t('manager cannot see pay rates', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/pay/' + HELPER))));
   await t('helper cannot see pay rates', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/pay/' + HELPER))));
   await t('manager adds a market place', assertSucceeds(setDoc(doc(as(MANAGER), 'businesses/b1/places/m1'), { name: 'Village market', channel: 'retail', group: 'markets' })));

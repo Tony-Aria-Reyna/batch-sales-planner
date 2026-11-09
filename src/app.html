@@ -187,6 +187,8 @@ body.practicing #main{padding-bottom:80px}
 .ptable{display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-size:17px}.ptable b{text-align:right}.ptable .neg{color:var(--danger)}
 .card.nudge{border:2px solid var(--green2)}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.clockgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.clockgrid .btn{min-height:72px;font-size:17px;display:flex;flex-direction:column;align-items:center;justify-content:center}.clockgrid small{font-size:12px;font-weight:600;opacity:.85}
+.clockbar{border:2px solid var(--green2)}.clockbar.long{border-color:var(--warn);background:#fff4d6}
 .formrow.four{grid-template-columns:repeat(4,1fr);gap:6px}.formrow.four .note{font-size:.8rem}@media(max-width:420px){.formrow.four{grid-template-columns:1fr 1fr}}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
@@ -431,7 +433,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], clock:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -552,12 +554,13 @@ SCREENS.home={
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar three"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hType" aria-label="Type a note or question">⌨️<small class="vlbl">Type</small></button><button class="vdrive" id="hPhoto" aria-label="Photo">📷<small class="vlbl">Photo</small></button><button class="vdrive" id="hDrive">🚗<small class="vlbl">Drive</small></button></section>`:''}
       ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
+      ${role()==='owner'&&!tillLock()?(clockBanner()||'<button class="homesearch" id="hClock">⏱️ <span>Time clock: brewing, orders, admin, buying</span></button>'):''}
       ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything…</span></button>'}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
-  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render());
+  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); const hc=$('#hClock'); if(hc) hc.onclick=()=>go('clock');
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
@@ -947,7 +950,7 @@ let rT=null, firstRender=true;
 // Parts of the business the database refused to share (usually: the Firebase rules haven't been
 // republished after an update). The app keeps working without them and says what's missing.
 const missingCols=new Set();
-const COL_TXT={pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales',places:'markets and shops',events:'the calendar',plans:'the brew plan',ideas:'ideas',costs:'costs',prices:'ingredient prices',fuel:'fuel records',stockmoves:'stock',shopping:'the shopping list',voicenotes:'voice notes',pay:'pay rates',contacts:'customer contacts'};
+const COL_TXT={clock:'the time clock',pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales',places:'markets and shops',events:'the calendar',plans:'the brew plan',ideas:'ideas',costs:'costs',prices:'ingredient prices',fuel:'fuel records',stockmoves:'stock',shopping:'the shopping list',voicenotes:'voice notes',pay:'pay rates',contacts:'customer contacts'};
 function rulesNotice(){ return missingCols.size?`<div class="card" style="border:2px solid var(--warn);background:#fff4d6"><b>⚠️ The database rules need updating.</b><p class="note" style="margin-bottom:0">These parts are switched off until the Firebase rules are republished: ${[...missingCols].map(c=>COL_TXT[c]||c).join(', ')}. ${canManage()?'Selling is not affected. The rules publish automatically with each update; if this stays, copy the latest rules into Firebase → Firestore → Rules → Publish, then reopen the app.':'Selling is not affected. Ask the owner.'}</p></div>`:''; }
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
