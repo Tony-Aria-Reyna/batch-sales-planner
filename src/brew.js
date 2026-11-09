@@ -157,7 +157,7 @@ function wirePlan(){
     return {id,r,items};
   };
   $('#bSave').onclick=()=>checked('planned',o=>{ if(keep('planned',o)){ save(); brewPlan=null; toast('Planned'); render(); } });
-  $('#bMade').onclick=()=>checked('made',o=>{ const k=keep('made',o); if(!k) return; madeStock(k.id); save(); brewPlan=null; toast('Made: stock added'); render(); });
+  $('#bMade').onclick=()=>checked('made',o=>{ const k=keep('made',o); if(!k) return; madeStock(k.id); save(); brewPlan=null; toast('Made: stock added'); render(); brewCheckin(k.id); });
 }
 // a batch made: products into stock (at home), ingredients and packaging used
 function madeStock(batchId){
@@ -174,7 +174,7 @@ function plansHtml(under){
       <small>${p.items.map(x=>{ const pr=S.products.find(y=>y.id===x.pid); return x.units+' × '+esc(pr?prodName(pr):'?'); }).join(', ')}</small></div>
       ${canManage()&&p.status!=='made'?`<button class="btn small" data-made="${p.batch}">✓ Made</button>`:''}</div>`).join(''):'<p class="note">Nothing planned.</p>'}</div>`;
 }
-function wirePlans(){ document.querySelectorAll('[data-made]').forEach(b=>b.onclick=()=>confirmBox('Mark it made?','The products are added to stock at home.','Made',()=>{ madeStock(b.dataset.made); save(); render(); toast('Stock added'); })); }
+function wirePlans(){ document.querySelectorAll('[data-made]').forEach(b=>b.onclick=()=>confirmBox('Mark it made?','The products are added to stock at home.','Made',()=>{ madeStock(b.dataset.made); save(); render(); toast('Stock added'); brewCheckin(b.dataset.made); })); }
 function batchesHtml(){
   const l=S.batches.filter(b=>b.status==='made').sort((a,b)=>(b.madeAt||0)-(a.madeAt||0)).slice(0,40);
   return `<div class="card"><h3>Batches made</h3>${l.length?l.map(b=>`<div class="lrow"><div class="grow ltxt"><b>${esc(b.recipeName||'Batch')} ×${b.mult} · ${esc(nzDate(kd(b.date),{day:'numeric',month:'short',year:'numeric'}))}</b>

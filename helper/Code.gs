@@ -558,18 +558,26 @@ function marketReports(b, devs, once) {
   if (!owners.length) return;
   for (const k of Object.keys(groups)) {
     const g = groups[k]; if (g.some(s => s.status === 'open') || g.every(s => s.reported)) continue;
+    if (g.some(s => s.type === 'market' && !s.checkin && Date.now() - (s.closedAt || 0) < 30 * 60000)) continue;   // give the check-in half an hour
     once('report-' + k, () => {
       const ids = g.map(s => s._id), sales = listDocs('businesses/' + b._id + '/sales').filter(s => ids.indexOf(s.sessionId) >= 0);
       const live = sales.filter(s => !s.voided), total = live.reduce((n, s) => n + s.total, 0), gst = live.reduce((n, s) => n + (s.gst || 0), 0);
       const by = m => live.filter(s => s.method === m).reduce((n, s) => n + s.total, 0), items = {};
       live.forEach(s => (s.lines || []).forEach(l => { const key = l.name + (l.size ? ' ' + l.size : ''); items[key] = (items[key] || 0) + l.qty; }));
       const top = Object.keys(items).sort((a, c) => items[c] - items[a]).slice(0, 8);
-      const place = g[0].placeId ? getDoc('businesses/' + b._id + '/places/' + g[0].placeId) : null, fee = place ? getDoc('businesses/' + b._id + '/costs/fee-' + g[0].placeId) : null;
+      const place = g[0].placeId ? getDoc('businesses/' + b._id + '/places/' + g[0].placeId) : null, dayFee = getDoc('businesses/' + b._id + '/costs/dayfee-' + g[0]._id);
+      const fee = dayFee ? { cents: dayFee.cents, days: 1 } : place ? getDoc('businesses/' + b._id + '/costs/fee-' + g[0].placeId) : null;
+      const prods = listDocs('businesses/' + b._id + '/products'), pn = id => { const p = prods.find(x => x._id === id); return p ? p.name + (p.size ? ' ' + p.size : '') : ''; };
+      const checkinRows = gg => { const c = (gg.find(s => s.checkin && !s.checkin.skipped) || {}).checkin; if (!c) return [];
+        const t = c.times || {}, sell = gg[0].closedAt && gg[0].openedAt ? Math.round((gg[0].closedAt - gg[0].openedAt) / 60000) : 0, all = (t.there || 0) + (t.setup || 0) + sell + (t.pack || 0) + (t.home || 0) + (t.unpack || 0);
+        return [['How busy', { quiet: 'Quiet', steady: 'Steady', busy: 'Busy', flat: 'Flat out' }[c.busy] || '—'], ['Weather', (c.weather || []).join(', ') || '—'], ['Hours in all (travel to unpacking)', (Math.round(all / 6) / 10) + ' h']]
+          .concat((c.soldOut || []).length ? [['Sold out', c.soldOut.map(pn).filter(Boolean).join(', ')]] : []).concat(c.note ? [['Notes', c.note]] : []); };
       const counted = g.reduce((n, s) => n + (s.countedCash != null ? s.countedCash : 0), 0), expected = g.reduce((n, s) => n + (s.expectedCash != null ? s.expectedCash : 0), 0);
       const name = (g[0].name || 'Selling day'), when = Utilities.formatDate(new Date(g[0].openedAt || Date.now()), 'Pacific/Auckland', 'EEEE d MMMM');
       const rows = [['Takings', money(total)], ['Sales', String(live.length)], ['Cash', money(by('cash'))], ['EFTPOS', money(by('eftpos'))], ['Other', money(by('other'))], ['GST in the takings', money(gst)],
         ['Average sale', live.length ? money(Math.round(total / live.length)) : '—'], ['Voided', String(sales.length - live.length)]]
         .concat(fee && fee.cents ? [['Stall fee', money(Math.round(fee.cents / Math.max(1, fee.days || 1))) + (fee.days > 1 ? ' (share of ' + money(fee.cents) + ' for ' + fee.days + ' days)' : '')]] : [])
+        .concat(checkinRows(g))
         .concat(expected ? [['Cash counted against expected', money(counted) + ' / ' + money(expected) + (counted === expected ? ' ✓' : ' (' + (counted > expected ? 'over ' : 'short ') + money(Math.abs(counted - expected)) + ')')]] : []);
       const html = '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f">' + esc(name) + '</h2><p>' + esc(when) + '</p>' +
         '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' +

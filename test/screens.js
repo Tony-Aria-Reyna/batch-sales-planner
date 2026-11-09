@@ -209,6 +209,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.fill('#eC', '268.50'); ok(/Short by \$5\.00/.test(await page.textContent('#eDiff')), 'end of day: a $5 shortfall is shown');
   await page.screenshot({ path: path.join(shots, '15-ipad-end-of-day.png') });
   await page.fill('#eC', '273.50'); await page.click('#eX'); await page.waitForSelector('.tiles');
+  await page.waitForSelector('#cOk', { timeout: 3000 }).catch(() => {});
+  ok(!!(await page.$('#cOk')) && /How did .* go\?/.test(await text(page)) && /Still to do: 1 h 30 min/.test(await page.textContent('#cLeft')), 'end of a market: the check-in opens, prefilled (pack up 45 + drive 30 + unpack 15 = 1 h 30 min still to do)');
+  await page.click('[data-cbusy="busy"]'); await page.click('[data-cwx="sun"]'); await page.fill('#cT_home', '40'); await page.waitForTimeout(30);
+  ok(/Still to do: 1 h 40 min/.test(await page.textContent('#cLeft')), 'check-in: changing the drive home updates the time still to do');
+  await page.fill('#cNote', 'Lots asked for lavender soap'); await page.screenshot({ path: path.join(shots, '15b-market-checkin.png') });
+  await page.click('#cOk'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const c = S.sessions[0].checkin; return c && c.busy === 'busy' && c.weather.includes('sun') && c.times.home === 40 && c.times.unpack === 15 && /lavender soap/.test(c.note); }), 'check-in saved on the selling day');
   ok(await page.evaluate(() => S.sessions[0].status === 'closed' && S.sessions[0].totals.eftpos === 5000 && !(localStorage.getItem('rs.tillMode')||'').includes('Sam')), 'day closed, totals stored, till mode off');
   ok(await page.evaluate(() => { const t = document.querySelector('.today').innerText; return /🔒 Show/.test(t) && !/153/.test(t); }), 'home: takings hidden until a PIN');
   await page.click('#showMoney'); await pin(page, '2580'); await page.waitForTimeout(150);
@@ -322,7 +329,10 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#bShop'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.shopping.some(x => x.item === 'Test scent' && x.qty === 2 && x.size === '10 ml' && x.input)), 'ingredients go onto the shopping list in packs (20 ml = 2 packs of 10 ml)');
   await page.screenshot({ path: path.join(shots, '30-brew-plan.png') });
-  await page.click('#bMade'); await page.waitForTimeout(80);
+  await page.click('#bMade'); await page.waitForSelector('#bcOk', { timeout: 3000 }).catch(() => {});
+  ok(/How long did it take\?/.test(await text(page)), 'brew day: asks how long it took');
+  await page.fill('#bcH', '2'); await page.fill('#bcM', '30'); await page.click('#bcOk'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => S.batches[0].mins === 150 && S.batches[0].minsFrom === 'checkin'), 'brew day: 2 h 30 min saved on the batch');
   ok(await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); const st = stockOf(p.id); const b = S.batches[0]; return st.total === 20 && st.home === 20 && b.status === 'made' && b.unitCost[p.id] === 498 && S.plans[0].status === 'made'; }), 'made: 20 into stock at home, cost a unit frozen on the batch');
   await page.click('[data-bt="stock"]'); await page.waitForSelector('#sPack'); await page.click('#sPack'); await page.waitForSelector('#kOk');
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); document.querySelector('[data-pk="' + p.id + '"]').value = '5'; }); await page.click('#kOk'); await page.waitForTimeout(80);

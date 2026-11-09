@@ -67,7 +67,7 @@ function crunch(from,to,chan){
   // costs of each selling day: stall fee share, mileage, staff
   const vc=vehicleCost(), pay=S.pay||[];
   for(const ses of S.sessions){ if(!inRange(ses.date)) continue; const w=saleWhere({sessionId:ses.id,channel:ses.type,where:ses.name}); if(!keep(w)) continue;
-    const pl=S.places.find(p=>p.id===w.place), fee=pl?feeOf(pl.id):null, day=ses.fee!=null?ses.fee:(fee&&fee.cents?Math.round(fee.cents/Math.max(1,fee.days||1)):0);
+    const pl=S.places.find(p=>p.id===w.place), fee=pl?feeOf(pl.id):null, dfee=S.costs.find(c=>c.id==='dayfee-'+ses.id), day=dfee?dfee.cents:ses.fee!=null?ses.fee:(fee&&fee.cents?Math.round(fee.cents/Math.max(1,fee.days||1)):0);
     const feeEx=Math.round(day/1.15), km=pl&&pl.km?pl.km:0, mil=Math.round(km*vc.perKm);
     const hours=Math.max(0,((ses.closedAt||ses.openedAt)-ses.openedAt)/3600000), names=[...new Set(S.sales.filter(x=>x.sessionId===ses.id&&x.servedBy).map(x=>x.servedBy))];
     const staff=names.reduce((n,nm)=>{ const r=pay.find(p=>(p.name||'').toLowerCase()===nm.toLowerCase()); return n+(r?(r.day?r.day:Math.round((r.hourly||0)*hours)):0); },0);

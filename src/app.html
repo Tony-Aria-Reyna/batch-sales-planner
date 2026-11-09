@@ -635,6 +635,8 @@ SCREENS.setup={
       <div class="formrow"><div><label class="note" for="sumT">Time</label><input class="txt" id="sumT" type="time" value="${esc(sm.time||'07:00')}"></div>
         <div><label class="note" for="sumW">Weekly summary on</label><select class="txt" id="sumW">${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d,i)=>`<option value="${i}" ${+(sm.weekday??1)===i?'selected':''}>${d}</option>`).join('')}</select></div></div></div>`; })():''}
 
+    ${canManage()?checkinsCard():''}
+
     ${role()==='owner'?`<div class="card"><h3>🛍️ Shopify</h3>
       <p class="note">Online orders are copied into Orders every 15 minutes by the business helper, using a read-only app made in Shopify's Dev Dashboard. Its keys stay in the helper, never in the app.</p>
       <label class="note" for="shShop">Shop address</label><input class="txt" id="shShop" autocapitalize="none" value="${esc(S.settings.shopifyShop||'')}" placeholder="yourshop.myshopify.com">
@@ -680,6 +682,7 @@ SCREENS.setup={
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
     const ss=$('#shShop'); if(ss) ss.onchange=()=>{ const v=ss.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if(v&&!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v)){ toast('Use the address ending in .myshopify.com'); ss.value=S.settings.shopifyShop||''; return; } S.settings.shopifyShop=v; save(); toast('Saved'); };
     const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
+    wireCheckins();
     const sumSet=(k,v)=>{ S.settings.summaries=Object.assign({},S.settings.summaries||{},{[k]:v}); save(); };
     document.querySelectorAll('[data-sum]').forEach(b=>b.onclick=()=>{ const k=b.dataset.sum, on=(S.settings.summaries||{})[k]!==false; sumSet(k,!on); render(); });
     const sT=$('#sumT'); if(sT) sT.onchange=()=>{ if(/^\d\d:\d\d$/.test(sT.value)){ sumSet('time',sT.value); toast('Saved'); } };
