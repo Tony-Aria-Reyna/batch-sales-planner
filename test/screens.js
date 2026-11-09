@@ -661,6 +661,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && !!(await page.$('#clkStop')), '"Yes, still going" keeps it running');
   await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.every(c => c.end)), 'Stop stops it');
   ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
+  // the Profit screen
+  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('#hProf'); await page.click('#hProf'); await page.waitForSelector('.profhead');
+  await page.click('[data-pp="fy"]'); await page.waitForSelector('.profhead');
+  const pt = await text(page);
+  ok(/This year: real profit/.test(pt) && /an hour for your/.test(pt) && /What to do next/.test(pt) && /How sure are these numbers\?/.test(pt), 'Profit: real profit, an hour of your time, what to do next, how sure');
+  ok(/Markets and places, best first/.test(pt) && /(Worth it|Borderline|Losing money)/.test(pt) && /Products, best earners first/.test(pt), 'Profit: markets and products ranked with a verdict');
+  ok(await page.evaluate(() => { const d = profCache; return d.H.market > 0 && d.H.clock >= 60 && d.H.brew === 150; }), 'Profit: hours from markets, the time clock and brew days (no double counting)');
+  await page.screenshot({ path: path.join(shots, '42-profit.png'), fullPage: true });
+  const gapBtn = await page.$('[data-gap]'); if (gapBtn) { await gapBtn.click(); await page.waitForTimeout(150); ok(await page.evaluate(() => cur() !== 'profit' || !!document.querySelector('.modal')), 'a Fix button takes you to the fix'); await page.evaluate(() => { while (modalStack.length) closeModal(); }); }
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.mgrCosts === true), 'an owner can let managers see recipes and costs');

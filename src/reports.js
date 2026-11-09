@@ -86,7 +86,7 @@ SCREENS.reports={
     const [from,to]=periodRange(repPeriod), R=crunch(from,to,repChan);
     const chOpts=[['all','Everything']].concat(Object.entries(CHANNELS).map(([k,v])=>['c:'+k,v])).concat(placeGroups().map(g=>['g:'+g.id,'· '+g.name])).concat(S.places.filter(p=>!p.gone).map(p=>['p:'+p.id,'·· '+p.name]));
     const tabs=[['summary','📊 Summary'],['places','📍 By place'],['products','🧴 Products'],['when','🕐 When'],['costs','💸 Costs']];
-    return `<div class="card"><div class="formrow"><div><label class="note" for="rP">Period</label><select class="txt" id="rP">${Object.entries(PERIODS).map(([k,v])=>`<option value="${k}" ${repPeriod===k?'selected':''}>${v}</option>`).join('')}</select></div>
+    return `<button class="homesearch profbtn" id="rProf">💰 <span><b>Real profit</b>, an hour of your time, and what to do next</span> ›</button><div class="card"><div class="formrow"><div><label class="note" for="rP">Period</label><select class="txt" id="rP">${Object.entries(PERIODS).map(([k,v])=>`<option value="${k}" ${repPeriod===k?'selected':''}>${v}</option>`).join('')}</select></div>
         <div><label class="note" for="rCh">Channel or place</label><select class="txt" id="rCh">${chOpts.map(([k,v])=>`<option value="${k}" ${repChan===k?'selected':''}>${esc(v)}</option>`).join('')}</select></div></div>
         ${repPeriod==='custom'?`<div class="formrow"><div><label class="note" for="rF">From</label><input class="txt" id="rF" type="date" value="${from}"></div><div><label class="note" for="rT">To</label><input class="txt" id="rT" type="date" value="${to}"></div></div>`:`<p class="note">${esc(nzDate(kd(from),{day:'numeric',month:'short',year:'numeric'}))} – ${esc(nzDate(kd(to),{day:'numeric',month:'short',year:'numeric'}))}</p>`}</div>
       <div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${repTab===k?'on':''}" data-rtab="${k}">${v}</button>`).join('')}</div>`
@@ -101,7 +101,7 @@ SCREENS.reports={
     const x=$('#rCsv'); if(x) x.onclick=exportSales;
     const ac=$('#rAddCost'); if(ac) ac.onclick=addCost;
     document.querySelectorAll('[data-delcost]').forEach(b=>b.onclick=()=>{ const i=S.costs.findIndex(c=>c.id===b.dataset.delcost); if(i>=0){ S.costs.splice(i,1); save(); render(); } });
-    const pr=$('#rPay'); if(pr) pr.onclick=editPay; wireHelperHours();
+    const pr=$('#rPay'); if(pr) pr.onclick=editPay; wireHelperHours(); const rpf=$('#rProf'); if(rpf) rpf.onclick=()=>go('profit');
     const vh=$('#rVeh'); if(vh) vh.onclick=()=>go('vehicle');
     const fy=$('#rFy'); if(fy) fy.onchange=()=>{ S.settings.fyStart=+fy.value; save(); render(); };
     const gm=$('#rGm'); if(gm) gm.onchange=()=>{ S.settings.gstMonths=+gm.value; save(); render(); };
