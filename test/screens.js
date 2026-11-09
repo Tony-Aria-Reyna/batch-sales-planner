@@ -468,6 +468,17 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(sb => { const p = S.products.find(x => x.name === 'Test Oil'); return stockOf(p.id).total === sb + 12 && S.costs.some(c => c.note === 'Stall fee' && c.cents === 5000 && c.from === 'voice') && S.fuel.some(f => f.cents === 11840 && f.odo === 84210); }, stockBefore), 'saying "yes" saves them all: 12 made into stock, the stall fee (fixed by hand to $50), the fill-up');
   ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.id === 'vkinds'); return n.status === 'done' && n.learn === 'todo' && n.edits.length === 1 && n.edits[0].kind === 'made' && n.edits[0].after.qty === 12; }), 'what was changed is kept for the assistant to learn from (but never the cost)');
   await page.evaluate(() => { for (const c of ['fuel', 'costs', 'stockmoves']) for (let i = S[c].length - 1; i >= 0; i--) if (S[c][i].from === 'voice') S[c].splice(i, 1); save(); });
+  // a photo fills the fuel form (camera or gallery); nothing is saved until Save
+  await page.evaluate(() => addFuel()); await page.waitForSelector('#fGal');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#fGal')]);
+  ok(!(await chooser.element().getAttribute('capture')), 'the gallery button lets you pick a saved photo (not only the camera)');
+  await chooser.setFiles(path.join(__dirname, 'pump.jpg')); await page.waitForSelector('#vS');
+  ok(await page.evaluate(() => { const n = S.voicenotes.filter(x => x.kind === 'note').pop(); return n.mime === 'image/jpeg' && /Fuel fill-up/.test(n.text) && n.chunks >= 1; }), 'the photo goes to the assistant as a fill-up');
+  await page.evaluate(() => { const n = S.voicenotes.filter(x => x.kind === 'note').pop(); Object.assign(n, { status: 'ready', drafts: [{ kind: 'fuel', unsure: ['odometer'], fuel: { litres: 38.6, cents: 10422, odometer: 84650, date: nzDay() } }] }); save(); });
+  await page.waitForFunction(() => document.querySelector('#fL') && document.querySelector('#fL').value === '38.6', null, { timeout: 5000 }).catch(() => {});
+  ok(await page.evaluate(() => document.querySelector('#fL').value === '38.6' && document.querySelector('#fT').value === '104.22' && document.querySelector('#fO').value === '84650' && document.querySelector('#fO').classList.contains('unsure') && !S.fuel.some(f => f.litres === 38.6)), 'what it reads is filled in (guesses in yellow) and nothing is saved yet');
+  await page.screenshot({ path: path.join(shots, '33b-fuel-photo.png') });
+  await page.click('#fC');
   await page.evaluate(() => { const v = { id: 'vfollow', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'buy beeswax', say: '', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 1, size: '' } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('#rTx'); await page.fill('#rTx', 'make it 3'); await page.click('#rTxGo'); await page.waitForSelector('#vS');
   ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); return n && n.text === 'make it 3' && n.prev.length === 1 && n.prev[0].shopping.item === 'Beeswax'; }), 'a typed change goes back to the assistant with the drafts on screen');

@@ -61,6 +61,8 @@ const np = patches.filter(p => p[0] === 'businesses/b1/voicenotes/n1').map(p => 
 ok(np.some(p => p.stage === 'listening') && np.findIndex(p => p.stage === 'thinking' && /Matakana/.test(p.heard)) < np.findIndex(p => p.status === 'ready'), 'voice note: the words are saved (stage "thinking") before the drafts are ready');
 ok(!calls[0].contents[0].parts.some(p => /Lessons/.test(p.text || '')) && calls[1].contents[0].parts[0].text.indexOf("'lav oil' means") > 0 && /Lip balm 15g/.test(calls[1].contents[0].parts[0].text), 'drafts are worked out with the products and the lessons learnt');
 const ready = np.find(p => p.status === 'ready');
+ok(ctx.cleanDraft({ kind: 'todo', task: 'Add a camera to the fuel tool' }).todo.text === 'Add a camera to the fuel tool' && ctx.cleanDraft({ kind: 'todo', todo: { title: 'Label jars' } }).todo.text === 'Label jars' && ctx.cleanDraft({ kind: 'idea', idea: { description: 'Rose balm' } }).idea.text === 'Rose balm', 'a to-do or idea is kept whatever the model calls the field (task, title, description)');
+ok(/todo \{text, who, due, time\}/.test(calls[1].contents[0].parts[0].text) && /never leave it empty/.test(calls[1].contents[0].parts[0].text), 'the instructions name every field (a to-do\'s text included)');
 ok(ready.drafts.map(d => d.kind).join(',') === 'shopping,question', 'a helper only gets their kinds (no calendar entry, no cost)');
 ok(calls[1].generationConfig.thinkingConfig.thinkingLevel === 'low', 'thinking is kept low for speed');
 calls.length = 0; patches.length = 0;
@@ -75,6 +77,11 @@ ctx.patchSetting = (bid, k, v) => patches.push(['setting', { [k]: v }]);
 ctx.learnTick(b);
 ok(patches.some(p => p[0] === 'setting' && /Beeswax comes in 1 kg blocks/.test(p[1].aiLessons)) && patches.some(p => p[0] === 'businesses/b1/voicenotes/n9' && p[1].learn === 'done') && /Never include prices/.test(calls[0].contents[0].parts[0].text), 'each evening, edits become lessons (never prices or recipe amounts), and the notes are marked learnt');
 b.aiLearnt = tomorrow; calls.length = 0; ctx.learnTick(b); ok(calls.length === 0, 'lessons are worked out once a day');
+// ---- the app's "Test the link": the helper notes it heard it, and does nothing else
+ctx.ContentService = { createTextOutput: t => ({ text: t }) }; ctx.Session = { getEffectiveUser: () => ({ getEmail: () => 'biz@example.com' }) };
+ctx.getDoc = p => p === 'businesses/bizb99' ? { settings: { receiptEmail: 'biz@example.com' } } : null; patches.length = 0;
+const pr = ctx.doPost({ postData: { contents: JSON.stringify({ bid: 'bizb99', id: 'ping-abc123' }) } });
+ok(pr.text === 'ok' && patches.length === 1 && patches[0][0] === 'businesses/bizb99' && patches[0][1].helperSeen.version === 6, 'Test the link: the helper records that it heard the app (and its version)');
 // ---- summaries: the daily briefing only on days with something on; weekly on Mondays; monthly on the 1st
 ctx.UrlFetchApp.fetch = realFetch; mails.length = 0;
 const mon = '2026-11-16', first = '2026-12-01';

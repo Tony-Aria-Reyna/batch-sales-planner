@@ -203,10 +203,18 @@ SCREENS.vehicle={
   }
 };
 function addFuel(){
-  modal((m,close)=>{ m.innerHTML=`<h2>⛽ Fill-up</h2><div class="formrow"><div><label class="note" for="fL">Litres</label><input class="txt" id="fL" inputmode="decimal"></div><div><label class="note" for="fT">Total paid ($)</label><input class="txt" id="fT" inputmode="decimal"></div></div>
+  modal((m,close)=>{ m.innerHTML=`<h2>⛽ Fill-up</h2>${voiceReady()?`<p class="note">Take a photo of the receipt, the pump or the odometer (or pick one from the gallery) and the assistant fills these in for you to check.</p>
+      <div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn alt" id="fCam">📷 Take a photo</button><button class="btn alt" id="fGal">🖼️ From the gallery</button></div>`:''}<div class="formrow"><div><label class="note" for="fL">Litres</label><input class="txt" id="fL" inputmode="decimal"></div><div><label class="note" for="fT">Total paid ($)</label><input class="txt" id="fT" inputmode="decimal"></div></div>
       <label class="note" for="fO">Odometer (km)</label><input class="txt" id="fO" inputmode="numeric">
       <p class="note">Fill the tank each time for the most accurate fuel use.</p><div class="mact"><button class="btn alt" id="fC">Cancel</button><button class="btn" id="fOk">Save</button></div>`;
     m.querySelector('#fC').onclick=close;
+    // the photo goes to the assistant; what it reads is filled in here (guesses in yellow), nothing is saved until Save
+    const fill=n=>{ const d=(n.drafts||[]).find(x=>x.kind==='fuel'); if(!d){ toast('Couldn\'t read a fill-up from that photo. Type it in, or try a clearer photo.'); return; }
+      const f=d.fuel, set=(id,v,k)=>{ const el=m.querySelector(id); if(v){ el.value=v; el.classList.toggle('unsure',(d.unsure||[]).includes(k)); } };
+      set('#fL',f.litres?String(f.litres):'','litres'); set('#fT',f.cents?(f.cents/100).toFixed(2):'','cents'); set('#fO',f.odometer?String(f.odometer):'','odometer');
+      toast('Filled in from the photo: check it, then Save'); };
+    const photo=src=>takePhoto({source:src,hint:'Fuel fill-up: a fuel receipt, the pump display or the odometer. Draft one fuel entry with what you can read.',onDrafts:fill});
+    const fc=m.querySelector('#fCam'); if(fc){ fc.onclick=()=>photo('camera'); m.querySelector('#fGal').onclick=()=>photo('gallery'); }
     m.querySelector('#fOk').onclick=()=>{ const l=+m.querySelector('#fL').value.replace(/[^0-9.]/g,''), c=toCents(m.querySelector('#fT').value), o=+m.querySelector('#fO').value.replace(/[^0-9]/g,'')||0;
       if(!(l>0)){ toast('Type the litres'); return; } if(!(c>0)){ toast('Type the total paid'); return; }
       S.fuel.push({id:SYNC.newId('fuel'),litres:l,cents:c,odo:o,at:Date.now(),date:nzDay(),by:SYNC.me()}); save(); close(); render(); toast('Saved'); }; });

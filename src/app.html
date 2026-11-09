@@ -618,6 +618,7 @@ SCREENS.setup={
       <div class="row"><div class="grow"><b>Voice assistant</b><small>${S.settings.aiPaused?'Paused: notes are kept but not worked out':S.settings.voiceOn?'On':'Off'}</small></div>
         <button class="btn small ${S.settings.voiceOn&&!S.settings.aiPaused?'alt':''}" id="aiOn">${S.settings.voiceOn&&!S.settings.aiPaused?'Pause':'Switch on'}</button></div>
       <label class="note" for="vUrl">Helper web address (makes replies near-instant; from the helper's Deploy → Web app)</label><input class="txt" id="vUrl" inputmode="url" autocapitalize="none" value="${esc(S.settings.voiceUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
+      <div class="row"><div class="grow"><b>Instant link</b><small id="linkState">${S.helperSeen&&S.helperSeen.at?'Last heard from the helper (version '+esc(String(S.helperSeen.version||'?'))+') '+nzDate(new Date(S.helperSeen.at),{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'Not tested yet'}</small></div><button class="btn small alt" id="linkTest">Test the link</button></div>
       <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div>
       <label class="note" for="aiLessons"><b>What it has learnt</b> · from the changes people make to its drafts, worked out each evening. Change or delete any line; it's never emailed.</label>
       <textarea class="txt" id="aiLessons" rows="5" placeholder="Nothing yet">${esc(S.settings.aiLessons||'')}</textarea></div>`:''}
@@ -682,6 +683,9 @@ SCREENS.setup={
     const sW=$('#sumW'); if(sW) sW.onchange=()=>{ sumSet('weekday',+sW.value); toast('Saved'); };
     const al=$('#aiLessons'); if(al) al.onchange=()=>{ S.settings.aiLessons=al.value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,40).join('\n').slice(0,3000); save(); toast('Saved'); };
     const ah=$('#aiHelp'); if(ah) ah.onclick=assistantHelp;
+    const lt=$('#linkTest'); if(lt) lt.onclick=()=>{ const st=$('#linkState'); st.textContent='Testing… (up to 25 seconds)'; lt.disabled=true;
+      testHelperLink((ok,secs,ver)=>{ lt.disabled=false; st.innerHTML=ok?`<span style="color:var(--ok);font-weight:800">✓ Working: the helper answered in ${secs} s (version ${esc(String(ver||'?'))})</span>${ver<6?' · Paste the new Code.gs and deploy a New version':''}`
+        :'<span class="bad">✕ No answer. Check the address ends in /exec, the deployment\'s "Who has access" is Anyone, and you deployed a New version after pasting the code.</span>'; }); };
     const vu=$('#vUrl'); if(vu) vu.onchange=()=>{ const v=vu.value.trim(); if(v&&!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)){ toast('Paste the web app address ending in /exec'); vu.value=S.settings.voiceUrl||''; return; } S.settings.voiceUrl=v; save(); toast('Saved'); };
     const re=$('#rcEmail'); re.onchange=()=>{ const v=re.value.trim().toLowerCase(); if(v&&!isEmail(v)){ toast('Type the full Gmail address'); re.value=S.settings.receiptEmail||''; return; } S.settings.receiptEmail=v; save(); render(); toast('Saved'); };
     const rn=$('#rcNote'); rn.onchange=()=>{ S.settings.receiptNote=rn.value.trim().slice(0,200); save(); toast('Saved'); };

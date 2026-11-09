@@ -72,11 +72,19 @@ function typedText(t,opts={}){
 // a photo (fuel pump, invoice, receipt, recipe card, handwritten list, sign-up sheet): made small on the device first
 function takePhoto(opts={}){
   if(!voiceReady()){ toast('The assistant is switched off in Setup'); return; }
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.setAttribute('capture','environment');
+  if(opts.source){ pickPhoto(opts); return; }
+  modal((m,close)=>{ m.innerHTML=`<h2>📷 ${esc(opts.title||'A photo')}</h2><div class="mact" style="justify-content:stretch"><button class="btn big" id="pcCam" style="flex:1">📷 Take a photo</button><button class="btn big alt" id="pcGal" style="flex:1">🖼️ From the gallery</button></div><div class="mact"><button class="btn alt" id="pcX">Cancel</button></div>`;
+    m.querySelector('#pcX').onclick=close;
+    m.querySelector('#pcCam').onclick=()=>{ close(); pickPhoto(Object.assign({},opts,{source:'camera'})); };
+    m.querySelector('#pcGal').onclick=()=>{ close(); pickPhoto(Object.assign({},opts,{source:'gallery'})); }; });
+}
+function pickPhoto(opts){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; if(opts.source==='camera') inp.setAttribute('capture','environment');
   inp.onchange=()=>{ const f=inp.files&&inp.files[0]; if(!f) return; const url=URL.createObjectURL(f), img=new Image();
     img.onload=()=>{ const k=Math.min(1,1400/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
       c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
       const data=c.toDataURL('image/jpeg',0.72).split(',')[1];
+      if(opts.hint){ sendNote({image:data,mime:'image/jpeg',text:opts.hint},opts); return; }
       modal((m,close)=>{ m.innerHTML=`<h2>📷 What's this photo?</h2><img src="data:image/jpeg;base64,${data}" alt="" style="max-width:100%;max-height:260px;border-radius:14px;display:block;margin:0 auto 10px">
           <div class="pastnames">${['Fuel receipt','Supplier invoice','Stall fee receipt','Recipe card','Shopping list','To-do list','Market sign-up sheet'].map(x=>`<button class="chip big" data-ph="${x}">${x}</button>`).join('')}</div>
           <label class="note" for="phT">Anything to add (optional)</label><input class="txt" id="phT" placeholder="e.g. this was for the Matakana market">
@@ -97,6 +105,14 @@ function sendNote(n,opts={}){
   save(); pingHelper(id);
   waitForNote(id,opts);
 }
+// Setup → Test the link: the helper notes when it hears the app, so we can show whether the instant link works
+function testHelperLink(done){
+  const url=S.settings.voiceUrl; if(!url){ toast('Paste the helper web address first'); return; }
+  const t0=Date.now(), was=(S.helperSeen||{}).at||0; pingHelper('ping-'+Date.now().toString(36));
+  const iv=setInterval(()=>{ const at=(S.helperSeen||{}).at||0;
+    if(at>was){ clearInterval(iv); done(true,Math.round((Date.now()-t0)/100)/10,(S.helperSeen||{}).version); }
+    else if(Date.now()-t0>25000){ clearInterval(iv); done(false); } },500);
+}
 function pingHelper(id){
   const url=S.settings.voiceUrl; if(!url||!/^https:\/\/script\.google\.com\//.test(url)) return;
   // the helper reads the note itself from the database; this only says "there's one waiting"
@@ -110,14 +126,14 @@ function waitForNote(id,opts={}){
     const quit=()=>{ clearInterval(voiceWatch); close(); };
     const draw=()=>{ const n=S.voicenotes.find(x=>x.id===id)||{}, photo=/^image\//.test(n.mime||''), typed=!!n.text&&!n.chunks, off=!navigator.onLine;
       const st=n.status==='working'||n.status==='ready'?n.stage||'thinking':'', secs=Math.round((Date.now()-t0)/1000);
-      const steps=[['saved','Saved on this '+deviceLabel(),true],['sent','Sent to the assistant',!off&&(st||secs>=2)]]
+      const steps=[['saved','Saved on this '+deviceLabel(),true],['sent','Picked up by the assistant',!!st,!st&&!off]]
         .concat(photo?[['looking','Reading the photo',st==='thinking'||st==='ready',st==='looking']]:typed?[]:[['listening','Listening to your note',!!n.heard,st==='listening']])
         .concat([['thinking','Working out what to do',st==='ready',st==='thinking'],['ready','Ready to check',n.status==='ready']]);
       m.querySelector('#vH').textContent=off?'Waiting for signal':'Working it out… '+secs+' s';
       m.querySelector('#vS').innerHTML=steps.map(([k,t,done,now])=>`<li class="${done?'done':now?'now':''}">${done?'✓':now?'⏳':'○'} ${esc(t)}</li>`).join('');
       const h=m.querySelector('#vHeard'); if(n.heard&&!photo){ h.hidden=false; h.textContent='“'+n.heard+'”'; }
       m.querySelector('#vW').textContent=off?'📴 You\'re offline. The note is saved on this '+deviceLabel()+' and will be worked out as soon as you\'re back in signal. It\'ll wait under Lists → Voice notes.'
-        :n.error&&n.status==='new'?'Still trying… ('+n.error.slice(0,80)+')':secs>45&&n.status==='new'?'The assistant hasn\'t picked it up yet. It checks every 5 minutes, so it may take a little while.':'';
+        :n.error&&n.status==='new'?'Still trying… ('+n.error.slice(0,80)+')':secs>20&&n.status==='new'?(S.settings.voiceUrl?'The assistant hasn\'t picked it up yet, so the instant link may not be working (Setup → 🎙 Voice assistant → Test the link). It also checks every 5 minutes, so it will get there.':'There\'s no instant link set up, so the assistant picks notes up on its 5-minute check. Add the helper web address in Setup → 🎙 Voice assistant.'):'';
       return n; };
     m.innerHTML=`<div class="vrec"><div class="vdot work">⏳</div><h2 id="vH">Working it out…</h2><ul class="vsteps" id="vS"></ul><p class="heard" id="vHeard" hidden></p><p class="note" id="vW"></p>
       <div class="mact"><button class="btn alt" id="vL">Carry on, tell me when it's ready</button></div></div>`;
@@ -136,6 +152,7 @@ function watchNote(id,opts){ watching.set(id,opts||{}); }
 setInterval(()=>{ for(const [id,opts] of watching){ const n=S.voicenotes.find(x=>x.id===id); if(!n||!['new','working'].includes(n.status)){ watching.delete(id);
   if(n&&n.status==='ready'){ const b=document.createElement('button'); b.className='notebanner'; b.textContent='🎙 Your note is ready to check · tap to see it'; b.onclick=()=>{ b.remove(); noteReady(n,opts); }; document.body.appendChild(b); setTimeout(()=>b.remove(),30000); } } } },1500);
 function noteReady(n,opts={}){
+  if(opts.onDrafts){ settleNote(n,'done'); opts.onDrafts(n); return; }
   if(opts.parentApi){ if(n.command){ settleNote(n,'done'); opts.parentApi.command(n.command); } else opts.parentApi.replace(n); return; }
   if(n.command){ settleNote(n,'done'); toast('Nothing on screen to '+n.command); return; }
   reviewNote(n,opts);
