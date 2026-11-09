@@ -5,3 +5,6 @@ public/
 *.log
 test/shots/
 src/brand-logo.webp
+scripts/guide/shots/
+scripts/guide/guide.html
+scripts/guide/*.pdf

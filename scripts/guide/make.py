@@ -14,7 +14,7 @@ def page(body, cls=''):
     pages.append(f'<section class="page {cls}">{nav}<div class="body">{body}</div>{foot}</section>')
 def shot(name, h, cap='', w=None):
     st = f'height:{h}mm' + (f';width:{w}mm' if w else '')
-    return f'<figure class="shot" style="{st}"><img src="shots/{name}.png"></figure>' + (f'<figcaption>{cap}</figcaption>' if cap else '')
+    return f'<div><figure class="shot" style="{st}"><img src="shots/{name}.png"></figure>' + (f'<figcaption>{cap}</figcaption>' if cap else '') + '</div>'
 def steps(items): return '<ol class="steps">' + ''.join(f'<li>{i}</li>' for i in items) + '</ol>'
 def table(head, rows, cls=''):
     return f'<table class="{cls}"><thead><tr>' + ''.join(f'<th>{h}</th>' for h in head) + '</tr></thead><tbody>' + ''.join('<tr>' + ''.join(f'<td>{c}</td>' for c in r) + '</tr>' for r in rows) + '</tbody></table>'
@@ -63,28 +63,27 @@ page(h1('1', 'How to use this guide', 'how') + '''<p>This guide shows how to do 
     ['See what I’m really making, and what to do next', L('profit', '7 Real profit')],
     ['Tell the app something quickly while driving', L('assistant', '8 The assistant')],
     ['Change a price, add a product or a person', L('setup', '9 Setup')],
-    ['Sort out a problem', L('whatif', '10 What to do if…')]], 'go') + tip('<b>Nothing breaks it.</b> To practise, use <b>Owner test mode</b> (Setup → View as → Owner test mode). Nothing is saved there. Tap the purple bar to come back.'))
+    ['Sort out a problem', L('whatif', '10 What to do if…')]], 'go') + tip('<b>Nothing breaks it.</b> To practise, use <b>Owner test mode</b> (Setup → View as → Owner test mode). Nothing is saved there. The top bar turns purple: tap <b>Go back</b> to return.'))
 
 # ---------- 2 home ----------
 page(h1('2', 'The home screen at a glance', 'homescreen') + two(shot('01-home', 228, 'The home screen (demo data)', 92), '''
 <p>Everything starts here. Tap <b>⚙️</b> or <b>‹ Back</b> to get back to it from anywhere.</p>''' + table(['Part', 'What it does'], [
-    ['<b>⚠️ Needs attention</b>', 'Missing information that makes a number wrong. Tap Show, then Fix.'],
+    ['<b>Top right</b>', 'While the time clock runs, its job and time (for example 🫙 1:23). Tap it to switch or stop. ✓ Saved shows everything is saved.'],
     ['<b>Today strip</b>', 'Today’s takings (tap 🔒 Show and your PIN), the selling day, batches and orders due.'],
     ['<b>🎙 Talk · Type · Photo · Drive</b>', 'The assistant (shows once it’s set up). See ' + L('assistant', 'page 8') + '.'],
-    ['<b>⏱️ Time clock</b>', 'Start and stop your time on a job. See ' + L('time', 'page 7') + '.'],
-    ['<b>💰 Real profit</b>', 'What you really make, and what to do next.'],
-    ['<b>🔍 Find anything</b>', 'Products, markets, settings, and “how do I…?” answers.'],
-    ['<b>Tiles</b>', 'Sell, Calendar, Brew, Orders, Lists, Products &amp; recipes, Reports, Setup. Setup has a 🔒: it asks for your PIN.'],
-    ['<b>What to do next</b>', 'The five most useful things to do, each with a button that takes you there.']], 'small'), 92))
+    ['<b>🧺 Sell</b> and <b>⏱️ Time clock</b>', 'The two big buttons. The clock tile turns purple and shows the job and time while it runs. See ' + L('time', 'page 7') + '.'],
+    ['<b>Tiles</b>', 'Calendar, Brew (with Recipes &amp; ingredients 🔒), Orders, Lists, 💰 Real profit (with Reports), Setup 🔒 (asks for your PIN).'],
+    ['<b>What to do next</b>', 'The five most useful things to do, each with a button that takes you there, including anything that needs attention.'],
+    ['<b>🔍 Find anything</b>', 'Products, markets, settings, and “how do I…?” answers.']], 'small'), 92))
 
 # ---------- 3 selling ----------
-page(h1('3', 'Selling at a market', 'selling') + two(shot('02-sell-start', 125, 'Start selling', 80), '<h2 class="first">Start a selling day</h2>' + steps([
+page(h1('3', 'Selling at a market', 'selling') + two(shot('02-sell-start', 108, 'Start selling', 80), '<h2 class="first">Start a selling day</h2>' + steps([
     'Home → <b>🧺 Sell</b>.',
     'If the market is on today’s calendar, tap it under <b>📅 On the calendar today</b>. Its name and float fill in.',
-    'Otherwise choose <b>Market, Farm gate, Garden tour or Shop</b>, and type or tap the name.',
+    'Otherwise choose <b>Market, Farm gate, Garden tour or Shop</b>, and tap a <b>saved market</b>. A new one: type its name and you’re asked for its details (address, float, stall fee) first.',
     'Check the <b>cash float</b> in the tin.',
-    'Tap <b>who is serving</b>, then <b>Start selling</b>.']) + tip('The screen stays on while the till is open.'), 80)
-    + '<h2>Sell in two taps</h2>' + two(shot('03-till', 125, 'The till: tap products to add them', 80), steps([
+    'Tap <b>who is serving</b>, then <b>Start selling</b>.']) + tip('Helpers can only open today’s markets where they’re ticked on the calendar. The screen stays on while the till is open.'), 80)
+    + '<h2>Sell in two taps</h2>' + two(shot('03-till', 112, 'The till: tap products to add them', 80), steps([
     'Tap each product. Tap again for two. The total shows at the bottom.',
     'To change a number, tap <b>Show items</b> and use <b>−</b> and <b>+</b>.',
     'Tap <b>Cash</b>, <b>EFTPOS</b> or <b>Other</b> (bank transfer and so on).',
@@ -94,18 +93,19 @@ page(h1('3', 'Selling at a market', 'selling') + two(shot('02-sell-start', 125, 
 page('<h2 id="pay" class="first">Taking payment, discounts and mistakes</h2>' + two(shot('04-pay', 140, 'Check the order before payment', 80), table(['To…', 'Do this'], [
     ['Take cash', 'Cash → Take payment → tap the notes given (or Exact) → the change to give shows big.'],
     ['Take EFTPOS', 'Put the total on your own terminal first. When it’s approved there, tap EFTPOS → Take payment → confirm.'],
-    ['Give a discount', '<b>🏷️ Add a discount 🔒</b>: a dollar amount or a percentage. It needs an owner’s or manager’s PIN, and goes in the approvals log.'],
+    ['Give a discount', '<b>🏷️ Discount 🔒</b>: on the whole sale or one item, % or $ (or Free). After the PIN, the approver sees the cost and margin (page ' + L('pay', 'below') + ').'],
+    ['Give something away', 'Discount it 100% (Free). The payment buttons become <b>🎁 Give away</b>: it’s recorded as a gift.'],
     ['Undo a sale just made', '<b>↩ Undo last sale</b> shows for a minute after each sale.'],
     ['Fix an older sale', '<b>🧾 Sales</b> → tap the sale → <b>Void</b>. Refund the cash or the card first. It needs a PIN.'],
     ['Add money to the float', '<b>💵 Float</b> → type the amount added.'],
     ['Let a helper sell', '<b>🤝 Hand to a helper</b>: the till locks to selling only, until a PIN unlocks it.']], 'small'), 80)
-    + tip('<b>Selling below cost</b> stops the sale and asks for an owner’s PIN. A sale that would give a product away for $0 can’t be finished yet: Clear it for now (being fixed in the next update).', 'warn'))
+    + two(shot('04b-discount-check', 92, 'Checking a discount (approver only)', 80), '<h2 class="first">Checking a discount</h2><p>After the PIN, the person approving sees what the items cost to make, the margin before and after, and a red flag if it’s below cost. One tap sets <b>Break even</b> or the <b>lowest margin</b> (20%, changeable in Setup), or keep it <b>as asked</b>. Do this on your own screen: helpers never see these figures.</p>' + tip('Selling below cost is always recorded in the approvals log, with who approved it.', 'warn'), 80))
 
-page(h1('', 'End of the day and the check-in', 'endday') + two(shot('05-end-day', 150, 'End of the day: count the tin', 80), steps([
+page(h1('', 'End of the day and the check-in', 'endday') + two(shot('05-end-day', 118, 'End of the day: count the tin', 80), steps([
     'On the till, tap <b>🏁 End the day</b> and enter your PIN.',
     'Check the <b>EFTPOS</b> total against the terminal’s settlement.',
     'Count the cash in the tin and type the total. It shows <b>✓ The cash is right</b>, or over or short.',
-    'Tap <b>Close the day</b>.']), 80) + two(shot('06-checkin', 150, 'The check-in, all filled in already', 80), '<h2 class="first">The one-minute check-in</h2>' + steps([
+    'Tap <b>Close the day</b>.']), 80) + two(shot('06-checkin', 118, 'The check-in, all filled in already', 80), '<h2 class="first">The one-minute check-in</h2>' + steps([
     'It opens straight after Close the day.',
     'Tap how busy it was. The weather is already ticked from the forecast.',
     'Check the stall fee, and your time: travel there, set up, pack up, drive home, unpack the car. It shows when you’ll be done.',
@@ -113,19 +113,19 @@ page(h1('', 'End of the day and the check-in', 'endday') + two(shot('05-end-day'
     'Tap <b>Save</b>, or Skip.']) + tip('The check-in makes Real profit right: your real hours and costs for each market.'), 80))
 
 # ---------- 4 calendar ----------
-page(h1('4', 'The calendar and market days', 'calendar') + two(shot('07-calendar', 115, 'Month view. Swipe for the next month.', 80), steps([
+page(h1('4', 'The calendar and market days', 'calendar') + two(shot('07-calendar', 105, 'Month view. Swipe for the next month.', 80), steps([
     'Home → <b>📅 Calendar</b>. Swipe left or right for the next week or month; <b>Today</b> comes back.',
     'Tap a day to see what’s on, then <b>Add on…</b> to add to it.',
     'Choose <b>Market, Brew day, Order due</b> or <b>Other</b>.',
     'For a market, pick it under <b>Which market?</b> (or <b>＋ a new one</b>), then the date and start and finish times.',
     'Set <b>Repeats</b> for a weekly or fortnightly market.',
     'Tick <b>who’s on the stall</b> and when to be reminded, then <b>Save</b>.']), 80)
-    + '<h2>The whole market day</h2>' + two(shot('08-market-entry', 128, 'A market entry with the whole day', 80), '''<p>Each market works out <b>when to leave home and when you’ll be back</b>, from:</p><ul class="dots">
+    + '<h2>The whole market day</h2>' + two(shot('08-market-entry', 122, 'A market entry with the whole day', 80), '''<p>Each market works out <b>when to leave home and when you’ll be back</b>, from:</p><ul class="dots">
 <li><b>Travel there</b> and <b>travel home</b>: the drive, worked out by road from the home address.</li><li><b>Set up</b> and <b>pack down</b>: your usual times, which each market then remembers.</li></ul>
 <p>Change any of the minutes and the leave-home time moves. The forecast weather shows here too, up to 16 days ahead.</p>''' + tip('The evening before, the reminder says when to leave home.'), 80))
 
 # ---------- 5 brew ----------
-page(h1('5', 'Brew and stock', 'brew') + two(shot('09-stock', 120, 'Stock: at home, and out with you', 80), '<h2 class="first">Stock</h2>' + table(['To…', 'Do this'], [
+page(h1('5', 'Brew and stock', 'brew') + two(shot('09-stock', 116, 'Stock: at home, and out with you', 80), '<h2 class="first">Stock</h2>' + table(['To…', 'Do this'], [
     ['See what’s left', 'Brew → <b>Stock</b>. Red means none at home; amber means at or below your warning level.'],
     ['Pack for a market', '<b>🧺 Pack for…</b>: each product is filled in from last time there. Change and tap Done. They move to “Out with me”.'],
     ['Count the stock', '<b>🔢 Count stock</b>: type what’s really there.'],
@@ -157,19 +157,18 @@ page('<h2 id="suppliers" class="first">Shopping and ordering from a supplier</h2
     'When it arrives, Brew → Stock → <b>🚚 On order</b> → <b>📦 Arrived</b>. Untick anything missing, change any amount, add the price, and tap <b>Into stock</b>.']) + tip('Ticking off something you bought at the shop asks what you really bought and the price, so costs stay right.'), 80))
 
 # ---------- 7 time & profit ----------
-page(h1('7', 'The time clock', 'time') + two(shot('14-clock', 125, 'The time clock, running on Brewing', 80), steps([
-    'Home → <b>⏱️ Time clock</b>.',
-    'Tap what you’re doing: <b>🫙 Brewing, 📦 Orders and packing, 🗂️ Admin</b> or <b>🛒 Buying supplies</b>. It starts.',
-    'A bar on the home screen shows it running. Tap another job to switch, or <b>Stop</b>.',
-    'Forgot? <b>＋ Add time I forgot to clock</b>.',
-    'After 10 hours it asks if you’re still working.']) + tip('Markets aren’t clocked: their hours come from the calendar and the check-in. Helpers’ hours are kept with their pay in Reports → Costs.')
-    + '<p class="note">Coming next: the clock becomes a big tile with the job’s icon, and shows on every screen.</p>', 80)
+page(h1('7', 'The time clock', 'time') + two(shot('14b-clock-switch', 88, 'Tap the tile or the top-right time', 80), steps([
+    'Home → tap the <b>⏱️ Time clock</b> tile.',
+    'Tap what you’re doing: <b>🫙 Brewing</b> (picking and drying too), <b>📦 Orders and packing, 🗂️ Admin</b> (calls, emails, social media) or <b>🛒 Buying supplies</b>. It starts.',
+    'The tile turns purple with the job and time, and the time shows top right on every screen.',
+    'To change job, tap either and choose another: it asks “Switch to…?”. To finish, <b>⏹ Stop the clock</b>.',
+    'Forgot? Time clock → <b>See my hours</b> → <b>＋ Add time I forgot to clock</b>. After 10 hours it asks if you’re still working.']) + tip('Markets aren’t clocked: their hours come from the calendar and the check-in. Helpers’ hours are kept with their pay in Reports → Costs.'), 80)
     + '<h2 id="profit">Real profit</h2>' + two(shot('15-profit', 120, 'Real profit (demo figures)', 80), '''<p>Home → <b>💰 Real profit</b>. Choose This week, month, last month or this year.</p><ul class="dots">
 <li><b>Real profit</b>: sales (ex GST) less stock, stall fees, fuel and car, helpers and other costs.</li>
 <li><b>An hour</b>: that profit for each hour you put in. ✅ worth it, 🟡 borderline, 🔴 losing money.</li>
 <li><b>What to do next</b>: tap the button beside each.</li>
 <li><b>How sure are these numbers?</b> Each gap has a <b>Fix</b> button.</li>
-<li>Markets and products ranked, best first.</li></ul><p><b>Reports</b> (home → 📈) has takings by day, place and product, GST, costs, and a CSV for the accountant.</p>''', 80))
+<li>Markets and products ranked, best first.</li></ul><p><b>📈 Reports</b> (the button at the top of Real profit) has takings by day, place and product, GST, costs, and a CSV for the accountant.</p>''', 80))
 
 # ---------- 8 assistant ----------
 ex = [('“Matakana market next Saturday, 8 till 1, Sam’s coming”', 'A market on the calendar'), ('“Remind me to label the lip balm jars on Thursday”', 'A to-do for Thursday'),
@@ -191,30 +190,33 @@ page('<h2 id="privacy" class="first">How your information is kept safe</h2>' + t
     ['<b>Recordings</b>', 'Deleted once they’re worked out.'],
     ['<b>Cost</b>', 'Capped each month. If the cap is reached it stops until the next month.']], 'plainhead')
     + '<h2>PINs and the approvals log</h2><p>Your PIN is asked for before anything sensitive: Setup, seeing the takings, discounts, voids, closing the till. Anything approved by a manager or helper, or a PIN used by someone else, is recorded in <b>Setup → Approvals log</b> with who and when.</p>'
-    + tip('<b>Recipes are the business’s secret.</b> Only owners can open them; managers and helpers can’t.'))
+    + tip('<b>Recipes are the business’s secret.</b> Only owners can open them, with an owner’s PIN every time, and they lock again after 2 minutes. Managers and helpers can’t see them at all.'))
 
 # ---------- 9 setup ----------
-page(h1('9', 'Setup, people and PINs', 'setup') + two(shot('17-setup', 140, 'Setup (asks for your PIN)', 80), table(['To…', 'Go to Setup →'], [
+page(h1('9', 'Setup, people and PINs', 'setup') + two(shot('17-setup', 112, 'Setup (asks for your PIN)', 80), table(['To…', 'Go to Setup →'], [
     ['Change a price, add a product, put one on or off the till', '<b>Products and prices</b>'],
-    ['Add or change a recipe, ingredient or packaging', '<b>Products, recipes and ingredients</b>'],
+    ['Add or change an ingredient or packaging', 'Brew → <b>Recipes &amp; ingredients</b>'],
+    ['Open a recipe', 'Brew → <b>Recipes &amp; ingredients 🔒</b>: an owner’s PIN every time; it locks again after 2 minutes'],
     ['Add a market, shop or place; home address; usual set-up times', '<b>Markets and places</b>'],
     ['Set up a deal (for example 3 for $30)', '<b>Deals</b>'],
     ['Invite someone, make them a manager or helper', '<b>People</b>: type their Google (Gmail) address'],
     ['Set or change your PIN', '<b>Your PIN</b>'],
     ['See who approved what', '<b>Approvals log</b>'],
-    ['Practise, or see what a helper sees', '<b>View as</b> → a role, a person, or Owner test mode'],
+    ['Practise, or see what a helper sees', '<b>View as</b> → a role, a person, or Owner test mode (the top bar turns purple; tap <b>Go back</b>)'],
+    ['Lowest margin for discounts', '<b>Lowest margin on a discount</b> (20%)'],
     ['Daily briefing and summary emails', '<b>Summaries by email</b>'],
     ['Check-ins on or off', '<b>Check-ins</b>'],
     ['Notifications on this device', '<b>Notifications</b>']], 'small'), 80)
-    + two(shot('18-places', 110, 'Markets and places', 80), '<h2 class="first">Markets and places</h2><p>Add each market, the farm shop and each shop you supply, with its address, usual float and stall fee. With the home address in, the drive and its km are worked out by themselves (within about 5 minutes).</p>' + tip('Owners: the main owner can never be removed. Add helpers as <b>Helper</b>: they can sell and see stock, but no costs or takings.'), 80))
+    + ('<h2>Markets and places</h2><p>Add each market, the farm shop and each shop you supply, with its address, usual float and stall fee. With the home address in, the drive and its km are worked out by themselves (within about 5 minutes).</p>' + tip('Owners: the main owner can never be removed. Add helpers as <b>Helper</b>: they can sell and see stock, but no costs or takings.')))
 
 # ---------- 10 what if ----------
 page(h1('10', 'What to do if…', 'whatif') + table(['Situation', 'Action'], [
     ['<b>No internet at the market</b>', 'Keep selling. Sales are saved on the device and sent when the signal comes back. The top bar shows when it’s saved.'],
     ['<b>Wrong sale just now</b>', '<b>↩ Undo last sale</b> (for about a minute). After that, 🧾 Sales → the sale → Void, with a PIN.'],
     ['<b>Cash is short or over</b>', 'Count again. The difference is recorded at Close the day; it’s in the end-of-day email.'],
+    ['<b>The payment buttons are grey</b>', 'The total is $0 (a free item). Tap <b>🎁 Give away</b>, or remove the discount.'],
     ['<b>A product isn’t on the till</b>', '<b>🔍 Find</b> on the till. A product that’s off the till needs a PIN to sell.'],
-    ['<b>A helper can’t open the till</b>', 'Check they’re ticked on that day’s market in the calendar. Otherwise an owner or manager opens it.'],
+    ['<b>A helper can’t open the till</b>', 'Tick them on that day’s market in the calendar (Calendar → the market → who’s on the stall), or an owner or manager opens it.'],
     ['<b>Forgot my PIN</b>', 'On the PIN pad, tap “Forgot?”. Another owner resets it, or Tony can.'],
     ['<b>Left the till open</b>', 'You’ll get a reminder. Open the app, Sell → 🏁 End the day.'],
     ['<b>The assistant doesn’t answer</b>', 'Check the signal. If it says the monthly limit is reached, type it in instead. Setup shows if the helper is running.'],
@@ -223,7 +225,7 @@ page(h1('10', 'What to do if…', 'whatif') + table(['Situation', 'Action'], [
     ['<b>I want to try something safely</b>', 'Setup → View as → Owner test mode. Nothing is saved.']], 'situ'))
 
 # ---------- 11 help & index ----------
-idx = [('Afterpay', 'pay'), ('Approvals log', 'setup'), ('Assistant', 'assistant'), ('Calendar', 'calendar'), ('Check-in', 'endday'), ('Count stock', 'brew'), ('Deals', 'setup'),
+idx = [('Approvals log', 'setup'), ('Assistant', 'assistant'), ('Calendar', 'calendar'), ('Check-in', 'endday'), ('Count stock', 'brew'), ('Deals', 'setup'),
        ('Discount', 'pay'), ('EFTPOS', 'pay'), ('End of the day', 'endday'), ('Find anything', 'help'), ('Float', 'pay'), ('Fuel', 'assistant'), ('Helpers', 'setup'),
        ('Home screen', 'homescreen'), ('Ideas', 'orders'), ('Markets and places', 'setup'), ('Notifications', 'setup'), ('Orders', 'orders'), ('Owner test mode', 'setup'),
        ('Pack for a market', 'brew'), ('PIN', 'privacy'), ('Plan a brew', 'brew'), ('Prices', 'setup'), ('Privacy', 'privacy'), ('Real profit', 'profit'), ('Recipes', 'setup'),

@@ -72,9 +72,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   // ---------- screens ----------
   await shot('01-home', { fullPage: true });
   await page.evaluate(() => { stack = ['home', 'sell']; render(); }); await page.waitForSelector('#sGo'); await shot('02-sell-start');
-  await page.evaluate(() => lsSet('rs.servedBy', 'Fiona')); await page.fill('#sName', 'Riverside Market'); await page.click('#sGo'); await page.waitForSelector('[data-add]');
+  await page.evaluate(() => lsSet('rs.servedBy', 'Fiona')); await page.evaluate(() => render()); await page.waitForSelector('[data-pl]');
+  await page.locator('[data-pl]', { hasText: 'Riverside Market' }).click(); await page.waitForTimeout(100); await shot('02-sell-start');
+  await page.click('#sGo'); await page.waitForSelector('#cY, [data-add]'); if (await page.$('#cY')) await page.click('#cY'); await page.waitForSelector('[data-add]');
   for (const n of ['Lavender Lip Balm', 'Lavender Lip Balm', 'Rose Hand Cream', 'Kawakawa Salve']) await page.evaluate(n => document.querySelector('[data-add="' + S.products.find(p => p.name === n).id + '"]').click(), n);
   await shot('03-till');
+  await page.evaluate(() => discountReview({ kind: 'pct', value: 10, pid: '', reason: 'regular customer' }, SYNC.me())); await page.waitForSelector('#drOk'); await modalShot('04b-discount-check');
+  await closeAll(); await page.evaluate(() => { cartDisc = null; saveCart(); render(); });
   await page.click('[data-pay="eftpos"]'); await page.waitForTimeout(300); await shot('04-pay');
   await closeAll(); await page.evaluate(() => { stack = ['home', 'sell']; render(); }); await page.waitForTimeout(200);
   await page.evaluate(() => { const d = S.sessions.find(s => s.status === 'open'), me = SYNC.me(); [['Lavender Lip Balm', 2, 'cash'], ['Rose Hand Cream', 1, 'eftpos'], ['Herbal Gift Box', 1, 'eftpos'], ['Kawakawa Salve', 2, 'cash'], ['Calendula Healing Balm', 1, 'eftpos']].forEach(([n, q, m], i) => { const p = S.products.find(x => x.name === n), t = p.price * q;
@@ -91,7 +95,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { stack = ['home', 'orders']; render(); }); await page.waitForTimeout(300); await shot('11-orders');
   await page.evaluate(() => { listTab = 'todo'; stack = ['home', 'lists']; render(); }); await page.waitForTimeout(300); await shot('12-todo');
   await page.evaluate(() => { listTab = 'shop'; render(); }); await page.waitForTimeout(300); await shot('13-shopping');
-  await page.evaluate(() => { stack = ['home', 'clock']; render(); clockStart('brewing'); render(); }); await page.waitForTimeout(300); await shot('14-clock');
+  await page.evaluate(() => { stack = ['home']; clockStart('brewing'); const r = clockRunning(); r.start = Date.now() - 83 * 60e3; save(); render(); }); await page.waitForTimeout(400); await page.evaluate(() => { const r = clockRunning(); r.start = Date.now() - 83 * 60e3; render(); }); await page.waitForTimeout(300); await shot('14a-home-clock', { clip: { x: 0, y: 0, width: 820, height: 700 } });
+  await page.evaluate(() => clockSheet()); await page.waitForSelector('#cjStop'); await modalShot('14b-clock-switch');
+  await closeAll(); await page.evaluate(() => { stack = ['home', 'clock']; render(); }); await page.waitForTimeout(300); await shot('14-clock');
   await page.evaluate(() => { const r = clockRunning(); if (r) clockStop(r, true); profPeriod = 'month'; stack = ['home', 'profit']; render(); }); await page.waitForTimeout(400); await shot('15-profit', { fullPage: true });
   await page.evaluate(() => { stack = ['home']; render(); openSearch(); }); await page.waitForSelector('#sQ'); await page.fill('#sQ', 'how do I change a price'); await page.waitForTimeout(300); await modalShot('16-help');
   await closeAll(); await page.evaluate(() => { setupOpen = true; stack = ['home', 'setup']; render(); }); await page.waitForTimeout(300); await shot('17-setup');
