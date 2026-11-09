@@ -187,6 +187,7 @@ body.practicing #main{padding-bottom:80px}
 .ptable{display:grid;grid-template-columns:1fr auto;gap:6px 14px;font-size:17px}.ptable b{text-align:right}.ptable .neg{color:var(--danger)}
 .card.nudge{border:2px solid var(--green2)}
 .formrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.formrow.four{grid-template-columns:repeat(4,1fr);gap:6px}.formrow.four .note{font-size:.8rem}@media(max-width:420px){.formrow.four{grid-template-columns:1fr 1fr}}
 .pgroup{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
 .prow{width:100%;text-align:left;padding-left:14px}
 .prow .chev{font-size:26px;color:var(--muted)}
@@ -577,7 +578,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=5;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=7;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';

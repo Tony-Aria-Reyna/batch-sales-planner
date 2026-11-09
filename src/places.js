@@ -16,7 +16,11 @@ SCREENS.places={
   html(){
     const live=S.places.filter(p=>!p.gone);
     return rulesNotice()+`<div class="card"><h3>🏠 Home base</h3><p class="note">Used to work out the drive to each market. Only owners and managers see it.</p>
-        <label class="note" for="homeAddr">Home address</label><input class="txt" id="homeAddr" value="${esc(S.settings.homeAddress||'')}" autocomplete="street-address" placeholder="Street, suburb, town"></div>`
+        <label class="note" for="homeAddr">Home address</label><input class="txt" id="homeAddr" value="${esc(S.settings.homeAddress||'')}" autocomplete="street-address" placeholder="Street, suburb, town">
+        <p class="note">With this and each place's address in, the assistant works out the km and drive time by road (usually within 5 minutes).</p>
+        <div class="formrow"><div><label class="note" for="setMin">Usual setting up (min)</label><input class="txt" id="setMin" inputmode="numeric" value="${+S.settings.setupMins||45}"></div>
+          <div><label class="note" for="packMin">Usual packing down (min)</label><input class="txt" id="packMin" inputmode="numeric" value="${+S.settings.packMins||45}"></div></div>
+        <p class="note">Used to prefill each market day. Each market then remembers its own.</p></div>`
       +Object.entries(CHANNELS).map(([ch,chName])=>`<div class="card"><h3>${ch==='retail'?'🛍️':'🚚'} ${chName}</h3>
         ${placeGroups().filter(g=>g.channel===ch).map(g=>{ const list=live.filter(p=>p.group===g.id).sort((a,b)=>a.name.localeCompare(b.name));
           return `<div class="pgroup"><div class="row"><div class="grow"><b>${esc(g.name)}</b><small>${list.length} place${list.length===1?'':'s'}</small></div><button class="btn alt small" data-addp="${g.id}">＋ Add</button></div>
@@ -25,6 +29,7 @@ SCREENS.places={
   },
   wire(){
     const h=$('#homeAddr'); h.onchange=()=>{ S.settings.homeAddress=h.value.trim().slice(0,200); save(); toast('Saved'); };
+    [['#setMin','setupMins'],['#packMin','packMins']].forEach(([id,k])=>{ const x=$(id); x.onchange=()=>{ const v=Math.round(+x.value); if(!(v>=0&&v<600)){ toast('Type the minutes, e.g. 45'); return; } S.settings[k]=v; save(); toast('Saved'); }; });
     document.querySelectorAll('[data-addp]').forEach(b=>b.onclick=()=>{ const g=placeGroups().find(x=>x.id===b.dataset.addp); editPlace({group:g.id,channel:g.channel},()=>render()); });
     document.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>{ const p=S.places.find(x=>x.id===b.dataset.place); if(p) editPlace(p,()=>render()); });
     document.querySelectorAll('[data-addg]').forEach(b=>b.onclick=()=>addGroup(b.dataset.addg,()=>render()));
@@ -48,6 +53,10 @@ function editPlace(src,done){
       <label class="note" for="pN">Name</label><input class="txt" id="pN" value="${esc(p.name)}" autocapitalize="words" placeholder="e.g. Village Market">
       <label class="note" for="pG">Group</label><select class="txt" id="pG">${Object.entries(CHANNELS).map(([ch,cn])=>`<optgroup label="${cn}">${placeGroups().filter(g=>g.channel===ch).map(g=>`<option value="${g.id}" ${p.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</optgroup>`).join('')}</select>
       <label class="note" for="pA">Address (optional)</label><input class="txt" id="pA" value="${esc(p.address)}" autocomplete="off" placeholder="Street, suburb, town">
+      ${(()=>{ const r=p.route||{}; if(!p.address) return ''; if(!S.settings.homeAddress) return '<p class="note">Add the home address (Markets and places → Home base) and the assistant works out the drive.</p>';
+        if(r.err) return '<p class="note warn">⚠️ The assistant couldn\'t find this address on the map. Check the spelling, or add the town.</p>';
+        if(r.km) return `<p class="note">🚗 By road from home: <b>${r.km} km each way, about ${hmTxt(r.mins)}</b>. Worked out by the assistant.</p>`;
+        return '<p class="note">🚗 The assistant will work out the km and drive time shortly.</p>'; })()}
       <div class="formrow"><div><label class="note" for="pK">Drive there and back (km)</label><input class="txt" id="pK" inputmode="decimal" value="${p.km||''}" placeholder="e.g. 64"></div>
         <div><label class="note" for="pF">Usual float ($)</label><input class="txt" id="pF" inputmode="decimal" value="${p.float?(p.float/100).toFixed(2):''}" placeholder="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(0):'200'}"></div></div>
       <div class="formrow"><div><label class="note" for="pFee">Usual stall fee ($)</label><input class="txt" id="pFee" inputmode="decimal" value="${f&&f.cents?(f.cents/100).toFixed(2):''}" placeholder="optional"></div>
@@ -63,8 +72,10 @@ function editPlace(src,done){
       const flT=m.querySelector('#pF').value.trim(), fl=flT?toCents(flT):0; if(flT&&!(fl>=0)){ toast('Type the float, e.g. 200'); return; }
       const feeT=m.querySelector('#pFee').value.trim(), fee=feeT?toCents(feeT):0; if(feeT&&!(fee>=0)){ toast('Type the fee, e.g. 45'); return; }
       const g=placeGroups().find(x=>x.id===m.querySelector('#pG').value)||BASE_GROUPS[0];
-      Object.assign(p,{name:name.slice(0,80),group:g.id,channel:g.channel,address:m.querySelector('#pA').value.trim().slice(0,200),km:km||0,float:fl||0,note:m.querySelector('#pNo').value.trim().slice(0,500)});
-      if(isNew){ p.id=SYNC.newId('places'); S.places.push(p); } else { const x=S.places.find(y=>y.id===p.id); if(x) Object.assign(x,p); }
+      const addr=m.querySelector('#pA').value.trim().slice(0,200);
+      if(km!==(+src.km||0)) p.kmAuto=false; if(addr!==(src.address||'')){ delete p.route; delete p.lat; delete p.lng; if(p.kmAuto!==false) p.kmAuto=true; }
+      Object.assign(p,{name:name.slice(0,80),group:g.id,channel:g.channel,address:addr,km:km||0,float:fl||0,note:m.querySelector('#pNo').value.trim().slice(0,500)});
+      if(isNew){ p.id=SYNC.newId('places'); S.places.push(p); } else { const x=S.places.find(y=>y.id===p.id); if(x){ ['route','lat','lng'].forEach(k=>{ if(!(k in p)) delete x[k]; }); Object.assign(x,p); } }
       const fid='fee-'+p.id, fx=S.costs.find(c=>c.id===fid), days=+m.querySelector('#pFd').value||1;
       if(fee){ if(fx) Object.assign(fx,{cents:fee,days}); else S.costs.push({id:fid,kind:'stallfee',place:p.id,cents:fee,days}); }
       else if(fx) S.costs.splice(S.costs.indexOf(fx),1);

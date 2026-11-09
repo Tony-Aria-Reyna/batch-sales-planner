@@ -285,10 +285,12 @@ function openEvent(e,occ){
   const ty=calType(e), pl=S.places.find(p=>p.id===e.place), who=(e.attendees||[]).map(personName);
   modal((m,close)=>{ m.innerHTML=`<h2>${ty.ic} ${esc(e.title||ty.t)}</h2>
       <p><b>${esc(nzDate(kd(occ||e.date)))}</b>${e.days>1?' · '+e.days+' days':''}<br>${e.time?t12(e.time)+(e.end?' – '+t12(e.end):''):'All day'}${e.rpt?' · 🔁 '+esc(REPEATS[e.rpt]):''}</p>
+      ${e.type==='market'&&marketPlan(Object.assign({},e,{date:occ||e.date})).ok?`<p>🚗 ${esc(planLine(marketPlan(e)))}</p>`:''}
+      ${e.place?`<p data-wx="${esc(e.place)}|${esc(occ||e.date)}" hidden></p>`:''}
       ${pl&&pl.address?`<p>📍 <a href="https://maps.google.com/?q=${encodeURIComponent(pl.address)}" target="_blank" rel="noopener">${esc(pl.address)}</a></p>`:''}
       ${e.type==='market'?`<p>${who.length?'On the stall: '+esc(who.join(', ')):'Nobody rostered yet.'}</p>${rostered(e)?'':'<p class="note">You\'re not rostered on this one. It\'s here so you know it\'s on.</p>'}`:''}
       ${e.note?`<p class="note">${esc(e.note)}</p>`:''}<div class="mact"><button class="btn" id="eOk">OK</button></div>`;
-    m.querySelector('#eOk').onclick=close; });
+    m.querySelector('#eOk').onclick=close; fillWeather(m); });
 }
 function openSession(s){
   const money=canManage()&&!tillLock()&&Date.now()<moneyUntil, t=money?dayTotals(s):null;
@@ -315,6 +317,11 @@ function editEvent(src,occ){
           <div><label class="note" for="eN">Days</label><select class="txt" id="eN">${[1,2,3,4,5,6,7].map(n=>`<option ${+e.days===n?'selected':''}>${n}</option>`).join('')}</select></div></div>
         <div class="formrow"><div><label class="note" for="eS">Starts (optional)</label><input class="txt" id="eS" type="time" value="${e.time}"></div>
           <div><label class="note" for="eE">Finishes</label><input class="txt" id="eE" type="time" value="${e.end}"></div></div>
+        ${e.type==='market'?(()=>{ const pl=marketPlan(e), pd=Object.assign(planDefaults(e.place,e.id),e.plan||{}), pc=S.places.find(x=>x.id===e.place)||{};
+          return `<div class="dayplan"><p class="note" style="margin:6px 0 2px"><b>🚗 The whole day</b> (minutes)${pc.route&&pc.route.mins?' · drive worked out by road: '+(pc.route.km)+' km, '+hmTxt(pc.route.mins)+' each way':''}</p>
+          <div class="formrow four">${[['there','Travel there'],['setup','Set up'],['pack','Pack down'],['home','Travel home']].map(([k,t])=>`<div><label class="note" for="eP_${k}">${t}</label><input class="txt" id="eP_${k}" inputmode="numeric" value="${pd[k]}"></div>`).join('')}</div>
+          <p class="note" id="ePlan">${pl&&pl.ok?esc(planLine(pl)):'Add the start and finish times to work out when to leave and when you\'ll be home.'}</p>
+          ${e.place?`<p class="note" data-wx="${esc(e.place)}|${esc(e.date)}" hidden></p>`:''}</div>`; })():''}
         <label class="note" for="eR">Repeats</label><select class="txt" id="eR">${Object.entries(REPEATS).map(([k,v])=>`<option value="${k}" ${e.rpt===k?'selected':''}>${v}</option>`).join('')}</select>
         ${e.rpt?`<label class="note" for="eU">Until (optional)</label><input class="txt" id="eU" type="date" value="${e.until||''}">`:''}
         ${e.type==='market'?`<p class="note" style="margin-bottom:4px">Who's on the stall? (helpers who aren't ticked see it greyed out)</p><div class="pastnames">${people.map(p=>`<button class="chip big ${(e.attendees||[]).includes(p)?'on':''}" data-who="${esc(p)}">${esc(personName(p))}</button>`).join('')}</div>`:''}
@@ -322,12 +329,16 @@ function editEvent(src,occ){
         <p class="note">Reminders arrive as notifications once those are switched on (coming with the alerts stage).</p>
         <label class="note" for="eNo">Notes (optional)</label><textarea class="txt" id="eNo" rows="2">${esc(e.note||'')}</textarea>
         <div class="mact">${isNew?'':'<button class="btn danger" id="eDel">Delete…</button>'}<button class="btn alt" id="eC">Cancel</button><button class="btn" id="eOk">Save</button></div>`;
-      const grab=()=>{ e.title=m.querySelector('#eT').value.trim(); e.date=m.querySelector('#eD').value||e.date; e.days=+m.querySelector('#eN').value||1; e.time=m.querySelector('#eS').value; e.end=m.querySelector('#eE').value; e.rpt=m.querySelector('#eR').value; const u=m.querySelector('#eU'); e.until=u?u.value:''; e.note=m.querySelector('#eNo').value.trim(); };
+      const grabPlan=()=>{ if(e.type!=='market'||!m.querySelector('#eP_there')) return; const pl={}; ['there','setup','pack','home'].forEach(k=>{ const v=Math.round(+m.querySelector('#eP_'+k).value.replace(/[^0-9.]/g,'')); pl[k]=v>=0&&v<1000?v:0; }); e.plan=pl; };
+      const grab=()=>{ grabPlan(); e.title=m.querySelector('#eT').value.trim(); e.date=m.querySelector('#eD').value||e.date; e.days=+m.querySelector('#eN').value||1; e.time=m.querySelector('#eS').value; e.end=m.querySelector('#eE').value; e.rpt=m.querySelector('#eR').value; const u=m.querySelector('#eU'); e.until=u?u.value:''; e.note=m.querySelector('#eNo').value.trim(); };
       m.querySelectorAll('[data-ty]').forEach(b=>b.onclick=()=>{ grab(); e.type=b.dataset.ty; draw(); });
       m.querySelector('#eR').onchange=()=>{ grab(); draw(); };
+      const replan=()=>{ const t=m.querySelector('#ePlan'); if(!t) return; grab(); const pl=marketPlan(e); t.textContent=pl&&pl.ok?planLine(pl):'Add the start and finish times to work out when to leave and when you\'ll be home.'; };
+      m.querySelectorAll('#eS,#eE,[id^="eP_"]').forEach(x=>x.addEventListener('input',replan));
+      fillWeather(m);
       const ps=m.querySelector('#eP'); if(ps) ps.onchange=()=>{ grab();
         if(ps.value==='+'){ editPlace({group:'markets',channel:'retail'},p=>{ e.place=p.id; e.title=p.name; draw(); }); ps.value=e.place||''; return; }
-        const p=S.places.find(x=>x.id===ps.value); const old=S.places.find(x=>x.id===e.place); if(p&&(!e.title||(old&&e.title===old.name))) e.title=p.name; e.place=ps.value; draw(); };
+        const p=S.places.find(x=>x.id===ps.value); const old=S.places.find(x=>x.id===e.place); if(p&&(!e.title||(old&&e.title===old.name))) e.title=p.name; if(e.place!==ps.value) delete e.plan; e.place=ps.value; draw(); };
       m.querySelectorAll('[data-who]').forEach(b=>b.onclick=()=>{ const w=b.dataset.who, a=e.attendees||(e.attendees=[]); const i=a.indexOf(w); if(i<0) a.push(w); else a.splice(i,1); b.classList.toggle('on',i<0); });
       m.querySelectorAll('[data-rem]').forEach(b=>b.onclick=()=>{ const r=b.dataset.rem, a=e.remind||(e.remind=[]); const i=a.indexOf(r); if(i<0) a.push(r); else a.splice(i,1); b.classList.toggle('on',i<0); });
       m.querySelector('#eC').onclick=close;
@@ -338,7 +349,7 @@ function editEvent(src,occ){
         if(e.time&&e.end&&e.end<=e.time&&+e.days===1){ toast('The finish time is before the start'); return; }
         if(e.until&&e.until<e.date){ toast('"Until" is before the first date'); return; }
         if(!e.title){ const p=S.places.find(x=>x.id===e.place); e.title=p?p.name:calType(e).t; }
-        if(e.type!=='market'){ e.attendees=[]; e.place=''; }
+        if(e.type!=='market'){ e.attendees=[]; e.place=''; delete e.plan; }
         if(!e.rpt) e.until='';
         e.by=e.by||SYNC.me(); e.changed=Date.now();
         if(isNew){ e.id=SYNC.newId('events'); S.events.push(e); } else { const x=S.events.find(y=>y.id===e.id); if(x) Object.assign(x,e); }
@@ -356,3 +367,44 @@ function deleteEvent(e,occ,closeEdit){
     m.querySelector('#dOne').onclick=()=>{ const x=S.events.find(y=>y.id===e.id); if(x){ x.skip=[...(x.skip||[]),occ||x.date]; save(); } close(); closeEdit(); drawCal(); toast('Removed that day'); };
     m.querySelector('#dAll').onclick=()=>{ close(); del(); }; });
 }
+
+/* ---------- a market's whole day: travel there, set up, sell, pack down, travel home ----------
+   The selling hours are the entry's start and finish. The rest is prefilled from the drive the assistant
+   worked out for the place and from the last market there, and can be changed on the entry. */
+const toMin=t=>t?(+t.slice(0,2))*60+(+t.slice(3,5)):null;
+const fromMin=n=>{ n=((Math.round(n)%1440)+1440)%1440; return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'); };
+const hmTxt=n=>{ n=Math.max(0,Math.round(n||0)); const h=Math.floor(n/60), m=n%60; return h?h+' h'+(m?' '+m+' min':''):m+' min'; };
+function planDefaults(placeId,notId){
+  const pl=S.places.find(p=>p.id===placeId)||{}, last=S.events.filter(x=>x.type==='market'&&x.place===placeId&&x.id!==notId&&x.plan).sort((a,b)=>(b.changed||0)-(a.changed||0))[0], lp=last?last.plan:{};
+  const drive=pl.route&&pl.route.mins?pl.route.mins:null;
+  return {there:lp.there!=null?lp.there:drive!=null?drive:30, setup:lp.setup!=null?lp.setup:(+S.settings.setupMins||45),
+    pack:lp.pack!=null?lp.pack:(+S.settings.packMins||45), home:lp.home!=null?lp.home:drive!=null?drive:30};
+}
+function marketPlan(e){
+  if(!e||e.type!=='market') return null;
+  const p=Object.assign(planDefaults(e.place,e.id),e.plan||{}), s=toMin(e.time), f=toMin(e.end);
+  if(s==null||f==null||f<=s) return Object.assign(p,{ok:false});
+  const leave=s-p.setup-p.there, back=f+p.pack+p.home;
+  return Object.assign(p,{ok:true,sell:f-s,leave:fromMin(leave),back:fromMin(back),total:back-leave});
+}
+const planLine=pl=>pl&&pl.ok?`Leave home ${t12(pl.leave)} · back about ${t12(pl.back)} · ${hmTxt(pl.total)} in all (${hmTxt(pl.sell)} selling)`:'';
+
+/* ---------- the weather for a place and day (Open-Meteo: free, no account, forecasts 16 days ahead) ---------- */
+const WX={0:['☀️','Clear'],1:['🌤️','Mostly clear'],2:['⛅','Part cloudy'],3:['☁️','Cloudy'],45:['🌫️','Fog'],48:['🌫️','Fog'],51:['🌦️','Drizzle'],53:['🌦️','Drizzle'],55:['🌧️','Heavy drizzle'],
+  61:['🌦️','Light rain'],63:['🌧️','Rain'],65:['🌧️','Heavy rain'],80:['🌦️','Showers'],81:['🌧️','Showers'],82:['⛈️','Heavy showers'],95:['⛈️','Thunderstorms'],96:['⛈️','Thunderstorms'],99:['⛈️','Thunderstorms']};
+const wxMem={};
+function weatherFor(placeId,date,done){
+  const pl=S.places.find(p=>p.id===placeId); if(!pl||pl.lat==null||pl.lng==null||!date) return done(null);
+  const days=Math.round((kd(date)-kd(nzDay()))/864e5); if(days>15||days<-60) return done(null);
+  const key=pl.lat.toFixed(2)+','+pl.lng.toFixed(2)+','+date, c=wxMem[key]||lsGet('rs.wx.'+key,null);
+  if(c&&Date.now()-c.at<(days<0?864e5*30:3*3600e3)) return done(c.w);
+  if(typeof fetch!=='function'||!navigator.onLine) return done(c?c.w:null);
+  fetch('https://api.open-meteo.com/v1/forecast?latitude='+pl.lat+'&longitude='+pl.lng+'&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max&timezone=Pacific%2FAuckland&start_date='+date+'&end_date='+date)
+    .then(r=>r.ok?r.json():null).then(j=>{ const d=j&&j.daily; if(!d||!d.time||!d.time.length){ done(null); return; }
+      const w={code:d.weather_code[0],hi:Math.round(d.temperature_2m_max[0]),lo:Math.round(d.temperature_2m_min[0]),rain:d.precipitation_probability_max[0],mm:d.precipitation_sum[0],wind:Math.round(d.wind_speed_10m_max[0])};
+      wxMem[key]={at:Date.now(),w}; lsSet('rs.wx.'+key,wxMem[key]); done(w); }).catch(()=>done(c?c.w:null));
+}
+const wxText=w=>{ if(!w) return ''; const k=WX[w.code]||WX[Math.floor(w.code/10)*10]||['🌡️','']; return k[0]+' '+[k[1],w.lo+'–'+w.hi+'°',w.rain!=null?w.rain+'% chance of rain':'',w.wind!=null?'wind '+w.wind+' km/h':''].filter(Boolean).join(', '); };
+const wxShort=w=>{ if(!w) return ''; const k=WX[w.code]||WX[Math.floor(w.code/10)*10]||['🌡️','']; return k[1].toLowerCase()+', '+w.hi+'°'+(w.rain>=30?', '+w.rain+'% rain':''); };
+// fill any [data-wx="placeId|date"] element on screen
+function fillWeather(root){ (root||document).querySelectorAll('[data-wx]').forEach(el=>{ const [p,d]=el.dataset.wx.split('|'); weatherFor(p,d,w=>{ if(w){ el.textContent=wxText(w); el.hidden=false; } }); }); }

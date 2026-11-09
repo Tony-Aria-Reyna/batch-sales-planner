@@ -17,7 +17,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 6;   // 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
+const HELPER_VERSION = 7;   // 7: drive km and time to each place, market check-ins · 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -49,6 +49,7 @@ function tick() {
     try { shopifyTick(b); } catch (e) { Logger.log('Shopify: ' + e); }
     try { notifyTick(b); } catch (e) { Logger.log('Notifications: ' + e); }
     try { learnTick(b); } catch (e) { Logger.log('Lessons: ' + e); }
+    try { routeTick(b); } catch (e) { Logger.log('Routes: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -359,6 +360,35 @@ function patchSetting(bid, key, value) {
   check(UrlFetchApp.fetch(BASE + '/businesses/' + bid + '?updateMask.fieldPaths=' + encodeURIComponent('settings.' + key), { method: 'patch', contentType: 'application/json', payload: JSON.stringify(body), headers: headers(), muteHttpExceptions: true }), 'Saving a setting');
 }
 
+/* ================= The drive to each place (Google Maps, built into Apps Script: free, no key) =================
+   From Setup's home address to each place's address, by road. Saves the km and minutes each way and the
+   place's map position (for the weather). Only places whose address (or the home address) has changed. */
+function routeTick(b, limit) {
+  const home = String((b.settings || {}).homeAddress || '').trim(); if (!home) return 0;
+  let n = 0;
+  for (const p of listDocs('businesses/' + b._id + '/places')) {
+    if (p.gone || !p.address) continue;
+    const key = home + '|' + p.address, r = p.route || {};
+    if (r.for === key && (r.km || Date.now() - (r.at || 0) < 864e5)) continue;   // done, or failed in the last day
+    if (n++ >= (limit || 5)) break;
+    const path = 'businesses/' + b._id + '/places/' + p._id;
+    try {
+      const d = Maps.newDirectionFinder().setOrigin(home).setDestination(p.address).setMode(Maps.DirectionFinder.Mode.DRIVING).setRegion('nz').getDirections();
+      const leg = d && d.routes && d.routes[0] && d.routes[0].legs && d.routes[0].legs[0];
+      if (!leg) { patch(path, { route: { for: key, err: d && d.status || 'not found', at: Date.now() } }); continue; }
+      const km = Math.round(leg.distance.value / 100) / 10, mins = Math.round(leg.duration.value / 60), f = { route: { for: key, km: km, mins: mins, at: Date.now() } };
+      if (leg.end_location) { f.lat = leg.end_location.lat; f.lng = leg.end_location.lng; }
+      if (!p.km || p.kmAuto !== false) { f.km = Math.round(km * 2); f.kmAuto = true; }
+      patch(path, f);
+    } catch (e) { patch(path, { route: { for: key, err: String(e && e.message || e).slice(0, 120), at: Date.now() } }); }
+  }
+  return n;
+}
+function checkRoutesNow() { myBusinesses().forEach(b => Logger.log(b.name + ': ' + routeTick(b, 50) + ' place(s) checked')); }
+// the time to leave home for a market (start less setting up and the drive there)
+function leaveAt(e) { const p = e.plan || {}; if (!e.time || p.there == null) return ''; const m = Number(e.time.slice(0, 2)) * 60 + Number(e.time.slice(3)) - (p.setup || 0) - (p.there || 0); if (m < 0) return '';
+  return t12(('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + m % 60).slice(-2)); }
+
 /* ================= Shopify orders (read-only) ================= */
 // Script properties: SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET from the app made in Shopify's Dev Dashboard
 // (inside her store's own organisation, with read_orders and read_products, installed on her store).
@@ -478,7 +508,7 @@ function notifyTick(b) {
     for (const e of events) {
       const rem = e.remind || [];
       if (rem.indexOf('day') >= 0 && nz.mins >= 18 * 60 && occursOn(e, tomorrow) && !occursOn(e, today))
-        once('rd-' + e._id + '-' + tomorrow, () => pushTo(b, who(e), 'reminders', (ty[e.type] || '📌') + ' tomorrow', (e.title || '') + (e.time ? ' at ' + t12(e.time) : ''), 'ev-' + e._id));
+        once('rd-' + e._id + '-' + tomorrow, () => pushTo(b, who(e), 'reminders', (ty[e.type] || '📌') + ' tomorrow', (e.title || '') + (e.time ? ' at ' + t12(e.time) : '') + (e.type === 'market' && leaveAt(e) ? ' · leave home ' + leaveAt(e) : ''), 'ev-' + e._id));
       if (rem.indexOf('hour') >= 0 && e.time && occursOn(e, today)) { const start = Number(e.time.slice(0, 2)) * 60 + Number(e.time.slice(3)), left = start - nz.mins;
         if (left > 0 && left <= 60) once('rh-' + e._id + '-' + today, () => pushTo(b, who(e), 'reminders', (ty[e.type] || '📌') + ' in ' + left + ' min', (e.title || '') + ' at ' + t12(e.time), 'ev-' + e._id)); }
     }

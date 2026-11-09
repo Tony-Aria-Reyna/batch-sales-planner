@@ -228,7 +228,14 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#pOk'); await page.waitForFunction(() => { const t = document.querySelector('#eT'); return t && t.value === 'Village Market'; }, null, { timeout: 3000 }).catch(() => {});
   ok(await page.evaluate(() => document.querySelector('#eT').value === 'Village Market'), 'new market fills in the calendar name');
   await page.fill('#eS', '08:00'); await page.fill('#eE', '13:00'); await page.selectOption('#eR', 'week'); await page.waitForTimeout(50);
+  ok(/Leave home 6:45am · back about 2:15pm · 7 h 30 min in all \(5 h selling\)/.test(await page.textContent('#ePlan')), 'market: the whole day worked out (travel, set up, selling, pack down, travel home)');
+  await page.fill('#eP_setup', '60'); await page.waitForTimeout(30);
+  ok(/Leave home 6:30am/.test(await page.textContent('#ePlan')), 'changing the setting-up time moves the time to leave');
   await page.click('[data-who="admin@example.com"]'); await page.click('#eOk'); await page.waitForFunction(() => S.events.length === 1, null, { timeout: 3000 }).catch(() => {});
+  ok(await page.evaluate(() => S.events[0].plan && S.events[0].plan.setup === 60 && S.events[0].plan.there === 30), 'the whole-day times are saved on the entry');
+  ok(await page.evaluate(() => { const e = { type: 'market', place: S.places[0].id, time: '09:00', end: '12:00' }; return marketPlan(e).setup === 60; }), 'the next market there starts with the same setting-up time');
+  await page.route('**/api.open-meteo.com/**', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ daily: { time: ['x'], weather_code: [61], temperature_2m_max: [19.4], temperature_2m_min: [12.2], precipitation_probability_max: [60], precipitation_sum: [3], wind_speed_10m_max: [24.6] } }) }));
+  ok(await page.evaluate(() => new Promise(res => { S.places[0].lat = -36.4; S.places[0].lng = 174.7; weatherFor(S.places[0].id, nzDay(), w => res(wxText(w))); })) === '🌦️ Light rain, 12–19°, 60% chance of rain, wind 25 km/h', 'weather for the market\'s place and day (Open-Meteo)');
   ok(await page.evaluate(() => S.events.length === 1 && S.events[0].type === 'market' && S.events[0].rpt === 'week' && S.events[0].attendees.join() === 'admin@example.com' && S.places[0].km === 64 && S.places[0].float === 15000), 'market saved: weekly, with who\'s on the stall');
   ok(await page.evaluate(() => { const f = S.costs.find(c => c.id === 'fee-' + S.places[0].id); return f && f.cents === 4500 && f.days === 2; }), 'stall fee kept with the costs (covers 2 days)');
   ok(await page.evaluate(() => occursOn(S.events[0], dk(addDays(kd(nzDay()), 7))) && !occursOn(S.events[0], dk(addDays(kd(nzDay()), 3)))), 'a weekly market repeats each week only');

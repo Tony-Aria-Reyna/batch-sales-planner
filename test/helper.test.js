@@ -82,7 +82,7 @@ b.aiLearnt = tomorrow; calls.length = 0; ctx.learnTick(b); ok(calls.length === 0
 ctx.ContentService = { createTextOutput: t => ({ text: t }) }; ctx.Session = { getEffectiveUser: () => ({ getEmail: () => 'biz@example.com' }) };
 ctx.getDoc = p => p === 'businesses/bizb99' ? { settings: { receiptEmail: 'biz@example.com' } } : null; patches.length = 0;
 const pr = ctx.doPost({ postData: { contents: JSON.stringify({ bid: 'bizb99', id: 'ping-abc123' }) } });
-ok(pr.text === 'ok' && patches.length === 1 && patches[0][0] === 'businesses/bizb99' && patches[0][1].helperSeen.version === 6, 'Test the link: the helper records that it heard the app (and its version)');
+ok(pr.text === 'ok' && patches.length === 1 && patches[0][0] === 'businesses/bizb99' && patches[0][1].helperSeen.version === +fs.readFileSync(path.join(__dirname, '..', 'helper', 'Code.gs'), 'utf8').match(/HELPER_VERSION = (\d+)/)[1], 'Test the link: the helper records that it heard the app (and its version)');
 // ---- summaries: the daily briefing only on days with something on; weekly on Mondays; monthly on the 1st
 ctx.UrlFetchApp.fetch = realFetch; mails.length = 0;
 const mon = '2026-11-16', first = '2026-12-01';
@@ -100,4 +100,15 @@ const nm = mails.length; b.notified = patches.filter(p => p[0] === 'businesses/b
 mails.length = 0; db['businesses/b1/events'] = []; b.notified = {}; clock = { day: '2026-11-17', mins: 7 * 60 + 30 }; ctx.notifyTick(b); ok(mails.length === 0, 'no briefing on a day with nothing on');
 clock = { day: first, mins: 8 * 60 }; b.notified = {}; ctx.notifyTick(b); ok(mails.some(m => /Last month: \$250\.00/.test(m.subject)), 'the 1st of the month: last month\'s summary');
 b.settings.summaries = { time: '07:00', monthly: false }; mails.length = 0; b.notified = {}; ctx.notifyTick(b); ok(!mails.some(m => /Last month/.test(m.subject)), 'a summary switched off in the app isn\'t sent');
+// ---- the drive to each place, by road
+const asked = [];
+ctx.Maps = { DirectionFinder: { Mode: { DRIVING: 'driving' } }, newDirectionFinder: () => { const q = {}; const f = { setOrigin: o => (q.o = o, f), setDestination: d => (q.d = d, f), setMode: () => f, setRegion: () => f,
+  getDirections: () => { asked.push(q.d); return /Nowhere/.test(q.d) ? { status: 'NOT_FOUND', routes: [] } : { routes: [{ legs: [{ distance: { value: 32450 }, duration: { value: 2130 }, end_location: { lat: -36.38, lng: 174.72 } }] }] }; } }; return f; } };
+db['businesses/b1/places'] = [{ _id: 'm1', name: 'Matakana', address: 'Matakana Village' }, { _id: 'm2', name: 'Lost', address: 'Nowhere Rd' }, { _id: 'm3', name: 'Done', address: 'X', km: 70, kmAuto: false, route: { for: '1 Home Rd|X', km: 35, mins: 40 } }, { _id: 'm4', name: 'Typed km', address: 'Y', km: 90, kmAuto: false }];
+patches.length = 0; b.settings.homeAddress = '1 Home Rd'; ctx.routeTick(b);
+const pm = id => (patches.find(p => p[0] === 'businesses/b1/places/' + id) || [])[1];
+ok(pm('m1') && pm('m1').route.km === 32.5 && pm('m1').route.mins === 36 && pm('m1').km === 65 && pm('m1').lat === -36.38, 'route: km and minutes each way by road, km there and back filled in, map position saved');
+ok(pm('m2') && pm('m2').route.err && !pm('m3') && asked.indexOf('X') < 0, 'route: an address not found is noted; a place already worked out isn\'t asked again');
+ok(pm('m4') && pm('m4').route.km === 32.5 && pm('m4').km === undefined, 'route: km she typed herself is kept');
+ok(ctx.leaveAt({ time: '08:00', plan: { there: 35, setup: 45 } }) === '6:40am', 'the reminder works out when to leave home');
 console.log(fails ? fails + ' helper check(s) failed' : 'All helper checks passed'); process.exit(fails ? 1 : 0);
