@@ -789,8 +789,13 @@ async function whosePin(pin){ for(const p of S.pins){ if(p.hash&&await pinHashOf
 // An owner working on their own (not in till mode) is not logged: opening Setup, seeing the takings and
 // so on are an owner's own business. (Sales, voids, discounts and floats still record who approved them
 // on the record itself, whoever did it.)
+// Everyday checks that aren't worth a record when an owner does them (a manager's still are, for record keeping).
+// The day's cash count is kept on the selling day itself either way.
+const QUIET_ACTIONS=['see the takings','see the sales','open Setup','leave till mode','end the day','close the day'];
+const quietEntry=a=>QUIET_ACTIONS.includes(a.action)&&!!a.approver&&SYNC.getOwners().includes(a.approver);
 function logApproval(action,approver,details,always){
   if(!always&&!tillLock()&&role()==='owner') return;   // an owner on their own device isn't logged, except a sale that goes ahead with an override
+  if(!always&&quietEntry({action,approver})) return;
   S.audit.push({id:SYNC.newId('audit'),at:Date.now(),day:nzDay(),action,approver:approver||null,approverName:approver?personName(approver):'',by:SYNC.me(),tillMode:!!tillLock(),details:String(details||'')});
   save();
 }
@@ -858,10 +863,13 @@ function checkPinReset(){
 const ACTION_ICON={'remove from the Loyalty programme':'💔','delete a customer contact':'🗑️','add float':'💵','change the opening float':'💵','give a discount':'🏷️','add an item not on the till':'➕','void a sale':'🚫','correct a sale':'✏️','end the day':'🏁','see the sales':'🧾','see the takings':'💰','leave till mode':'🔓','open Setup':'⚙️'};
 SCREENS.audit={
   title:()=>({h:'Approvals log',s:'Who approved what, and when'}),
-  html(){ const list=S.audit.slice().sort((a,b)=>b.at-a.at).slice(0,400);
-    return `<div class="card">${list.length?list.map(a=>`<div class="row"><span style="font-size:24px">${ACTION_ICON[a.action]||'🔒'}</span><div class="grow"><b>${esc(a.action.charAt(0).toUpperCase()+a.action.slice(1))}</b>${a.details?' · '+esc(a.details):''}
+  html(){ const list=S.audit.slice().sort((a,b)=>b.at-a.at).slice(0,400), quiet=role()==='owner'?S.audit.filter(quietEntry).length:0;
+    return `${quiet?`<div class="card"><div class="row" style="border:0;padding:0"><div class="grow"><b>🧹 Tidy the log</b><small>Remove ${quiet} everyday entr${quiet===1?'y':'ies'} by owners (seeing the takings or sales, opening Setup, leaving till mode, ending and closing the day). Managers' entries and every real approval stay.</small></div><button class="btn small" id="auTidy">Tidy</button></div></div>`:''}<div class="card">${list.length?list.map(a=>`<div class="row"><span style="font-size:24px">${ACTION_ICON[a.action]||'🔒'}</span><div class="grow"><b>${esc(a.action.charAt(0).toUpperCase()+a.action.slice(1))}</b>${a.details?' · '+esc(a.details):''}
         <small>${nzDate(new Date(a.at),{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'})} · approved by <b>${esc(a.approverName||a.approver||'nobody')}</b>${a.by&&a.by!==a.approver?' · on '+esc(a.by)+'\'s device':''}${a.tillMode?' · in till mode':''}</small></div></div>`).join('')
-      :'<p class="note">Nothing yet. Every PIN approval will be listed here.</p>'}</div>`; }
+      :'<p class="note">Nothing yet. Every PIN approval will be listed here.</p>'}</div>`; },
+  wire(){ const t=$('#auTidy'); if(t) t.onclick=()=>{ const n=S.audit.filter(quietEntry).length;
+    confirmBox('Tidy the log?','This removes '+n+' everyday entr'+(n===1?'y':'ies')+' by owners. It can\'t be undone. Managers\' entries and every real approval (discounts, voids, corrections, below cost and so on) stay.','Tidy the log',()=>{
+      for(let i=S.audit.length-1;i>=0;i--) if(quietEntry(S.audit[i])) S.audit.splice(i,1); save(); render(); toast('Removed '+n+' entries'); }); }; }
 };
 
 /* ================= install ================= */

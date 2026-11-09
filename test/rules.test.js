@@ -41,7 +41,12 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('helper cannot read the approvals log', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/audit/a1'))));
   await t('owner reads the approvals log', assertSucceeds(getDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
   await t('nobody can change the approvals log', assertFails(updateDoc(doc(as(OWNER), 'businesses/b1/audit/a1'), { approver: MANAGER })));
-  await t('nobody can delete from the approvals log', assertFails(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
+  await t('a real approval (a discount) can never be deleted, even by an owner', assertFails(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/a1'))));
+  await t('add an everyday owner entry', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/audit/q1'), { by: HELPER, at: Date.now(), action: 'see the takings', approver: OWNER })));
+  await t('add an everyday manager entry', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/audit/q2'), { by: HELPER, at: Date.now(), action: 'see the takings', approver: MANAGER })));
+  await t('a manager cannot tidy the log', assertFails(deleteDoc(doc(as(MANAGER), 'businesses/b1/audit/q1'))));
+  await t('a manager\'s everyday entry stays, even for an owner', assertFails(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/q2'))));
+  await t('an owner can tidy away an everyday owner entry', assertSucceeds(deleteDoc(doc(as(OWNER), 'businesses/b1/audit/q1'))));
   await t('log entries must be in your own name', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/audit/a2'), { by: OWNER, at: Date.now() })));
   await t('helper can ask for a receipt to be emailed', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/receipts/r1'), { saleId: 'a1', to: 'customer@example.com', by: HELPER, status: 'queued', at: Date.now() })));
   await t('a receipt request cannot claim to be sent already', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/receipts/r2'), { saleId: 'a1', to: 'customer@example.com', by: HELPER, status: 'sent', at: Date.now() })));

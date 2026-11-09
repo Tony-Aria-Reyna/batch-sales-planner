@@ -589,6 +589,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await op2.screenshot({ path: path.join(shots, '21-rules-notice.png') });
   await op2.evaluate(() => localStorage.removeItem('mockdeny')); await op2.close();
 
+  console.log('Approvals log: everyday owner entries are not kept, and old ones can be tidied away');
+  await page.evaluate(() => { const o = SYNC.getOwners()[0]; S.audit.push({ id: 'aq1', at: Date.now(), action: 'see the takings', approver: o, approverName: 'Owner', by: o, details: '' }, { id: 'aq2', at: Date.now(), action: 'open Setup', approver: o, approverName: 'Owner', by: o, details: '' }, { id: 'aq3', at: Date.now(), action: 'see the sales', approver: 'manager@example.com', approverName: 'Manager', by: o, details: '' }); save(); });
+  const auditBefore = await page.evaluate(() => S.audit.length);
+  await page.evaluate(() => { lsSet('rs.tillMode', { bid: SYNC.businessId(), servedBy: '' }); logApproval('see the takings', SYNC.getOwners()[0], ''); logApproval('see the takings', 'manager@example.com', ''); lsSet('rs.tillMode', null); });
+  ok(await page.evaluate(n => S.audit.length === n + 1 && S.audit[S.audit.length - 1].approver === 'manager@example.com', auditBefore), 'seeing the takings: an owner isn\'t logged any more, a manager still is');
+  await page.evaluate(() => { stack = ['home', 'setup', 'audit']; render(); }); await page.waitForSelector('#auTidy');
+  await page.click('#auTidy'); await page.click('#cY'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => !S.audit.some(a => a.id === 'aq1' || a.id === 'aq2') && S.audit.some(a => a.id === 'aq3') && S.audit.some(a => a.action === 'sell below cost') && !document.querySelector('#auTidy')), 'Tidy the log removes everyday owner entries; managers\' entries and real approvals stay');
+  await page.evaluate(() => { stack = ['home']; setupOpen = false; render(); });
   console.log('Search, View as (practice mode) and the managers switch');
   await page.evaluate(() => { stack = ['home']; setupOpen = false; render(); }); await page.waitForSelector('#hFind');
   await page.click('#hFind'); await page.waitForSelector('#sQ'); await page.fill('#sQ', 'stall fee'); await page.waitForTimeout(60);

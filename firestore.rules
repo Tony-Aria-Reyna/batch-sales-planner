@@ -136,10 +136,16 @@ service cloud.firestore {
         allow delete: if canManage(bid) && (who == email() || roleIn(biz(bid)) == 'owner');
       }
       // Approvals log: who approved what, and when. Anyone in the business can add an entry for an action
-      // on their device; only owners and managers can read it; nobody can change or delete an entry.
+      // on their device; only owners and managers can read it; nobody can change an entry, and only everyday
+      // owner entries can be tidied away (below).
       match /audit/{id} {
         allow read: if canManage(bid);
         allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.at is number;
+        // the only thing ever removed: an owner tidying away everyday entries approved by an owner
+        // (seeing the takings or sales, opening Setup, leaving till mode, ending or closing the day)
+        allow delete: if isMember(bid) && roleIn(biz(bid)) == 'owner'
+                      && resource.data.action in ['see the takings', 'see the sales', 'open Setup', 'leave till mode', 'end the day', 'close the day']
+                      && resource.data.approver in biz(bid).get('owners', []);
       }
       // Emailed GST receipts: anyone selling can ask for a receipt for a sale to be emailed. The request only
       // names the sale and the address; the Google helper script builds the receipt itself from the saved
