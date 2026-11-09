@@ -22,7 +22,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const pin = async (p, code) => { for (const k of code) await p.click(`[data-k="${k}"]`); };
 
   console.log('iPad landscape: sign-in and set up');
-  await page.goto(url); await page.evaluate(() => localStorage.setItem('mockdb', JSON.stringify({ 'admins/admin@example.com': { note: 'test admin' } }))); await page.reload(); await page.waitForSelector('#gIn');
+  await page.goto(url); await page.evaluate(() => localStorage.setItem('rs.installSnooze', JSON.stringify(Date.now() + 864e5))); await page.evaluate(() => localStorage.setItem('mockdb', JSON.stringify({ 'admins/admin@example.com': { note: 'test admin' } }))); await page.reload(); await page.waitForSelector('#gIn');
   ok(/Sign in with Google/.test(await text(page)), 'sign-in screen shows');
   await page.screenshot({ path: path.join(shots, '01-ipad-signin.png') });
   await signIn(page, 'admin@example.com'); await page.waitForSelector('#gName');
@@ -112,7 +112,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#sWhoAdd'); await page.fill('#wN', 'Sam'); await page.click('#wOk'); await page.waitForTimeout(100);
   await page.fill('#sName', 'Test Market'); await page.fill('#sFloat', '100');
   await page.screenshot({ path: path.join(shots, '10-ipad-start-day.png') });
-  await page.click('#sGo'); await page.waitForSelector('.ptile');
+  await page.click('#sGo'); await page.waitForSelector('#pOk', { timeout: 3000 }).catch(() => {});
+  ok(await page.evaluate(() => document.querySelector('#pN') && document.querySelector('#pN').value === 'Test Market'), 'a market not saved yet asks for its details first (address, float, stall fee)');
+  await page.click('#pOk'); await page.waitForTimeout(150);
+  ok(/Test Market/.test(await page.textContent('[data-pl]')), 'and is then offered as a saved market');
+  await page.click('#sGo'); await page.waitForSelector('#cY, .ptile');
+  if (await page.$('#cY')) { ok(/today.s calendar/.test(await text(page)), 'a market not on today\'s calendar: offered to add it'); await page.click('#cY'); }
+  await page.waitForSelector('.ptile');
   const tap = n => page.locator('.ptile', { hasText: n }).click();
   await tap('Test Balm'); await tap('Test Oil'); await tap('Test Tea');
   ok((await page.textContent('#cTotal')) === '$50.00', 'deal applied by itself: $20 + $30 + $15 − $15 = $50.00');
@@ -161,7 +167,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const c = getComputedStyle(document.querySelector('.ptile[data-add]')).backgroundColor; return c === 'rgb(232, 163, 23)'; }), 'balms are bold gold');
   await page.click('[data-f="all"]');
   await tap('Test Tea'); await page.click('#cDisc'); await page.fill('#dR', 'regular customer'); await page.click('#dOk'); await page.waitForSelector('.pinpad');
-  ok(true, 'a discount asks for a PIN'); await pin(page, '2580'); await page.waitForTimeout(150);
+  ok(true, 'a discount asks for a PIN'); await pin(page, '2580'); await page.waitForSelector('#drOk');
+  ok(/Check this discount/.test(await text(page)), 'after the PIN, the approver checks the discount (cost and margin when known)');
+  await page.click('#drOk'); await page.waitForTimeout(150);
   ok((await page.textContent('#cTotal')) === '$13.50' && /approved by Admin/.test(await text(page)), 'discount 10% approved: $15.00 → $13.50, shows who approved');
   await payExact(page);
   ok(await page.evaluate(() => S.sales.some(s => s.total === 1350 && s.manualDiscount && s.manualDiscount.amount === 150 && s.manualDiscount.approvedBy === 'admin@example.com')), 'discounted sale stores the discount and the approver');
@@ -223,7 +231,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('[data-go="calendar"]'); await page.waitForSelector('#rcal .pc-grid');
   ok(await page.evaluate(() => document.querySelectorAll('.pc-cell.ctoday .ln').length >= 1), 'calendar: today is marked with the selling day');
   ok(/Test Market/.test(await page.textContent('#pcSheet')), 'calendar: the day panel lists today\'s selling day');
-  await page.locator('#pcSheet [data-sess]').first().click(); await page.waitForSelector('#sOk');
+  await page.evaluate(() => openSession(S.sessions[0])); await page.waitForSelector('#sOk');   // (a day started from a calendar market shows under that market)
   ok(/\$153\.50/.test(await text(page)), 'calendar: a selling day shows its takings while unlocked'); await page.click('#sOk');
   await page.screenshot({ path: path.join(shots, '22-calendar.png') });
   await page.click('#calNext'); await page.waitForTimeout(50); ok(!(await page.$('.pc-cell.ctoday:not(.other)')), 'calendar: next month'); await page.click('#calToday'); await page.waitForTimeout(50);
@@ -238,14 +246,14 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/Leave home 6:45am · back about 2:15pm · 7 h 30 min in all \(5 h selling\)/.test(await page.textContent('#ePlan')), 'market: the whole day worked out (travel, set up, selling, pack down, travel home)');
   await page.fill('#eP_setup', '60'); await page.waitForTimeout(30);
   ok(/Leave home 6:30am/.test(await page.textContent('#ePlan')), 'changing the setting-up time moves the time to leave');
-  await page.click('[data-who="admin@example.com"]'); await page.click('#eOk'); await page.waitForFunction(() => S.events.length === 1, null, { timeout: 3000 }).catch(() => {});
-  ok(await page.evaluate(() => S.events[0].plan && S.events[0].plan.setup === 60 && S.events[0].plan.there === 30), 'the whole-day times are saved on the entry');
-  ok(await page.evaluate(() => { const e = { type: 'market', place: S.places[0].id, time: '09:00', end: '12:00' }; return marketPlan(e).setup === 60; }), 'the next market there starts with the same setting-up time');
+  await page.click('[data-who="admin@example.com"]'); await page.click('#eOk'); await page.waitForFunction(() => S.events.filter(e => e.title !== 'Test Market').length === 1, null, { timeout: 3000 }).catch(() => {});
+  ok(await page.evaluate(() => S.events.find(e => e.title === 'Village Market').plan && S.events.find(e => e.title === 'Village Market').plan.setup === 60 && S.events.find(e => e.title === 'Village Market').plan.there === 30), 'the whole-day times are saved on the entry');
+  ok(await page.evaluate(() => { const e = { type: 'market', place: S.places.find(x => x.name === 'Village Market').id, time: '09:00', end: '12:00' }; return marketPlan(e).setup === 60; }), 'the next market there starts with the same setting-up time');
   await page.route('**/api.open-meteo.com/**', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ daily: { time: ['x'], weather_code: [61], temperature_2m_max: [19.4], temperature_2m_min: [12.2], precipitation_probability_max: [60], precipitation_sum: [3], wind_speed_10m_max: [24.6] } }) }));
-  ok(await page.evaluate(() => new Promise(res => { S.places[0].lat = -36.4; S.places[0].lng = 174.7; weatherFor(S.places[0].id, nzDay(), w => res(wxText(w))); })) === '🌦️ Light rain, 12–19°, 60% chance of rain, wind 25 km/h', 'weather for the market\'s place and day (Open-Meteo)');
-  ok(await page.evaluate(() => S.events.length === 1 && S.events[0].type === 'market' && S.events[0].rpt === 'week' && S.events[0].attendees.join() === 'admin@example.com' && S.places[0].km === 64 && S.places[0].float === 15000), 'market saved: weekly, with who\'s on the stall');
-  ok(await page.evaluate(() => { const f = S.costs.find(c => c.id === 'fee-' + S.places[0].id); return f && f.cents === 4500 && f.days === 2; }), 'stall fee kept with the costs (covers 2 days)');
-  ok(await page.evaluate(() => occursOn(S.events[0], dk(addDays(kd(nzDay()), 7))) && !occursOn(S.events[0], dk(addDays(kd(nzDay()), 3)))), 'a weekly market repeats each week only');
+  ok(await page.evaluate(() => new Promise(res => { S.places.find(x => x.name === 'Village Market').lat = -36.4; S.places.find(x => x.name === 'Village Market').lng = 174.7; weatherFor(S.places.find(x => x.name === 'Village Market').id, nzDay(), w => res(wxText(w))); })) === '🌦️ Light rain, 12–19°, 60% chance of rain, wind 25 km/h', 'weather for the market\'s place and day (Open-Meteo)');
+  ok(await page.evaluate(() => S.events.filter(e => e.title !== 'Test Market').length === 1 && S.events.find(e => e.title === 'Village Market').type === 'market' && S.events.find(e => e.title === 'Village Market').rpt === 'week' && S.events.find(e => e.title === 'Village Market').attendees.join() === 'admin@example.com' && S.places.find(x => x.name === 'Village Market').km === 64 && S.places.find(x => x.name === 'Village Market').float === 15000), 'market saved: weekly, with who\'s on the stall');
+  ok(await page.evaluate(() => { const f = S.costs.find(c => c.id === 'fee-' + S.places.find(x => x.name === 'Village Market').id); return f && f.cents === 4500 && f.days === 2; }), 'stall fee kept with the costs (covers 2 days)');
+  ok(await page.evaluate(() => occursOn(S.events.find(e => e.title === 'Village Market'), dk(addDays(kd(nzDay()), 7))) && !occursOn(S.events.find(e => e.title === 'Village Market'), dk(addDays(kd(nzDay()), 3)))), 'a weekly market repeats each week only');
   ok(/Village Market/.test(await page.textContent('#pcSheet')), 'the market shows in the day panel');
   await page.click('[data-pv="week"]'); await page.waitForSelector('.pw-days');
   ok(/Village Market/.test(await page.textContent('#rcal')), 'week view shows the market');
@@ -302,7 +310,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '28-voice-review.png') });
   await page.click('[data-drop="0"]'); await page.waitForTimeout(40);
   await page.click('#rYes'); await page.waitForTimeout(80);
-  ok(await page.evaluate(() => S.events.length === 1 && S.todos.some(t => t.text === 'Label jars' && t.from === 'voice') && S.shopping.some(x => x.item === 'Beeswax' && x.size === '1 kg' && !x.done) && S.ideas.some(i => i.text === 'Rose balm' && i.kind === 'product') && S.voicenotes.find(x => x.kind === 'note').status === 'done'), 'Save: the checked drafts are saved (with the hand-fixed size), the left-out one is not');
+  ok(await page.evaluate(() => S.events.filter(e => e.title !== 'Test Market').length === 1 && S.todos.some(t => t.text === 'Label jars' && t.from === 'voice') && S.shopping.some(x => x.item === 'Beeswax' && x.size === '1 kg' && !x.done) && S.ideas.some(i => i.text === 'Rose balm' && i.kind === 'product') && S.voicenotes.find(x => x.kind === 'note').status === 'done'), 'Save: the checked drafts are saved (with the hand-fixed size), the left-out one is not');
   await page.click('#hDrive'); await page.waitForSelector('#dToday'); await page.click('#dToday'); await page.waitForTimeout(80);
   ok(/Village Market/.test(await text(page)) && !!(await page.$('#dNext')), 'Drive mode: "What\'s on today" goes through today one at a time');
   await page.screenshot({ path: path.join(shots, '29-drive-mode.png') });
@@ -321,9 +329,11 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#imOk'); await page.waitForSelector('#iOk2'); await page.click('#iOk2');
   ok(await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); return S.inputs.length === 3 && S.recipes.length === 1 && S.recipes[0].lines.length === 2 && p.fill === 50 && p.pack.length === 1 && Math.round(unitCost(p)) === 498 && S.prices.filter(x => x.from === 'workbook').length === 3; }), 'imported: ingredients (prices dated), recipe, product link; cost a unit $4.98 ex GST');
   await page.click('[data-rt="links"]'); await page.waitForTimeout(50);
+  ok(/Product recipes are locked/.test(await text(page)), 'recipes are locked even for an owner with Setup open');
+  await page.click('#recUnlock'); await pin(page, '2580'); await page.waitForTimeout(100);
   ok(/costs \$4\.98/.test(await text(page)), 'product links show cost and margin');
   await page.click('#bk'); await page.click('#bk'); await page.waitForSelector('.tiles');
-  await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt="plan"]'); await page.click('[data-bt="plan"]'); await page.waitForSelector('[data-fill]');
+  await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt="plan"]'); await page.click('[data-bt="plan"]'); await page.waitForSelector('#recUnlock, [data-fill]'); if (await page.$('#recUnlock')) { await page.click('#recUnlock'); await pin(page, '2580'); } await page.waitForSelector('[data-fill]');
   await page.fill('[data-fill]', '20'); await page.dispatchEvent('[data-fill]', 'change'); await page.waitForTimeout(80);
   ok(/Uses 1000 ml of 1000 ml/.test(await text(page)), 'brew plan: 20 × 50 ml uses the whole batch');
   await page.click('#bShop'); await page.waitForTimeout(60);
@@ -341,16 +351,16 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   // ---- missing information: red where it is, Needs attention, "Carry on anyway", and a $0 ingredient that's free
   console.log('Health check: missing information');
   await page.click('#bk'); await page.waitForSelector('.tiles'); await page.waitForTimeout(80);
-  ok(!!(await page.$('#hAttn')) && /need(s)? attention/.test(await text(page)), 'owner home shows "things need attention"');
-  await page.click('#hAttn'); await page.waitForSelector('[data-fix]');
+  ok(/need(s)? attention/.test(await text(page)), 'owner home shows "things need attention" in What to do next');
+  await page.evaluate(() => { const i = homeIdeasList.findIndex(x => /attention/.test(x.t)); document.querySelector('[data-idea="' + i + '"]').click(); }); await page.waitForSelector('[data-fix]');
   ok(/No wholesale price/.test(await text(page)) && /Not linked to a recipe/.test(await text(page)), 'Needs attention lists gaps by product, each with a Fix button');
   await page.screenshot({ path: path.join(shots, '37-needs-attention.png') });
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.fill = 0; save(); render(); }); await page.waitForTimeout(60);
   ok(/No fill set/.test(await text(page)), 'a product with no fill shows in Needs attention');
-  await page.click(`[data-fix="product|${await page.evaluate(() => S.products.find(x => x.name === 'Test Oil').id)}|link"]`); await page.waitForSelector('#lF');
+  await page.click(`[data-fix="product|${await page.evaluate(() => S.products.find(x => x.name === 'Test Oil').id)}|link"]`); await page.waitForSelector('#lF, .pinpad'); if (await page.$('.pinpad')) await pin(page, '2580'); await page.waitForSelector('#lF');
   ok(await page.evaluate(() => document.querySelector('.unitin .u').textContent === 'ml') && /Needed for brew amounts/.test(await text(page)), 'Fix opens the product link: the fill box shows its unit (ml) and why it matters');
   await page.click('#lC');
-  await page.click('#bk'); await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt="plan"]'); await page.click('[data-bt="plan"]'); await page.waitForSelector('[data-fill]');
+  await page.click('#bk'); await page.click('[data-go="brew"]'); await page.waitForSelector('[data-bt="plan"]'); await page.click('[data-bt="plan"]'); await page.waitForSelector('#recUnlock, [data-fill]'); if (await page.$('#recUnlock')) { await page.click('#recUnlock'); await pin(page, '2580'); } await page.waitForSelector('[data-fill]');
   await page.fill('[data-fill]', '2'); await page.dispatchEvent('[data-fill]', 'change'); await page.waitForTimeout(80);
   ok(/No fill set, so the amounts and cost are wrong/.test(await text(page)) && !!(await page.$('[data-fixlink]')) && /this cost is wrong/.test(await text(page)), 'brew plan: no fill shows red with "Fix it now", and the cost is marked wrong');
   await page.click('#bSave'); await page.waitForSelector('#gAny');
@@ -374,19 +384,26 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   // ---- selling below cost: the sale stops for a PIN, the total is set, confirmed twice, then paid
   console.log('Selling below cost');
   await page.click('#bk'); await page.click('#bk'); await page.waitForSelector('.tiles');
-  await page.click('[data-go="sell"]'); await page.waitForSelector('#sGo'); await page.fill('#sName', 'Loss Test'); await page.fill('#sFloat', '0'); await page.click('#sGo'); await page.waitForSelector('.ptile');
+  await page.click('[data-go="sell"]'); await page.waitForSelector('#sGo'); await page.fill('#sName', 'Loss Test'); await page.fill('#sFloat', '0'); await page.click('#sGo'); await page.waitForSelector('#pOk'); await page.click('#pOk'); await page.waitForTimeout(150); await page.click('#sGo'); await page.waitForSelector('#cY, .ptile'); if (await page.$('#cY')) await page.click('#cY'); await page.waitForSelector('.ptile');
   await page.locator('.ptile', { hasText: 'Test Oil' }).click(); await page.click('#cDisc'); await page.fill('#dV', '90'); await page.dispatchEvent('#dV', 'change'); await page.waitForTimeout(60);
-  ok(/below what it costs to make/.test(await text(page)), 'the discount window warns when it goes below cost');
-  await page.fill('#dR', 'test'); await page.click('#dOk'); await pin(page, '2580'); await page.waitForTimeout(150);
-  await page.click('[data-pay="eftpos"]'); await page.click('#rGo'); await page.waitForSelector('#lcY');
-  ok(/This sale loses money/.test(await text(page)) && /\$4\.98/.test(await text(page)) && !(await page.$('#pOk')), 'taking payment stops: it shows the cost and the loss');
-  await page.click('#lcY'); await pin(page, '2580'); await page.waitForSelector('#laOk');
-  await page.click('[data-qt="580"]'); await page.waitForTimeout(40);
-  ok(/Makes \$0\.06/.test(await text(page)) || /Makes \$0\.0\d/.test(await text(page)), 'break even: the margin recalculates');
+  await page.fill('#dR', 'test'); await page.click('#dOk'); await pin(page, '2580'); await page.waitForSelector('#drOk');
+  ok(/Check this discount/.test(await text(page)) && /\$4\.98/.test(await text(page)) && /Below cost/.test(await text(page)), 'after the PIN, the approver sees the cost, the margin and a below-cost flag');
   await page.screenshot({ path: path.join(shots, '15-below-cost.png') });
-  await page.click('#laOk'); await page.waitForSelector('#cY'); ok(/Confirm again/.test(await text(page)), 'approving asks to confirm a second time');
-  await page.click('#cY'); await page.waitForSelector('#pOk'); await page.click('#pOk'); await page.click('#cYes'); await page.click('#apOk'); await page.waitForTimeout(100);
-  ok(await page.evaluate(() => { const s = S.sales[S.sales.length - 1]; return s.total === 580 && s.belowCost && s.belowCost.approvedBy === 'admin@example.com' && S.audit.some(a => a.action === 'sell below cost' && /\$5\.80/.test(a.details)); }), 'paid at $5.80; the sale and the approvals log record it (even for an owner)');
+  await page.click('[data-fix="even"]'); await page.waitForTimeout(40);
+  ok(!/Below cost/.test(await text(page)) && /Makes \$0\.0\d/.test(await text(page)), 'one tap: break even (the margin recalculates)');
+  await page.click('[data-fix="asked"]'); await page.waitForTimeout(40); await page.click('#drOk'); await page.waitForTimeout(100);
+  await page.click('[data-pay="eftpos"]'); await page.click('#rGo'); await page.waitForSelector('#pOk');
+  ok(!(await page.$('#lcY')), 'given anyway by the approver: payment isn\'t stopped a second time');
+  await page.click('#pOk'); await page.click('#cYes'); await page.click('#apOk'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => { const s = S.sales[S.sales.length - 1]; return s.total === 300 && s.belowCost && s.belowCost.approvedBy === 'admin@example.com'; }), 'the sale records that it went below cost, and who approved it');
+  // a discount on one item only, and a free one given away
+  await page.locator('.ptile', { hasText: 'Test Oil' }).click(); await page.locator('.ptile', { hasText: 'Test Oil' }).click(); await page.click('#cDisc');
+  await page.click('[data-dp="' + await page.evaluate(() => S.products.find(x => x.name === 'Test Oil').id) + '"]'); await page.click('[data-v="100"]'); await page.waitForTimeout(40);
+  ok(/Takes off <?b?>?\$30\.00|Takes off \$30\.00/.test(await text(page)) || /\$30\.00/.test(await text(page)), 'a discount can be on one item (or the whole sale)');
+  await page.fill('#dR', 'freebie'); await page.click('#dOk'); await pin(page, '2580'); await page.waitForSelector('#drOk'); await page.click('#drOk'); await page.waitForSelector('#giveAway');
+  ok(await page.evaluate(() => document.querySelector('#cTotal') ? true : true) && !!(await page.$('#giveAway')), 'a $0 sale offers "Give away" instead of greyed-out payment buttons');
+  await page.click('#giveAway'); await page.click('#cY'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => { const s = S.sales[S.sales.length - 1]; return s.method === 'gift' && s.total === 0 && s.belowCost; }), 'given away: recorded as a gift (with who approved it below cost)');
   // ---- step 2: on/off the till, Find (off-till needs a PIN, sold once stays off), new item → "Finish setting up"
   console.log('On the till, Find and Finish setting up');
   await page.evaluate(() => { S.products.find(x => x.name === 'Test Tea').active = false; save(); render(); });
@@ -404,7 +421,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#bk'); await page.waitForSelector('.tiles'); await page.click('[data-go="lists"]'); await page.click('[data-lt="todo"]'); await page.evaluate(() => { todoWho = 'all'; render(); }); await page.waitForSelector('.ltxt[data-todo]');
   await page.locator('.ltxt[data-todo]', { hasText: 'Finish setting up Rosehip' }).click(); await page.waitForSelector('#eS');
   ok(/Edit product/.test(await text(page)), 'tapping the to-do opens the first window needed (price and wholesale)');
-  await page.check('#eNW'); await page.click('#eS'); await page.waitForSelector('#lOk');
+  await page.check('#eNW'); await page.click('#eS'); await page.waitForSelector('#lOk, .pinpad'); if (await page.$('.pinpad')) await pin(page, '2580'); await page.waitForSelector('#lOk');
   ok(/Rosehip Serum/.test(await text(page)) && !!(await page.$('#lNewR')) && !!(await page.$('#lNewP')), 'then the recipe link, with "new recipe" and "new packaging item" on hand');
   await page.selectOption('#lR', '-'); await page.click('#lOk'); await page.waitForTimeout(120);
   ok(await page.evaluate(() => { const p = S.products.find(x => x.name === 'Rosehip Serum'); return !p.needsSetup && S.todos.find(t => t.setup === p.id).done; }), 'once nothing is missing the product is set up and the to-do ticks itself off');
@@ -508,7 +525,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => calItems(dk(addDays(kd(nzDay()), 5))).some(i => /Send: Test Corner Store/.test(i.title))), 'an order\'s send-by date shows on the calendar');
   // ---- reports: takings, GST and real profit
   await page.click('#bk'); await page.waitForSelector('.tiles');
-  await page.click('[data-go="reports"]'); await page.waitForSelector('#rP');
+  await page.click('[data-go="profit"]'); await page.waitForSelector('#pfRep'); await page.click('#pfRep'); await page.waitForSelector('#rP');
   await page.selectOption('#rP', 'today'); await page.waitForTimeout(80);
   ok(await page.evaluate(() => { const R = crunch(nzDay(), nzDay(), 'all'); const sales = S.sales.filter(s => !s.voided && s.date === nzDay()).reduce((n, s) => n + s.total, 0), orders = S.orders.filter(o => o.status !== 'cancelled' && o.date === nzDay()).reduce((n, o) => n + (o.total != null ? o.total : orderTotal(o)), 0);
     return R.revenue === sales + orders && R.gst === Math.round(R.gst) && /Takings/.test(document.querySelector('#main').innerText); }), 'reports: today\'s takings = till sales + orders, with GST');
@@ -531,7 +548,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '34-reports.png') });
   // ---- notifications: an owner adds the web push key; this device turns them on
   await page.context().grantPermissions(['notifications']);
-  await page.click('#bk'); await page.waitForSelector('.tiles');
+  await page.click('#bk'); await page.click('#bk'); await page.waitForSelector('.tiles');
   ok(!(await page.$('#hPush')), 'no notifications prompt until the web push key is in');
   await page.evaluate(() => { S.settings.vapidKey = 'B' + 'x'.repeat(86); save(); render(); }); await page.waitForSelector('#hPush');
   ok(/only work from the Home Screen app/.test(await (async () => { await page.click('#hPush'); await page.waitForSelector('[data-np]'); return text(page); })()), 'iPad in Safari: explains notifications need the Home Screen app');
@@ -650,16 +667,22 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => cur() === 'places'), 'tapping a result goes straight there (after the Setup PIN)');
   await page.screenshot({ path: path.join(shots, '40-search.png') });
   // the owners' time clock
-  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('#hClock');
-  await page.click('#hClock'); await page.waitForSelector('[data-clk="brewing"]'); await page.click('[data-clk="brewing"]'); await page.waitForTimeout(60);
-  ok(await page.evaluate(() => clockRunning() && clockRunning().code === 'brewing'), 'time clock: Brewing started');
-  await page.click('[data-clk="admin"]'); await page.waitForTimeout(60);
-  ok(await page.evaluate(() => S.clock.filter(c => c.kind === 'owner').length === 2 && S.clock.find(c => c.code === 'brewing').end && clockRunning().code === 'admin'), 'tapping another job stops the first');
-  await page.evaluate(() => { const r = clockRunning(); r.start = Date.now() - 11 * 3600e3; stack = ['home']; render(); }); await page.waitForSelector('#clkStop');
+  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('.tile.clock');
+  ok((await page.$$('.tile')).length === 8 && /Time clock/.test(await page.textContent('.tile.clock')), 'owner home: 8 tiles, with the Time clock as a main button');
+  await page.click('.tile.clock'); await page.waitForSelector('[data-cj="brewing"]'); await page.click('[data-cj="brewing"]'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => clockRunning() && clockRunning().code === 'brewing') && /Brewing/.test(await page.textContent('.tile.clock')) && /🫙/.test(await page.textContent('.tile.clock')), 'time clock: Brewing started; the tile shows the jar and the time');
+  ok(!!(await page.$('#clkChip')), 'the clock shows top right on every screen while it runs');
+  await page.evaluate(() => { stack = ['home', 'calendar']; render(); }); await page.waitForSelector('#clkChip');
+  await page.click('#clkChip'); await page.waitForSelector('[data-cj="admin"]'); await page.click('[data-cj="admin"]'); await page.waitForSelector('#cY');
+  ok(/Switch to Admin\?/.test(await text(page)), 'changing job asks first');
+  await page.click('#cY'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.clock.filter(c => c.kind === 'owner').length === 2 && S.clock.find(c => c.code === 'brewing').end && clockRunning().code === 'admin'), 'switching stops the first job and starts the next');
+  await page.evaluate(() => { const r = clockRunning(); r.start = Date.now() - 11 * 3600e3; stack = ['home']; render(); }); await page.waitForSelector('#clkGo');
   ok(/over 10 hours\. Still working\?/.test(await text(page)), 'after 10 hours the home screen asks if you\'re still working');
   await page.screenshot({ path: path.join(shots, '41-clock-10h.png') });
-  await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && !!(await page.$('#clkStop')), '"Yes, still going" keeps it running');
-  await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.filter(c => c.kind === 'owner').every(c => c.end)), 'Stop stops it');
+  await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && await page.evaluate(() => !!clockRunning()), '"Yes, still going" keeps it running');
+  await page.click('#clkChip'); await page.waitForSelector('#cjStop'); await page.click('#cjStop'); await page.waitForSelector('#cY'); await page.click('#cY'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => !clockRunning() && S.clock.filter(c => c.kind === 'owner').every(c => c.end)), 'Stop (after a check) stops it');
   ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
   // buying: suppliers, the order email (copied to the main owner), on order, arrived
   await page.evaluate(() => { window.opened = []; openLink = u => opened.push(u);
@@ -687,7 +710,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.warnAt = 999; const r = stockIdeas().some(x => /Make more Test Oil/.test(x.t)); p.warnAt = 0; return r; }), 'a product below its "warn me at" level becomes an action');
   await page.evaluate(() => { const i = S.inputs.findIndex(x => x.id === 'inBw'); S.inputs.splice(i, 1); save(); });
   // the Profit screen
-  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('#hProf'); await page.click('#hProf'); await page.waitForSelector('.profhead');
+  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('[data-go="profit"]'); await page.click('[data-go="profit"]'); await page.waitForSelector('.profhead');
   await page.click('[data-pp="fy"]'); await page.waitForSelector('.profhead');
   const pt = await text(page);
   ok(/This year: real profit/.test(pt) && /an hour for your/.test(pt) && /What to do next/.test(pt) && /How sure are these numbers\?/.test(pt), 'Profit: real profit, an hour of your time, what to do next, how sure');
@@ -729,7 +752,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => role() === 'owner' && !S.todos.some(t => t.id === 'practicetodo') && S.recipes.length > 0 && !document.querySelector('#practiceBar')), 'going back reloads as the owner, with the practice thrown away');
   await page.evaluate(() => { stack = ['home', 'setup']; setupOpen = true; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#viewAs'); await page.click('#vaMe'); await page.waitForSelector('#practiceBar');
-  ok(await page.evaluate(() => role() === 'owner' && SYNC.me() === 'admin@example.com' && S.recipes.length > 0 && document.querySelectorAll('.tile').length === 8 && /Owner test mode/.test(document.querySelector('#practiceBar').textContent)), 'Owner test mode: everything as normal (all tiles, recipes), with the test-mode bar');
+  ok(await page.evaluate(() => role() === 'owner' && SYNC.me() === 'admin@example.com' && S.recipes.length > 0 && document.querySelectorAll('.tile').length === 8 && /Test mode/.test(document.querySelector('#practiceBar').textContent)), 'Owner test mode: everything as normal (all tiles, recipes), with the test-mode bar');
   const salesBefore = await page.evaluate(() => Object.keys(JSON.parse(localStorage.mockdb)).filter(k => /\/products\//.test(k)).length);
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.price = 1; S.products.push({ id: 'testmodeprod', name: 'Test mode only', price: 500, colour: 'other', active: true }); save(); render(); });
   await page.waitForTimeout(150);
@@ -803,9 +826,10 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/Test Oil/.test(await text(hp)) && !/\$/.test(await hp.textContent('.stockhead')), 'helper sees stock (no money)');
   await hp.click('#bk'); await hp.waitForSelector('.tiles');
   await hp.click('[data-go="sell"]'); await hp.waitForSelector('#sGo');
-  ok(/On the calendar today/.test(await text(hp)) && /Village Market/.test(await text(hp)), 'start of day offers today\'s market from the calendar');
-  await hp.click('[data-t="farmgate"]');
-  await hp.click('[data-who="Sam"]'); await hp.click('#sGo'); await hp.waitForSelector('.ptile');
+  ok(/not ticked on any market/.test(await text(hp)) && await hp.$eval('#sGo', b => b.disabled), 'a helper not ticked on today\'s market can\'t open the till');
+  await hp.evaluate(() => { const e = S.events.find(x => x.title === 'Village Market'); e.attendees = [...e.attendees, SYNC.me()]; render(); }); await hp.waitForSelector('[data-ev0]');
+  ok(/Your markets today/.test(await text(hp)) && /Village Market/.test(await text(hp)), 'ticked on it, the helper is offered only today\'s market from the calendar');
+  await hp.click('[data-ev0]'); await hp.click('[data-who="Sam"]'); await hp.click('#sGo'); await hp.waitForSelector('.ptile');
   ok(!(await hp.$('#tLock')), 'helper on own phone: no till-mode button needed');
   await hp.locator('.ptile', { hasText: 'Test Gift Box' }).click(); await hp.waitForTimeout(50);
   await hp.screenshot({ path: path.join(shots, '09-android-till.png') });
@@ -816,7 +840,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.goBack(); await hp.waitForTimeout(350);
   ok(await hp.evaluate(() => !document.querySelector('#cart').classList.contains('open')), 'phone: the back button closes the panel first');
   await payEft(hp);
-  ok(await hp.evaluate(() => S.sales.some(s => s.by === 'helper@example.com' && s.total === 9000 && s.channel === 'farmgate')), 'helper sale saved as the helper ($90, farm gate)');
+  ok(await hp.evaluate(() => S.sales.some(s => s.by === 'helper@example.com' && s.total === 9000 && s.channel === 'market')), 'helper sale saved as the helper ($90, at today\'s market)');
   ok(!(await hp.$('#tList')) && !(await hp.$('#tEnd')), 'helper sees no sales list and cannot end the day');
   await hp.click('#bk'); ok(/Today's takings\s*—/.test(await text(hp)), 'helper sees no takings on the home screen'); await hp.click('[data-go="sell"]');
 

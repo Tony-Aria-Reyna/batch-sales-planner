@@ -66,7 +66,7 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('manager cannot change recipes', assertFails(setDoc(doc(as(MANAGER), 'businesses/b1/recipes/r2'), { product: 'p1' })));
   await t('a manager cannot switch on "managers see recipes" themselves', assertFails(updateDoc(doc(as(MANAGER), 'businesses/b1'), { settings: { mgrCosts: true } })));
   await t('an owner can switch it on', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { settings: { mgrCosts: true } })));
-  await t('then a manager can read recipes', assertSucceeds(getDoc(doc(as(MANAGER), 'businesses/b1/recipes/r1'))));
+  await t('even then a manager cannot read recipes (owners only, always)', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/recipes/r1'))));
   await t('but still cannot change them', assertFails(setDoc(doc(as(MANAGER), 'businesses/b1/recipes/r1'), { product: 'p2' })));
   await t('a helper still cannot read recipes', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/recipes/r1'))));
   await t('an owner switches it off again', assertSucceeds(updateDoc(doc(as(OWNER), 'businesses/b1'), { settings: { mgrCosts: false } })));

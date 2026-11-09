@@ -15,7 +15,7 @@ const OWNER_ONLY = ['recipes', 'pay', 'clock'];                                 
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans', 'stockmoves', 'shopping', 'todos', 'voicenotes'];
 const MINE_ONLY = { todos: 'who', voicenotes: 'by' };                       // a helper sees only their own of these
 // managers see recipes (and costs worked out from them) only when an owner switches that on; pay stays owners-only
-export const readableCols = (role, mgrCosts) => role === 'helper' ? HELPER_COLS.slice() : role === 'manager' ? COLS.filter(c => !OWNER_ONLY.includes(c) || (mgrCosts && c === 'recipes')) : COLS.slice();
+export const readableCols = (role, mgrCosts) => role === 'helper' ? HELPER_COLS.slice() : role === 'manager' ? COLS.filter(c => !OWNER_ONLY.includes(c)) : COLS.slice();
 // sales and sessions grow forever: phase 3 will listen to recent ones only. Until then, listen to all.
 
 let app, auth, db, bid = null, unsub = [], S = null, onChange = () => {}, synced = null, user = null;

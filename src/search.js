@@ -54,7 +54,7 @@ function searchAll(q){
     S.inputs.forEach(i=>add('Ingredients and packaging',i.name,i.cat==='packaging'?'Packaging':'Ingredient',i.name+' '+(i.supplier||''),()=>{ recTab='inputs'; go('recipes'); setTimeout(()=>editInput(i),60); }));
     S.ideas.forEach(x=>add('Ideas',x.text||'Idea','',x.text,()=>{ listTab='ideas'; go('lists'); }));
   }
-  if(seesCosts()&&!locked) S.recipes.forEach(r=>add('Recipes',r.name,'Makes '+fmtQty(r.yield,r.unit),r.name,()=>{ recTab='recipes'; go('recipes'); setTimeout(()=>editRecipe(r),60); }));
+  if(role()==='owner'&&recipesOpen()&&!locked) S.recipes.forEach(r=>add('Recipes',r.name,'Makes '+fmtQty(r.yield,r.unit),r.name,()=>{ recTab='recipes'; go('recipes'); setTimeout(()=>editRecipe(r),60); }));
   // to-dos: owners and managers see everyone's; a helper's device only ever holds their own
   S.todos.filter(t=>!t.done).forEach(t=>add('To-dos',t.text,t.due?nzDate(kd(t.due),{day:'numeric',month:'short'}):'',t.text,()=>{ listTab='todo'; go('lists'); setTimeout(()=>{ if(t.setup&&typeof finishSetup==='function') finishSetup(t.setup); else openTodo(t); },60); }));
   S.shopping.filter(x=>!x.done).forEach(x=>add('Shopping list',x.item,x.size||'',x.item,()=>{ listTab='shop'; go('lists'); }));

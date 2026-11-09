@@ -114,3 +114,40 @@ function wireHelperHours(){
   document.querySelectorAll('[data-hh]').forEach(b=>b.onclick=()=>{ const [sid,name]=b.dataset.hh.split('|'), x=helperShifts(28).find(y=>y.session.id===sid&&y.name===name); if(!x) return;
     editClock(x.rec||{kind:'helper',who:x.name,code:'market',session:sid,date:x.session.date,mins:x.est,label:(x.session.name||'Selling day')+' · '+nzDate(kd(x.session.date),{weekday:'long',day:'numeric',month:'long'})}); });
 }
+
+/* ---------- the clock on the home screen and on every screen (round 4) ----------
+   A tile beside Sell, and a small chip top right of every screen while it runs, each showing the job's icon
+   and the time. Tapping either opens one window: the jobs as big buttons and Stop. Changing job or stopping
+   asks first. */
+const CLOCK_IC={brewing:'🫙',orders:'📦',admin:'🗂️',buying:'🛒'};
+const clockName=k=>(CLOCK_CODES[k]||k).replace(/^\S+ /,'');
+const hm2=n=>{ n=Math.max(0,n); return Math.floor(n/60)+':'+String(n%60).padStart(2,'0'); };
+function clockTile(){
+  const r=clockRunning();
+  return r?`<button class="tile clock running" data-go="clock"><span class="ic">${CLOCK_IC[r.code]||'⏱️'}</span><span><h2>${esc(clockName(r.code))}</h2><p><span class="tick" data-clocktick="${r.id}">⏱️ ${hm2(clockMins(r))}</span> · tap to change or stop</p></span></button>`
+    :`<button class="tile clock" data-go="clock"><span class="ic">⏱️</span><span><h2>Time clock</h2><p>Tap to start: brewing, orders, admin, buying</p></span></button>`;
+}
+function clockChip(){ const r=role()==='owner'&&!tillLock()?clockRunning():null; return r?`<button class="clockchip" id="clkChip" aria-label="Time clock: ${esc(clockName(r.code))}">${CLOCK_IC[r.code]||'⏱️'} <span data-clocktick="${r.id}">${hm2(clockMins(r))}</span></button>`:''; }
+setInterval(()=>{ document.querySelectorAll('[data-clocktick]').forEach(el=>{ const c=clockList().find(x=>x.id===el.dataset.clocktick); if(c&&!c.end) el.textContent=(el.classList.contains('tick')?'⏱️ ':'')+hm2(clockMins(c)); }); },20e3);
+// the one window: the jobs, and Stop
+function clockSheet(){
+  if(role()!=='owner') return;
+  modal((m,close)=>{
+    const r=clockRunning();
+    m.innerHTML=`<h2>⏱️ ${r?'You\'re on '+esc(clockName(r.code))+' · '+hm2(clockMins(r)):'What are you working on?'}</h2>
+      <p class="note">${r?'Tap another job to switch, or Stop.':'Tap a job to start the clock.'} Markets aren't clocked: they come from the calendar.</p>
+      <div class="clockjobs">${Object.keys(CLOCK_CODES).map(k=>`<button class="btn ${r&&r.code===k?'':'alt'}" data-cj="${k}"><span class="big">${CLOCK_IC[k]}</span>${esc(clockName(k))}${r&&r.code===k?'<small>running · '+hm2(clockMins(r))+'</small>':''}</button>`).join('')}</div>
+      ${r?'<button class="btn danger bigbtn" id="cjStop" style="width:100%">⏹ Stop the clock</button>':''}
+      <div class="mact"><button class="btn alt" id="cjHours">See my hours</button><button class="btn alt" id="cjX">Close</button></div>`;
+    m.querySelector('#cjX').onclick=close;
+    m.querySelector('#cjHours').onclick=()=>{ close(); go('clock'); };
+    m.querySelectorAll('[data-cj]').forEach(b=>b.onclick=()=>{ const k=b.dataset.cj, now=clockRunning();
+      if(now&&now.code===k){ close(); return; }
+      if(now) confirmBox('Switch to '+clockName(k)+'?','Stops '+esc(clockName(now.code))+' at '+hmTxt(clockMins(now))+' and starts '+esc(clockName(k))+'.','Switch',()=>{ clockStart(k); close(); render(); });
+      else { clockStart(k); close(); render(); } });
+    const st=m.querySelector('#cjStop'); if(st) st.onclick=()=>{ const now=clockRunning(); if(!now) return;
+      confirmBox('Stop the clock?',esc(clockName(now.code))+': '+hmTxt(clockMins(now))+'.','Stop',()=>{ clockStop(now); close(); render(); }); };
+  });
+}
+// over 10 hours: the home screen asks
+function clockLongBanner(){ const b=clockBanner(); return b&&/still working/i.test(b)?b:''; }

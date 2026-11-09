@@ -46,20 +46,28 @@ SCREENS.sell={
 };
 
 /* ---------- start a selling day ---------- */
-let startType=lsGet('rs.lastType','market'), startEvent=null;
+let startType=lsGet('rs.lastType','market'), startEvent=null, startPlace=null;
+const START_GROUP={market:'markets',farmgate:'farmshop',tour:'tours',shop:'shops'};
+// a helper may open only today's markets they're ticked on in the calendar
+const myMarketsToday=()=>todaysMarkets().filter(e=>canManage()||(e.attendees||[]).includes(SYNC.me()));
 // markets on the calendar for today, offered first so the name, place and float fill themselves in
 const todaysMarkets=()=>(typeof eventsOn==='function'?eventsOn(nzDay()):[]).filter(e=>e.type==='market');
 function startHtml(){
-  const tm=todaysMarkets();
-  const past=[...new Set(S.sessions.filter(s=>s.type===startType&&s.name).sort((a,b)=>b.openedAt-a.openedAt).map(s=>s.name))].slice(0,6);
+  const tm=myMarketsToday();
+  if(!canManage()) return `<div class="card"><h3>📅 Your markets today</h3>${tm.length?`<div class="pastnames">${tm.map(e=>`<button class="chip big ${startEvent===e.id?'on':''}" data-ev0="${e.id}">🧺 ${esc(e.title)}${e.time?' · '+esc(t12(e.time)):''}</button>`).join('')}</div>`:'<p>You\'re not ticked on any market on today\'s calendar.</p><p class="note">Ask an owner or manager to open the till for you, or to tick you on today\'s market in the calendar.</p>'}
+      <input type="hidden" id="sName" value=""><label class="note" for="sFloat">Cash float in the tin (optional)</label><input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):''}"></div>
+    <div class="card"><h3>Who is serving?</h3><div class="pastnames">${(S.settings.staff||[]).map(n=>`<button class="chip big ${servedBy()===n?'on':''}" data-who="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip big" id="sWhoAdd">＋ Someone new</button></div></div>
+    <button class="btn bigbtn" id="sGo" ${tm.length&&activeProducts().length?'':'disabled'}>Start selling</button>`;
+  const saved=S.places.filter(p=>!p.gone&&p.group===START_GROUP[startType]).sort((a,b)=>a.name.localeCompare(b.name));
   const staff=S.settings.staff||[];
   return (tm.length?`<div class="card"><h3>📅 On the calendar today</h3><div class="pastnames">${tm.map(e=>`<button class="chip big ${startEvent===e.id?'on':''}" data-ev0="${e.id}">🧺 ${esc(e.title)}${e.time?' · '+esc(t12(e.time)):''}</button>`).join('')}</div></div>`:'')+`<div class="card"><h3>Where are you selling today?</h3>
       <div class="bigseg">${Object.entries(DAY_TYPES).map(([k,v])=>`<button data-t="${k}" class="${startType===k?'on':''}">${v}</button>`).join('')}</div>
       <label class="note" for="sName">${startType==='market'?'Which market?':'Name (optional)'}</label>
-      <input class="txt" id="sName" list="sPast" autocomplete="off" placeholder="${startType==='market'?'e.g. Titirangi Village Market':''}">
-      ${past.length?`<div class="pastnames">${past.map(n=>`<button class="chip" data-n="${esc(n)}">${esc(n)}</button>`).join('')}</div>`:''}
+      <input class="txt" id="sName" list="sPast" autocomplete="off" value="${esc((S.places.find(p=>p.id===startPlace)||{}).name||'')}" placeholder="${startType==='market'?'e.g. Titirangi Village Market':''}">
+      ${saved.length?`<p class="note" style="margin:8px 0 0">Saved ${startType==='market'?'markets':'places'}:</p><div class="pastnames">${saved.map(p=>`<button class="chip big ${startPlace===p.id?'on':''}" data-pl="${p.id}">${esc(p.name)}</button>`).join('')}</div>`:''}
+      <p class="note">${saved.length?'Not there? Type the name: you\'ll be asked for its details first.':'Type the name: you\'ll be asked for its details (address, float, stall fee) first.'}</p>
       <label class="note" for="sFloat">Cash float in the tin (optional)</label>
-      <input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):''}"></div>
+      <input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${(()=>{ const pl=S.places.find(p=>p.id===startPlace), f=pl&&pl.float?pl.float:S.settings.defaultFloat; return f?(f/100).toFixed(2):''; })()}"></div>
     <div class="card"><h3>Who is serving?</h3><p class="note">Each sale records who served.</p>
       <div class="pastnames">${staff.map(n=>`<button class="chip big ${servedBy()===n?'on':''}" data-who="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip big" id="sWhoAdd">＋ Someone new</button></div></div>
     ${activeProducts().length?'':`<div class="card" style="border-color:var(--rata)"><b>No products yet.</b><p class="note">${canManage()?'Add them first in Setup → Products and prices.':'Ask the owner to add the products first.'}</p></div>`}
@@ -67,20 +75,31 @@ function startHtml(){
 }
 function wireStart(){
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ startType=b.dataset.t; lsSet('rs.lastType',startType); render(); });
-  document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{ $('#sName').value=b.dataset.n; startEvent=null; });
+  document.querySelectorAll('[data-pl]').forEach(b=>b.onclick=()=>{ const p=S.places.find(x=>x.id===b.dataset.pl); if(!p) return; startPlace=p.id; startEvent=null;
+    $('#sName').value=p.name; if(p.float) $('#sFloat').value=(p.float/100).toFixed(2); document.querySelectorAll('[data-pl]').forEach(x=>x.classList.toggle('on',x===b)); });
+  const sn=$('#sName'); if(sn&&sn.type!=='hidden') sn.oninput=()=>{ startPlace=null; startEvent=null; document.querySelectorAll('[data-pl]').forEach(x=>x.classList.remove('on')); };
   document.querySelectorAll('[data-ev0]').forEach(b=>b.onclick=()=>{ const e=S.events.find(x=>x.id===b.dataset.ev0); if(!e) return;
-    startEvent=e.id; startType='market'; lsSet('rs.lastType','market'); render();
+    startEvent=e.id; startPlace=e.place||null; startType='market'; lsSet('rs.lastType','market'); render();
     $('#sName').value=e.title; const pl=S.places.find(p=>p.id===e.place); if(pl&&pl.float) $('#sFloat').value=(pl.float/100).toFixed(2); });
   document.querySelectorAll('[data-who]').forEach(b=>b.onclick=()=>{ lsSet('rs.servedBy',b.dataset.who); document.querySelectorAll('[data-who]').forEach(x=>x.classList.toggle('on',x===b)); });
   $('#sWhoAdd').onclick=()=>askName(n=>{ lsSet('rs.servedBy',n); if(canManage()&&!(S.settings.staff||[]).includes(n)){ S.settings.staff=[...(S.settings.staff||[]),n]; save(); } render(); });
   $('#sGo').onclick=()=>{
     if(!servedBy()){ toast('Tap who is serving first'); return; }
     const fl=$('#sFloat').value.trim(), fc=fl?toCents(fl):0; if(fl&&!(fc>=0)){ toast('The float should be a number, e.g. 100'); return; }
-    const name=$('#sName').value.trim(); if(startType==='market'&&!name){ toast('Type which market'); return; }
-    const ev=startEvent&&S.events.find(x=>x.id===startEvent&&x.title===name);
-    S.sessions.push(Object.assign({id:SYNC.newId('sessions'),type:startType,name,date:nzDay(),openedAt:Date.now(),openedBy:SYNC.me(),float:fc||0,status:'open'},ev?{eventId:ev.id,placeId:ev.place||''}:{}));
-    startEvent=null;
-    cart=[]; saveCart(); save(); render();
+    const name=$('#sName').value.trim(); if(!canManage()&&!startEvent){ toast('Tap your market first'); return; }
+    if(startType==='market'&&!name){ toast('Tap or type which market'); return; }
+    const ev=startEvent&&S.events.find(x=>x.id===startEvent);
+    let pl=startPlace&&S.places.find(p=>p.id===startPlace)||(name&&S.places.find(p=>!p.gone&&p.name.toLowerCase()===name.toLowerCase()));
+    // a new market or place: its details first, so nothing is half set up
+    if(!pl&&name&&canManage()&&START_GROUP[startType]&&startType!=='tour'){ const g=placeGroups().find(x=>x.id===START_GROUP[startType]);
+      editPlace({name,group:g?g.id:'markets',channel:g?g.channel:'retail',float:fc||0},p=>{ startPlace=p.id; render(); toast('Saved. Tap Start selling.'); }); return; }
+    const open=evx=>{ S.sessions.push(Object.assign({id:SYNC.newId('sessions'),type:startType,name:name||(evx&&evx.title)||'',date:nzDay(),openedAt:Date.now(),openedBy:SYNC.me(),float:fc||0,status:'open'},evx?{eventId:evx.id,placeId:evx.place||''}:pl?{placeId:pl.id}:{}));
+      startEvent=null; startPlace=null; cart=[]; saveCart(); save(); render(); };
+    // a market that isn't on today's calendar: offer to add it, so the day is planned and costed
+    if(startType==='market'&&!ev&&pl&&canManage()){ confirmBox('Add '+esc(pl.name)+' to today\'s calendar?','So its hours, drive and stall fee count in Real profit.','Add and start',()=>{
+        const now=new Date(), hh=String(now.getHours()).padStart(2,'0')+':00', e={id:SYNC.newId('events'),type:'market',title:pl.name,place:pl.id,date:nzDay(),time:hh,end:'',days:1,rpt:'',until:'',attendees:[SYNC.me()],remind:[],note:'',by:SYNC.me(),changed:Date.now()};
+        S.events.push(e); open(e); }); return; }
+    open(ev);
   };
 }
 function askName(done){
@@ -98,7 +117,7 @@ function cartLinesHtml(pc,big){
   return pc.lines.map(l=>`<div class="cl"><div class="grow"><b>${esc(l.name)}</b><small>${esc(l.size)}${l.size?' · ':''}${c2(l.unit)} each${l.custom?' · not on the till':''}</small></div>
       <button class="qb" data-dec="${l.pid}" aria-label="One less">−</button><b class="qn">${l.qty}</b><button class="qb" data-inc="${l.pid}" aria-label="One more">＋</button><b class="la">${c2(l.amount)}</b>${big?`<button class="qb rm" data-rm="${l.pid}" aria-label="Remove">✕</button>`:''}</div>`).join('')
     +pc.deals.map(d=>`<div class="cl deal"><div class="grow"><b>🎁 ${esc(d.name)}${d.times>1?' ×'+d.times:''}</b></div><b class="la">−${c2(d.saving)}</b></div>`).join('')
-    +(pc.manual?`<div class="cl deal"><div class="grow"><b>🏷️ Discount ${pc.manual.kind==='pct'?pc.manual.value+'%':c2(pc.manual.value)}</b><small>${esc(pc.manual.reason)} · approved by ${esc(personName(pc.manual.approvedBy))}</small></div><button class="qb" data-discx="1" aria-label="Remove discount">✕</button><b class="la">−${c2(pc.manual.amount)}</b></div>`:'');
+    +(pc.manual?`<div class="cl deal"><div class="grow"><b>🏷️ Discount ${pc.manual.kind==='pct'?pc.manual.value+'%':c2(pc.manual.value)}${pc.manual.pid?' on '+esc((pc.lines.find(l=>l.pid===pc.manual.pid)||{}).name||'one item'):''}</b><small>${esc(pc.manual.reason)} · approved by ${esc(personName(pc.manual.approvedBy))}</small></div><button class="qb" data-discx="1" aria-label="Remove discount">✕</button><b class="la">−${c2(pc.manual.amount)}</b></div>`:'');
 }
 // the sale panel slides on phones and iPad portrait: closed shows the total and payment buttons,
 // open shows every item. It follows the finger and settles open or closed.
@@ -137,7 +156,7 @@ function tillHtml(){
     <aside class="cart ${sheetOpen?'open':''}" id="cart">
       <div class="grab" id="cGrab"><i></i><span>${pc.lines.length?(sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'):'Tap a product to start'}</span></div>
       <div class="ctot"><span>${cartCount()} item${cartCount()===1?'':'s'}${pc.lines.length?` · <button class="linkb" id="cClear">Clear</button>${pc.manual?'':` · <button class="linkb" id="cDisc" style="color:var(--green)">🏷️ Discount 🔒</button>`}`:''}</span><span class="tot"><b id="cTotal">${c2(pc.total)}</b>${gstLine(pc.total)}</span></div>
-      <div class="pay">${['cash','eftpos','other'].map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
+      <div class="pay">${pc.total===0&&pc.lines.length&&pc.manual?`<button class="pb gift" id="giveAway" style="grid-column:1/-1">🎁 Give away · record it</button>`:['cash','eftpos','other'].map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
       ${correcting?`<div class="corr">✏️ Correcting the ${c2(correcting.total)} sale from ${nzTime(correcting.at)}. When you take payment, the old sale is voided and replaced. <button class="linkb" id="cCorrX">Cancel correction</button></div>`:''}
       <div class="clines">${cartLinesHtml(pc)}</div>
     </aside></div>`;
@@ -151,6 +170,8 @@ function wireTill(){
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ tillFilter=b.dataset.f; lsSet('rs.filter',tillFilter); render(); });
   const cl=$('#cClear'); if(cl) cl.onclick=()=>confirmBox('Clear this sale?','The items are taken off. Nothing has been charged.','Clear',()=>{ const c=correcting; cart=[]; cartDisc=null; saveCart(); render(); if(c) toast('Correction still open: add the right items, or cancel the correction'); });
   const cd=$('#cDisc'); if(cd) cd.onclick=giveDiscount;
+  const ga=$('#giveAway'); if(ga) ga.onclick=()=>{ const pc=priceCart(cart,cartDisc);
+    confirmBox('Give these away?',esc(pc.lines.map(l=>l.qty+' × '+l.name).join(', '))+' at no charge, approved by '+esc(personName(pc.manual.approvedBy))+'. It\'s recorded as a gift, and the stock comes off.','Give away',()=>{ recordSale('gift',pc); toast('🎁 Recorded as a gift'); }); };
   document.querySelectorAll('[data-discx]').forEach(b=>b.onclick=()=>{ cartDisc=null; saveCart(); render(); });
   wireSheet();
   const cc=$('#cCorrX'); if(cc) cc.onclick=()=>confirmBox('Cancel the correction?','The original sale stays as it was.','Cancel correction',()=>{ clearCart(); render(); });
@@ -178,27 +199,54 @@ function handToHelper(){
     toast('Till mode on for '+n+'. Prices are locked; a PIN unlocks it.'); });
 }
 
-/* ---------- a discount on this sale (needs a PIN) ---------- */
+/* ---------- a discount (needs a PIN): on the whole sale, or on one item ----------
+   After the PIN, the person approving sees what it costs to make, the margin before and after, and a red
+   flag if it's below cost, with one tap for break even or the lowest margin (Setup, default 20%). The
+   helper never sees those figures: the approver does this on their own screen, or the iPad in their hands. */
+const minMargin=()=>{ const v=+S.settings.minMargin; return v>=0&&v<95?v:20; };
 function giveDiscount(){
-  const base=priceCart(cart,null).total; if(base<=0) return;
-  modal((m,close)=>{ let kind='pct', value=10;
-    const draw=()=>{ const amt=kind==='pct'?Math.round(base*value/100):Math.min(value,base);
-      m.innerHTML=`<h2>🏷️ Discount on this sale</h2><p class="note">Sale total ${c2(base)}. An owner or manager approves it with their PIN.</p>
+  const all=priceCart(cart,null); if(all.total<=0) return;
+  modal((m,close)=>{ let kind='pct', value=10, pid='';
+    const draw=()=>{ const base=pid?all.lines.filter(l=>l.pid===pid).reduce((n,l)=>n+l.amount,0):all.total, amt=kind==='pct'?Math.round(base*value/100):Math.min(value,base);
+      m.innerHTML=`<h2>🏷️ Discount</h2><p class="note">On the whole sale, or on one item. An owner or manager approves it with their PIN.</p>
+        <div class="pastnames"><button class="chip big ${pid?'':'on'}" data-dp="">Whole sale · ${c2(all.total)}</button>${all.lines.map(l=>`<button class="chip big ${pid===l.pid?'on':''}" data-dp="${esc(l.pid)}">${esc(l.name)}${l.qty>1?' ×'+l.qty:''} · ${c2(l.amount)}</button>`).join('')}</div>
         <div class="seg"><button data-kind="pct" class="${kind==='pct'?'on':''}">% off</button><button data-kind="amt" class="${kind==='amt'?'on':''}">$ off</button></div>
-        <div class="pastnames">${(kind==='pct'?[5,10,15,20,25,50]:[200,500,1000,2000]).map(v=>`<button class="chip big ${value===v?'on':''}" data-v="${v}">${kind==='pct'?v+'%':c2(v).replace('.00','')}</button>`).join('')}</div>
+        <div class="pastnames">${(kind==='pct'?[5,10,15,20,25,50,100]:[200,500,1000,2000]).map(v=>`<button class="chip big ${value===v?'on':''}" data-v="${v}">${kind==='pct'?(v===100?'Free':v+'%'):c2(v).replace('.00','')}</button>`).join('')}</div>
         <label class="note">Or type the ${kind==='pct'?'percentage':'amount'}</label><input class="txt" id="dV" inputmode="decimal" value="${kind==='pct'?value:(value/100).toFixed(2)}">
-        <label class="note">Reason (shown in the approvals log)</label><input class="txt" id="dR" placeholder="e.g. regular customer, damaged label">
-        <p class="change ok">Takes off <b>${c2(amt)}</b> · new total <b>${c2(base-amt)}</b></p>
-        ${(()=>{ const k=cartCost(priceCart(cart,null)); return k.cost>0&&exGst(base-amt)<k.cost?`<p class="note clash">⚠️ That's below what it costs to make (${c2(Math.ceil(k.cost*1.15))} incl. GST). The sale will stop for an owner or manager to approve it.</p>`:''; })()}
+        <label class="note">Reason (shown in the approvals log)</label><input class="txt" id="dR" placeholder="e.g. regular customer, damaged label, freebie">
+        <p class="change ok">Takes off <b>${c2(amt)}</b>${pid?' from '+esc(all.lines.find(l=>l.pid===pid).name):''} · sale total <b>${c2(all.total-amt)}</b></p>
         <div class="mact"><button class="btn alt" id="dC">Cancel</button><button class="btn" id="dOk">Approve with PIN</button></div>`;
-      const keepR=m.querySelector('#dR');
-      m.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{ const r=keepR.value; kind=b.dataset.kind; value=kind==='pct'?10:500; draw(); m.querySelector('#dR').value=r; });
-      m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{ const r=keepR.value; value=+b.dataset.v; draw(); m.querySelector('#dR').value=r; });
-      m.querySelector('#dV').onchange=e=>{ const r=keepR.value, n=parseFloat(e.target.value); if(!(n>0)) return; value=kind==='pct'?Math.min(100,n):Math.round(n*100); draw(); m.querySelector('#dR').value=r; };
+      const keep=()=>m.querySelector('#dR').value, put=r=>{ m.querySelector('#dR').value=r; };
+      m.querySelectorAll('[data-dp]').forEach(b=>b.onclick=()=>{ const r=keep(); pid=b.dataset.dp; draw(); put(r); });
+      m.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{ const r=keep(); kind=b.dataset.kind; value=kind==='pct'?10:500; draw(); put(r); });
+      m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{ const r=keep(); value=+b.dataset.v; draw(); put(r); });
+      m.querySelector('#dV').onchange=e=>{ const r=keep(), n=parseFloat(e.target.value); if(!(n>0)) return; value=kind==='pct'?Math.min(100,n):Math.round(n*100); draw(); put(r); };
       m.querySelector('#dC').onclick=close;
-      m.querySelector('#dOk').onclick=()=>{ const reason=m.querySelector('#dR').value.trim(); if(!reason){ toast('Give a reason for the discount'); return; } close();
-        const label=(kind==='pct'?value+'%':c2(value))+' off '+c2(base)+' ('+reason+')';
-        approve('give a discount',who=>{ cartDisc={kind,value,reason,approvedBy:who,at:Date.now()}; saveCart(); render(); if(payRedraw) payRedraw(); toast('Discount approved by '+personName(who)); },label); };
+      m.querySelector('#dOk').onclick=()=>{ const reason=keep().trim(); if(!reason){ toast('Give a reason for the discount'); return; } close();
+        const what=pid?all.lines.find(l=>l.pid===pid).name:'the sale', label=(kind==='pct'?value+'%':c2(value))+' off '+what+' ('+reason+')';
+        approve('give a discount',who=>discountReview({kind,value,pid,reason},who),label); };
+    }; draw(); });
+}
+// the approver's window: cost, margin before and after, a flag below cost, and one-tap fixes
+function discountReview(d,who){
+  const all=priceCart(cart,null), k=cartCost(all);
+  modal((m,close)=>{ let cur=Object.assign({},d);
+    const draw=()=>{ const pc=priceCart(cart,cur), before=marginTxt(all.total,k.cost), after=marginTxt(pc.total,k.cost), below=k.cost>0&&exGst(pc.total)<k.cost;
+      const target=p=>Math.max(0,all.total-Math.ceil(k.cost*1.15/(1-p/100)/10)*10), even=Math.max(0,all.total-Math.ceil(k.cost*1.15/10)*10);
+      m.innerHTML=`<h2>🔒 Check this discount</h2><p class="note">For ${esc(personName(who))}'s eyes: the cost figures aren't shown to helpers.</p>
+        ${k.cost>0?`<div class="eod"><div><span>Costs to make (ex GST)</span><b>${c2(k.cost)}</b></div><div><span>Before: ${c2(all.total)}</span><b>${esc(before.txt.split(' · ')[1])}</b></div><div><span>After: ${c2(pc.total)}</span><b class="${below?'bad':''}">${esc(after.txt.split(' · ')[1])}</b></div></div>
+        ${below?`<p class="change bad">⚠️ Below cost: this sale loses ${c2(k.cost-exGst(pc.total))} (ex GST).</p>`:`<p class="change ok">${esc(after.txt)}</p>`}
+        <div class="pastnames"><button class="chip big" data-fix="even">Break even · ${c2(all.total-even)}</button><button class="chip big" data-fix="min">${minMargin()}% margin · ${c2(all.total-target(minMargin()))}</button><button class="chip big" data-fix="asked">As asked · ${c2(priceCart(cart,d).total)}</button></div>`
+        :`<p class="note">${k.unknown?'No cost has been worked out for '+(k.unknown===1?'this item':'these items')+' yet, so the margin can\'t be checked.':''}</p><p class="change ok">New total ${c2(pc.total)}</p>`}
+        ${k.unknown&&k.cost>0?`<p class="note">${k.unknown} item${k.unknown===1?' has':'s have'} no cost yet, so the real margin may be lower.</p>`:''}
+        <div class="mact"><button class="btn alt" id="drC">Don't give it</button><button class="btn" id="drOk">${below?'Give it anyway':'Give the discount'}</button></div>`;
+      m.querySelectorAll('[data-fix]').forEach(b=>b.onclick=()=>{ const f=b.dataset.fix;
+        if(f==='asked') cur=Object.assign({},d); else { const off=f==='even'?even:target(minMargin()); cur=Object.assign({},d,{pid:'',kind:'amt',value:Math.max(0,off)}); } draw(); });
+      m.querySelector('#drC').onclick=close;
+      m.querySelector('#drOk').onclick=()=>{ close(); if(!(priceCart(cart,cur).manual||{}).amount){ cartDisc=null; saveCart(); render(); toast('No discount needed'); return; }
+        cartDisc=Object.assign({},cur,{approvedBy:who,at:Date.now()});
+        const pc=priceCart(cart,cartDisc); if(k.cost>0&&exGst(pc.total)<k.cost){ lossOk={sig:cartSig(),by:who,at:Date.now(),cost:k.cost,total:pc.total}; logApproval('sell below cost',who,c2(pc.total)+' total, costs '+c2(k.cost)+' ex GST to make ('+(cur.reason||'')+')',true); }
+        saveCart(); render(); if(payRedraw) payRedraw(); toast('Discount approved by '+personName(who)); };
     }; draw(); });
 }
 
@@ -269,7 +317,7 @@ function cartCost(pc){ let cost=0, unknown=0;
   for(const l of pc.lines){ const p=l.custom?null:S.products.find(x=>x.id===l.pid), c=p&&typeof unitCost==='function'?unitCost(p):null;
     if(c==null) unknown+=l.qty; else cost+=c*l.qty; }
   return {cost:Math.round(cost),unknown}; }
-const cartSig=()=>JSON.stringify([cart.map(c=>[c.pid,c.qty]),cartDisc?[cartDisc.kind,cartDisc.value]:null]);
+const cartSig=()=>JSON.stringify([cart.map(c=>[c.pid,c.qty]),cartDisc?[cartDisc.kind,cartDisc.value,cartDisc.pid||'']:null]);
 const lossApproved=()=>!!(lossOk&&lossOk.sig===cartSig());
 function belowCost(pc){ const k=cartCost(pc); return k.cost>0&&exGst(pc.total)<k.cost?k:null; }
 const marginTxt=(total,cost)=>{ const ex=exGst(total), m=ex>0?Math.round((ex-cost)/ex*100):-100; return {m,txt:(ex>=cost?'Makes ':'Loses ')+c2(Math.abs(ex-cost))+' · margin '+m+'%'}; };

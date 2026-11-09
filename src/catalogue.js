@@ -259,7 +259,8 @@ function priceCart(cart,disc){
       const ex=deals.find(x=>x.id===d.id); if(ex){ ex.times++; ex.saving+=save; } else deals.push({id:d.id,name:d.name,times:1,saving:save}); }
   }
   let manual=null;
-  if(disc&&subtotal-discount>0){ const base=subtotal-discount, amt=disc.kind==='pct'?Math.round(base*disc.value/100):Math.min(disc.value,base);
+  const lineBase=disc&&disc.pid?lines.filter(l=>l.pid===disc.pid).reduce((n,l)=>n+l.amount,0):null;
+  if(disc&&subtotal-discount>0&&(lineBase==null||lineBase>0)){ const base=lineBase!=null?Math.min(lineBase,subtotal-discount):subtotal-discount, amt=disc.kind==='pct'?Math.round(base*disc.value/100):Math.min(disc.value,base);
     manual=Object.assign({},disc,{amount:amt}); discount+=amt; }
   return {lines,deals,manual,subtotal,discount,total:subtotal-discount};
 }

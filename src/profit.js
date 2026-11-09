@@ -59,8 +59,10 @@ function profitIdeas(from,to,R,H){
   if(idle.length&&S.sales.length>20) ideas.push({score:35,t:idle.length+' product'+(idle.length===1?' hasn\'t':'s haven\'t')+' sold in 2 months',d:idle.slice(0,4).map(prodName).join(', ')+(idle.length>4?'…':'')+'. Put them on special or stop making them.',lbl:'See the products',go:'setup:products',act:()=>requirePin(()=>{ go('setup'); setTimeout(()=>go('products'),30); })});
   if(H.total>0&&R.net>0&&perHour(R.net,H.total)<tgt) ideas.push({score:50,t:'Your time is worth more than '+c2(perHour(R.net,H.total))+' an hour',d:'Look at which markets and products earn the least for the time they take (below).',lbl:'See the markets',go:'profit',act:()=>{ const el=$('#pfMk'); if(el) el.scrollIntoView({behavior:'smooth'}); }});
   if(typeof stockIdeas==='function') stockIdeas().forEach(x=>ideas.push(x));
-  return ideas.sort((a,b)=>b.score-a.score);
+  return dedupeIdeas(ideas);
 }
+// one line per thing to do: the same action twice keeps the more urgent, with both reasons
+function dedupeIdeas(l){ const m=new Map(); l.sort((a,b)=>b.score-a.score).forEach(x=>{ const k=x.t.toLowerCase(); if(!m.has(k)) m.set(k,x); else { const y=m.get(k); if(y.d!==x.d) y.d=y.d+' '+x.d; } }); return [...m.values()]; }
 // the action list: top five, then "Show more ideas"
 let ideasMore=false;   // (the Lists screen has its own ideas list; these are action ideas)
 function ideasCard(ideas,title){
@@ -85,7 +87,7 @@ SCREENS.profit={
     const mk=Object.entries(R.byPlace).filter(([,p])=>p.days>0).map(([k,p])=>{ const net=p.ex-p.cogs-p.fees-p.mileage-p.staff, mins=H.byPlace[k]||0; return {p,net,mins,ph:perHour(net,mins)}; }).sort((a,b)=>(b.ph==null?-1e12:b.ph)-(a.ph==null?-1e12:a.ph)||b.net-a.net);
     const pr=Object.entries(R.byProduct).map(([pid,x])=>{ const p=S.products.find(y=>y.id===pid), u=p?unitCost(p):null, ex=Math.round(x.total/1.15); return {p,qty:x.qty,ex,prof:u==null?null:Math.round(ex-u*x.qty),m:u==null||!ex?null:1-u*x.qty/ex}; }).filter(x=>x.p).sort((a,b)=>(b.prof==null?-1e12:b.prof)-(a.prof==null?-1e12:a.prof));
     const months=[...Array(6)].map((_,i)=>{ const t=kd(nzDay()), a=new Date(t.getFullYear(),t.getMonth()-5+i,1), b=new Date(t.getFullYear(),t.getMonth()-4+i,0), r=crunch(dk(a),dk(b)>nzDay()?nzDay():dk(b),'all'); return [nzDate(a,{month:'short'}),r.net]; });
-    return `<div class="ctabs">${Object.entries(PROF_PERIODS).map(([k,t])=>`<button class="chip big ${profPeriod===k?'on':''}" data-pp="${k}">${t}</button>`).join('')}</div>
+    return `<button class="homesearch" id="pfRep">📈 <span><b>Reports</b>: takings by day, place and product, GST, costs, CSV</span> ›</button><div class="ctabs">${Object.entries(PROF_PERIODS).map(([k,t])=>`<button class="chip big ${profPeriod===k?'on':''}" data-pp="${k}">${t}</button>`).join('')}</div>
       <div class="card profhead ${v[2]}"><span>${esc(PROF_PERIODS[profPeriod])}: real profit</span><b class="${R.net<0?'neg':''}">${c2(R.net)}</b>
         <small>${H.total?`${ph!=null?c2(ph)+' an hour':''} for your ${hmTxt(H.total)} · ${v[0]} ${v[1]}`:'Your hours aren\'t recorded yet: use the time clock and the check-ins.'}</small>
         <small>From ${c2(R.ex)} sales ex GST, less ${c2(R.cogs)} stock, ${c2(R.fees)} stall fees, ${c2(R.mileage)} fuel and car, ${c2(R.staff)} helpers, ${c2(R.otherCosts)} other costs.</small></div>
@@ -104,7 +106,7 @@ SCREENS.profit={
     document.querySelectorAll('[data-pp]').forEach(b=>b.onclick=()=>{ profPeriod=b.dataset.pp; lsSet('rs.profperiod',profPeriod); ideasMore=false; render(); });
     const d=profCache; if(!d) return; wireActionIdeas(d.ideas);
     document.querySelectorAll('[data-gap]').forEach(b=>b.onclick=()=>{ const x=d.gaps[+b.dataset.gap]; if(x) x.act(); });
-    const c=$('#pfClock'); if(c) c.onclick=()=>go('clock');
+    const c=$('#pfClock'); if(c) c.onclick=()=>go('clock'); const rp=$('#pfRep'); if(rp) rp.onclick=()=>go('reports');
     const t=$('#pfTgt'); if(t) t.onclick=()=>modal((m,close)=>{ m.innerHTML=`<h2>What's "worth it"?</h2><p class="note">The profit an hour of your time that makes a market worth doing.</p>
       <label class="note" for="tgV">Dollars an hour</label><input class="txt" id="tgV" inputmode="decimal" value="${(hourTarget()/100).toFixed(2)}"><div class="mact"><button class="btn alt" id="tgC">Cancel</button><button class="btn" id="tgOk">Save</button></div>`;
       m.querySelector('#tgC').onclick=close; m.querySelector('#tgOk').onclick=()=>{ const v=toCents(m.querySelector('#tgV').value); if(!(v>0)){ toast('Type an amount, e.g. 25'); return; } S.settings.hourTarget=v; save(); close(); render(); }; });
@@ -117,10 +119,11 @@ SCREENS.profit={
    each with a link that opens the app at the right place (#go=…). */
 function homeIdeas(){
   if(tillLock()||!canManage()) return [];
-  if(role()!=='owner') return stockIdeas().sort((a,b)=>b.score-a.score);
+  if(role()!=='owner') return dedupeIdeas(stockIdeas());
   const to=nzDay(), from=dk(addDays(kd(to),-60)), R=crunch(from,to,'all'), H=ownerHours(from,to), l=profitIdeas(from,to,R,H);
   const g=profitGaps(from,to,R)[0]; if(g) l.push({score:40,t:g.t,d:g.d,lbl:g.fix,go:'profit',act:g.act});
-  return l.sort((a,b)=>b.score-a.score);
+  const n=typeof issueCount==='function'?issueCount():0; if(n){ const hi=healthIssues()[0]; l.push({score:88,t:n+' thing'+(n===1?' needs':'s need')+' attention',d:hi?hi.name+': '+hi.issues[0].t:'Missing information that makes a number wrong.',lbl:'Fix',go:'attention',act:()=>go('attention')}); }
+  return dedupeIdeas(l);
 }
 let homeIdeasList=[];
 function homeIdeasHtml(){ homeIdeasList=homeIdeas(); return homeIdeasList.length?ideasCard(homeIdeasList):''; }

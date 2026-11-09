@@ -153,8 +153,9 @@ body:has(.rcal) main{min-height:0}
 .prodrow{gap:12px}.prodrow.offtill .grow b{text-decoration:line-through;color:var(--muted)}.prodrow.offtill{opacity:.75}
 .findlist .frow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 6px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;min-height:56px;cursor:pointer}.findlist .frow.off{color:var(--muted)}.findlist .frow.off b{text-decoration:line-through}.findlist .frow small{display:block}
 .freebox{border-radius:14px;padding:12px 14px;border:2px solid}.freebox.red{background:#fbe4e1;border-color:var(--danger);color:var(--danger)}.freebox.green{background:#e3efdb;border-color:var(--ok);color:var(--ok)}
-.practicebar{position:fixed;left:0;right:0;bottom:0;z-index:60;background:#806092;color:#fff;font-weight:800;font-size:16px;padding:12px 16px calc(12px + var(--sab));text-align:center;width:100%}
-body.practicing #main{padding-bottom:80px}
+.practicebar{flex:none;background:#fff;color:#5d3f70;font-weight:800;font-size:14px;padding:8px 12px;border-radius:99px;line-height:1.2;max-width:46vw;text-align:center}
+body.practicing .top{background:#806092}
+
 .homesearch{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;margin:4px 0 14px;padding:0 18px;border-radius:16px;background:#fff;border:2px solid var(--line);font-size:19px;color:var(--muted);text-align:left}
 .vsteps{list-style:none;padding:0;margin:8px auto 10px;max-width:360px;text-align:left}.vsteps li{padding:7px 0;font-size:18px;color:var(--muted)}.vsteps li.done{color:var(--ok);font-weight:700}.vsteps li.now{color:var(--ink);font-weight:800}
 .notebanner{position:fixed;left:50%;transform:translateX(-50%);top:calc(84px + var(--sat));z-index:70;background:var(--rata);color:#fff;font-weight:800;font-size:17px;border-radius:99px;padding:14px 22px;box-shadow:0 10px 30px rgba(43,44,34,.3)}
@@ -193,6 +194,7 @@ body.practicing #main{padding-bottom:80px}
 ol.ideas{margin:0;padding:0;list-style:none;counter-reset:i}ol.ideas li{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#e5e1d2);counter-increment:i}
 ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;display:grid;place-items:center}ol.ideas .grow{flex:1;min-width:0}@media(max-width:600px){ol.ideas li{flex-wrap:wrap}ol.ideas .grow{flex-basis:calc(100% - 40px)}ol.ideas .btn{margin-left:38px}}ol.ideas small{display:block;color:var(--muted,#686a5a)}ol.ideas .btn{flex:none}
 .ordst{color:var(--lav);font-weight:700}.lowcard{border:2px solid #f0d58a}.stockrow b.low{color:#9a6a00}.arrow{border-bottom:1px solid var(--line);padding:8px 0}
+.pb.gift{background:#806092;color:#fff}
 .clockgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.clockgrid .btn{min-height:72px;font-size:17px;display:flex;flex-direction:column;align-items:center;justify-content:center}.clockgrid small{font-size:12px;font-weight:600;opacity:.85}
 .clockbar{border:2px solid var(--green2)}.clockbar.long{border-color:var(--warn);background:#fff4d6}
 .formrow.four{grid-template-columns:repeat(4,1fr);gap:6px}.formrow.four .note{font-size:.8rem}@media(max-width:420px){.formrow.four{grid-template-columns:1fr 1fr}}
@@ -213,6 +215,12 @@ ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-r
 .today div b{font-size:28px}
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
 .tiles .tile.sell{grid-column:span 2}
+.tiles.owner8 .tile.clock,.tiles.owner8 .tile.wide{grid-column:span 2}
+.tile.clock{background:#f3eef6;border-color:#d9cbe2}.tile.clock.running{background:var(--lav);color:#fff;border-color:var(--lav)}.tile.clock.running p{color:#f1e9f6}
+.tile.clock .tick{font-size:15px;font-weight:800;opacity:.9}
+.clockchip{flex:none;background:#fff;color:var(--lav);font-weight:800;font-size:15px;border-radius:99px;padding:7px 12px;white-space:nowrap}
+.clockjobs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.clockjobs .btn{min-height:84px;font-size:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.clockjobs .btn small{font-size:13px;font-weight:700;opacity:.9}.clockjobs .btn .big{font-size:30px;line-height:1}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:26px;min-height:190px;padding:22px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 2px 0 rgba(0,0,0,.04);transition:transform .08s}
 .tile:active{transform:scale(.98)}
 .tile .ic{font-size:52px;line-height:1}
@@ -400,7 +408,7 @@ ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-r
 @keyframes bob{50%{transform:translateY(-8px)}}
 
 /* ---------- iPad portrait and phones ---------- */
-@media (max-width:1000px) and (orientation:portrait),(max-width:860px){ .tiles{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:1000px) and (orientation:portrait),(max-width:860px){ .tiles{grid-template-columns:repeat(2,1fr)} .tiles.owner8 .tile.sell,.tiles.owner8 .tile.clock,.tiles.owner8 .tile.wide{grid-column:auto} }
 .tiles.one .tile.sell,.tiles.two .tile.sell{grid-column:auto}
 .tiles.two{grid-template-columns:1fr 1fr}
 @media (max-width:640px){
@@ -459,7 +467,7 @@ function startPractice(email,r,label){
   if(typeof loadCart==='function') loadCart(); stack=['home']; render(); toast('Viewing as '+label+'. Nothing is saved.');
 }
 function endPractice(){ location.reload(); }
-function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">${practice.role==='owner'&&practice.email===SYNC.me()?'🧪 Owner test mode':'👁 Viewing as '+esc(practice.label)} · nothing is saved · <u>Tap to go back</u></button>`:''; }
+function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">${practice.role==='owner'&&practice.email===SYNC.me()?'🧪 Test mode':'👁 As '+esc(practice.label)} · nothing saved<br><u>Go back</u></button>`:''; }
 function viewAsPicker(){
   modal((m,close)=>{ const others=SYNC.getMembers().filter(e=>e!==SYNC.me());
     m.innerHTML=`<h2>👁 View as</h2><p class="note">See the app exactly as they would: only what they can see and do. Practice freely: nothing you do is saved, and it's all thrown away when you go back.</p>
@@ -510,16 +518,16 @@ function render(){
   const t=sc.title?sc.title():{h:S.name||'Rata & Smudge',s:nzDate(new Date())}, lock=!!tillLock();
   document.body.classList.toggle('tillmode',lock);
   if(cur()!=='sell') keepAwake(false);
+  if(cur()!=='recipes'&&!(cur()==='brew'&&brewTab==='plan')) recipesUntil=0;   // leaving the recipes locks them again
   $('#top').innerHTML=`${cur()!=='home'&&!lock?'<button class="back" id="bk" aria-label="Back"><b>‹</b> Back</button>':''}
     <div class="title"><h1>${esc(t.h)}</h1>${t.s?`<small>${esc(t.s)}</small>`:''}</div>
-    <span class="syncpill" id="syncPill"></span>
+    ${practiceBar()}${typeof clockChip==='function'?clockChip():''}<span class="syncpill" id="syncPill"></span>
     ${cur()==='home'&&canManage()?'<button class="cog" id="cog" aria-label="Setup">⚙️</button>':''}${lock?'<button class="tlock" id="tlk">🔒 Till mode</button>':''}`;
   const tl=$('#tlk'); if(tl) tl.onclick=()=>toast('Locked to selling. Use "Leave till mode" and the PIN to unlock.');
-  const bk=$('#bk'); if(bk) bk.onclick=back;
+  const bk=$('#bk'); if(bk) bk.onclick=back; const ck=$('#clkChip'); if(ck) ck.onclick=clockSheet;
   const cg=$('#cog'); if(cg) cg.onclick=()=>requirePin(()=>go('setup'));
   drawSync();
-  let pb=$('#practiceWrap'); if(practice&&!pb){ pb=document.createElement('div'); pb.id='practiceWrap'; document.body.appendChild(pb); }
-  if(pb){ pb.innerHTML=practiceBar(); const b=$('#practiceBar'); if(b) b.onclick=()=>confirmBox('Go back to your own view?','Everything done while viewing as '+esc(practice.label)+' is thrown away.','Go back',endPractice); }
+  { const b=$('#practiceBar'); if(b) b.onclick=()=>confirmBox('Go back to your own view?','Everything done while viewing as '+esc(practice.label)+' is thrown away.','Go back',endPractice); }
   document.body.classList.toggle('practicing',!!practice);
   $('#main').innerHTML=sc.html();
   sc.wire&&sc.wire();
@@ -538,12 +546,12 @@ addEventListener('online',drawSync); addEventListener('offline',drawSync);
 /* ================= home ================= */
 const TILES=[
   {id:'sell', ic:'🧺', h:'Sell', p:'Market, farm gate, tour or shop', all:true},
+  {id:'clock', ic:'⏱️', h:'Time clock', p:'Tap to start', owner:true},
   {id:'calendar', ic:'📅', h:'Calendar', p:'Markets, brew days, orders, to-dos', all:true},
   {id:'brew', ic:'🫙', h:'Brew', p:'What to make, batches and stock', all:true},
   {id:'orders', ic:'📦', h:'Orders', p:'Wholesale, custom and Shopify'},
   {id:'lists', ic:'✅', h:'Lists', p:'To do, shopping and ideas', all:true},
-  {id:'recipes', ic:'🧪', h:'Products & recipes', p:'Recipes, ingredients, costs', costs:true},
-  {id:'reports', ic:'📈', h:'Reports', p:'Takings, profit and GST', owner:true},
+  {id:'profit', ic:'💰', h:'Real profit', p:'What you make, and reports', owner:true},
   {id:'setup', ic:'⚙️', h:'Setup', p:'Products, prices, people, PIN', lock:true},
 ];
 SCREENS.home={
@@ -551,7 +559,7 @@ SCREENS.home={
     const tiles=TILES.filter(t=>t.all||(t.costs?seesCosts()&&!tillLock():t.owner?role()==='owner':canManage())), d=openDay();
     const taken=S.sales.filter(x=>!x.voided&&x.date===nzDay()).reduce((n,x)=>n+x.total,0);
     const pinNag=canManage()&&!tillLock()&&!myPin()&&!missingCols.has('pins')?`<div class="card" style="border:2px solid var(--green2)"><b>🔒 Set your own PIN</b><p class="note">${esc(SYNC.me())} hasn't got a PIN yet. You'll need it to approve discounts, see sales and end the day.</p><button class="btn" id="nagPin">Choose my PIN</button></div>`:'';
-    return rulesNotice()+pinNag+(typeof attentionCard==='function'?attentionCard():'')+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
+    return rulesNotice()+pinNag+(role()==='owner'?clockLongBanner():'')+`<div class="brand"><img src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.parentNode.remove()"></div>
       <section class="today" aria-label="Today">
         <div><span>Today's takings</span>${canManage()&&!tillLock()?(Date.now()<moneyUntil?`<b>${c2(taken)}</b>`:`<b><button class="linkb" id="showMoney" style="font-size:22px;color:var(--green)">🔒 Show</button></b>`):'<b>—</b>'}</div>
         <div><span>Selling day</span><b>${d?esc((DAY_TYPES[d.type]||'').replace(/^\S+ /,'')):'None open'}</b></div>
@@ -560,20 +568,20 @@ SCREENS.home={
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar three"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hType" aria-label="Type a note or question">⌨️<small class="vlbl">Type</small></button><button class="vdrive" id="hPhoto" aria-label="Photo">📷<small class="vlbl">Photo</small></button><button class="vdrive" id="hDrive">🚗<small class="vlbl">Drive</small></button></section>`:''}
       ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
-      ${role()==='owner'&&!tillLock()?(clockBanner()||'<button class="homesearch" id="hClock">⏱️ <span>Time clock: brewing, orders, admin, buying</span></button>')+'<button class="homesearch profbtn" id="hProf">💰 <span><b>Real profit</b> and what to do next</span></button>':''}
-      ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything…</span></button>'}
-      <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
-        <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
+      <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''} ${tiles.some(t=>t.id==='clock')?'owner8':''}">${tiles.map(t=>{ if(t.id==='clock') return clockTile();
+        return `<button class="tile ${t.id==='sell'?'sell':''} ${t.id==='profit'||t.id==='setup'?'wide':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
+        <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`; }).join('')}</section>
       ${homeIdeasHtml()}
+      ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything… or ask “how do I…?”</span></button>'}
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
-  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); const hc=$('#hClock'); if(hc) hc.onclick=()=>go('clock'); const hpf=$('#hProf'); if(hpf) hpf.onclick=()=>go('profit'); wireHomeIdeas();
+  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); wireHomeIdeas(); syncProductCosts();
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
     const hp=$('#hPush'); if(hp) hp.onclick=()=>go('notify'); const hN=$('#hNotify'); if(hN) hN.onclick=()=>go('notify'); const hn=$('#hPushNo'); if(hn) hn.onclick=()=>{ lsSet('rs.pushNo','1'); render(); };
     const sm=$('#showMoney'); if(sm) sm.onclick=()=>approve('see the takings',()=>{ moneyUntil=Date.now()+60e3; render(); setTimeout(render,60.5e3); });
-    document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else go(id); }); }
+    document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{ const id=b.dataset.go; if(id==='setup') requirePin(()=>go('setup')); else if(id==='clock') clockSheet(); else go(id); }); }
 };
 
 /* ---------- screens still to build: say what they will do ---------- */
@@ -615,6 +623,7 @@ SCREENS.setup={
       <div class="row"><div class="grow"><b>Products, recipes and ingredients</b><small>${S.inputs.length} ingredients and packaging${seesCosts()?' · '+S.recipes.length+' recipes':''} · costs and margins · import from the workbook</small></div><button class="btn small" id="goRecipes">Open</button></div>
       <div class="row"><div class="grow"><b>Markets and places</b><small>${S.places.filter(p=>!p.gone).length} · markets, Farm Shop, online, shops · fees and distances</small></div><button class="btn small" id="goPlaces">Open</button></div>
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
+      <div class="row"><div class="grow"><b>Lowest margin on a discount</b><small>The one-tap "margin" button when approving a discount</small></div><input class="txt" id="minMarg" inputmode="numeric" style="width:90px;min-height:48px" value="${minMargin()}"><span style="margin-left:6px">%</span></div>
       <div class="row"><div class="grow"><b>Usual cash float</b><small>Filled in for you when a selling day starts</small></div><input class="txt" id="defFloat" inputmode="decimal" style="width:130px;min-height:48px" value="${st.defaultFloat?(st.defaultFloat/100).toFixed(2):''}" placeholder="200.00"></div>
       <div class="row"><div class="grow"><b>Helpers' names</b><small>${esc((st.staff||[]).join(', ')||'None yet')} · for "who served"</small></div><button class="btn alt small" id="goStaff">Change</button></div>
       <p class="note">Recipes, ingredients and the import from your Excel workbook come with the Brew screen.</p></div>
@@ -660,7 +669,7 @@ SCREENS.setup={
       ${mem.map(e=>{ const r=SYNC.roleOf(e), main=e===SYNC.getMainOwner(); return `<div class="row"><div class="grow"><b>${esc(e)}</b>${e===SYNC.me()?'<small>This is you</small>':''}</div>
         <span class="chip ${r}">${main?'Main owner':r==='owner'?'Co-owner':ROLE_TXT[r]}</span>${own&&!main?`<button class="btn alt small" data-role="${esc(e)}">Change</button>`:''}</div>`; }).join('')}
       <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button>${own&&!practice?'<button class="btn alt" id="viewAs">👁 View as…</button>':''}</div>
-      ${own?`<div class="row"><div class="grow"><b>Managers can see recipes and costs</b><small>${st.mgrCosts?'On: managers see recipes, costs and margins, and can plan brews. Only owners change recipes.':'Off: recipes and costs are for owners only'}</small></div><button class="switch ${st.mgrCosts?'on':''}" id="mgrCosts" role="switch" aria-checked="${!!st.mgrCosts}" aria-label="Managers can see recipes and costs"><i></i></button></div>`:''}</div>
+      ${own?`<div class="row"><div class="grow"><b>Managers can see costs and margins</b><small>${st.mgrCosts?'On: managers see what each product costs to make and its margin. Recipes stay owners-only.':'Off: costs are for owners only. Recipes are always owners-only.'}</small></div><button class="switch ${st.mgrCosts?'on':''}" id="mgrCosts" role="switch" aria-checked="${!!st.mgrCosts}" aria-label="Managers can see costs and margins"><i></i></button></div>`:''}</div>
 
     <div class="card"><h3>🔒 PINs and approvals</h3>
       <p class="note">Each owner and manager has their <b>own</b> 4-digit PIN. A PIN is needed to open Setup, see sales, give a discount, add an item that isn't on the till, correct or void a sale, end the day and leave till mode. Every approval is logged with who approved it and when. Helpers never see the PINs.</p>
@@ -687,6 +696,7 @@ SCREENS.setup={
     $('#addPerson').onclick=addPerson;
     const va=$('#viewAs'); if(va) va.onclick=viewAsPicker;
     const mc=$('#mgrCosts'); if(mc) mc.onclick=()=>{ S.settings.mgrCosts=!S.settings.mgrCosts; save(); render(); toast(S.settings.mgrCosts?'Managers can now see recipes and costs (from their next app open)':'Recipes and costs are owners-only again'); };
+    const mm=$('#minMarg'); if(mm) mm.onchange=()=>{ const v=Math.round(+mm.value); if(!(v>=0&&v<95)){ toast('Type a percentage, e.g. 20'); mm.value=minMargin(); return; } S.settings.minMargin=v; save(); toast('Saved'); };
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };

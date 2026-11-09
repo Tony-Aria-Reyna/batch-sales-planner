@@ -84,8 +84,7 @@ service cloud.firestore {
       // Recipes and staff pay rates: owners only (recipes are the business's secret; pay is private).
       // An owner can let managers read the recipes (to see costs and plan brews); only owners change them.
       match /recipes/{id} {
-        allow read: if isMember(bid) && (roleIn(biz(bid)) == 'owner'
-                    || (roleIn(biz(bid)) == 'manager' && biz(bid).get('settings', {}).get('mgrCosts', false) == true));
+        allow read: if isMember(bid) && roleIn(biz(bid)) == 'owner';
         allow write: if isMember(bid) && roleIn(biz(bid)) == 'owner';
       }
       match /pay/{id} {

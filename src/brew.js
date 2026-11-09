@@ -15,7 +15,7 @@ const recipeOf=p=>p&&p.recipe?S.recipes.find(r=>r.id===p.recipe):null;
 const recipeCost=r=>(r.lines||[]).reduce((n,l)=>n+(+l.qty||0)*inputCost(S.inputs.find(i=>i.id===l.input)),0);  // cents per batch
 const packCost=p=>(p.pack||[]).reduce((n,l)=>n+(+l.qty||0)*inputCost(S.inputs.find(i=>i.id===l.input)),0);
 // cost of one unit, ex GST, in cents (null when the recipe or fill isn't set)
-function unitCost(p){ const r=S.recipes.find(x=>x.id===p.recipe); if(!r||!(r.yield>0)||!(p.fill>0)) return null; return recipeCost(r)/r.yield*p.fill+packCost(p); }
+function unitCost(p){ const r=S.recipes.find(x=>x.id===p.recipe); if(!r&&role()!=='owner'){ const pc=S.costs.find(c=>c.id==='pcost'); const v=pc&&pc.map?pc.map[p.id]:null; return v==null?null:v; } if(!r||!(r.yield>0)||!(p.fill>0)) return null; return recipeCost(r)/r.yield*p.fill+packCost(p); }
 
 /* ---------- stock ---------- */
 const soldOf=(pid,since)=>S.sales.reduce((n,s)=>s.voided||(since&&s.at<since)?n:n+(s.lines||[]).filter(l=>l.pid===pid).reduce((a,l)=>a+l.qty,0),0);
@@ -60,16 +60,17 @@ function makeNext(){
 
 /* ---------- the Brew screen ---------- */
 let brewTab=lsGet('rs.brewtab','next'), brewPlan=null;
-const BREW_TABS=()=>canManage()?[['next','🔮 What to make'],['plan','🫙 Plan a brew'],['stock','📦 Stock'],['batches','📒 Batches']]:[['plan','🫙 Brew plan'],['stock','📦 Stock']];
+const BREW_TABS=()=>canManage()?[['next','🔮 What to make'],['plan','🫙 Plan a brew'],['stock','📦 Stock'],['batches','📒 Batches'],['recipes',role()==='owner'?'🧪 Recipes & ingredients 🔒':'🧴 Ingredients']]:[['plan','🫙 Brew plan'],['stock','📦 Stock']];
 SCREENS.brew={
   title:()=>({h:'Brew and stock',s:canManage()?'What to make, batches and stock':'What\'s being made, and stock'}),
   html(){
-    const tabs=BREW_TABS(); if(!tabs.some(t=>t[0]===brewTab)) brewTab=tabs[0][0];
+    const tabs=BREW_TABS(); if(!tabs.some(t=>t[0]===brewTab)||brewTab==='recipes') brewTab=tabs[0][0];
     const body=brewTab==='next'?nextHtml():brewTab==='plan'?(canManage()?planHtml():plansHtml()):brewTab==='batches'?batchesHtml():stockHtml();
     return rulesNotice()+`<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${brewTab===k?'on':''}" data-bt="${k}">${v}</button>`).join('')}</div>`+body;
   },
   wire(){
-    document.querySelectorAll('[data-bt]').forEach(b=>b.onclick=()=>{ brewTab=b.dataset.bt; lsSet('rs.brewtab',brewTab); render(); });
+    document.querySelectorAll('[data-bt]').forEach(b=>b.onclick=()=>{ if(b.dataset.bt==='recipes'){ recTab=role()==='owner'?'recipes':'inputs'; go('recipes'); return; } brewTab=b.dataset.bt; lsSet('rs.brewtab',brewTab); render(); });
+    const pu=$('#recUnlock'); if(pu) pu.onclick=()=>recipeGate(()=>render());
     if(brewTab==='next') wireNext(); else if(brewTab==='plan') (canManage()?wirePlan:wirePlans)(); else if(brewTab==='batches') wireBatches(); else wireStock();
   }
 };
@@ -96,8 +97,9 @@ function wireNext(){
 function planLines(r,mult){ return (r.lines||[]).map(l=>{ const i=S.inputs.find(x=>x.id===l.input)||{name:'(missing ingredient)',unit:'',pack:0,price:0}; const need=(+l.qty||0)*mult, have=inputStock(l.input);
   return {i,need,have,short:have==null?null:Math.max(0,need-have),cost:need*inputCost(i)}; }); }
 function planHtml(){
-  const recs=seesCosts()?S.recipes:[];
-  if(!seesCosts()) return plansHtml()+`<div class="card"><p class="note">Recipes are owners-only, so planning a brew is done by an owner.</p></div>`;
+  if(role()==='owner'&&!recipesOpen()) return lockedRecipes('Brew planning (it shows the recipes)')+plansHtml();
+  const recs=role()==='owner'?S.recipes:[];
+  if(role()!=='owner') return plansHtml()+`<div class="card"><p class="note">Recipes are owners-only, so planning a brew is done by an owner.</p></div>`;
   if(!recs.length) return needSetupHtml();
   const pl=brewPlan=brewPlan||{recipe:recs[0].id,mult:1,date:nzDay(),fill:{}}, r=S.recipes.find(x=>x.id===pl.recipe)||recs[0]; pl.recipe=r.id;
   const prods=S.products.filter(p=>p.recipe===r.id&&p.active!==false), total=r.yield*pl.mult;
@@ -240,19 +242,43 @@ function fixStock(p){
       if(canManage()&&!tillLock()) doIt(null); else approve(what,who=>doIt(who),what); }; });
 }
 
+/* ---------- recipes: locked at all times, owners only ----------
+   Opening a recipe always asks for an owner's PIN, even with Setup open. It locks again on leaving, or
+   after 2 minutes untouched. Only another person's PIN used on this device goes in the approvals log. */
+let recipesUntil=0;
+const recipesOpen=()=>role()==='owner'&&!tillLock()&&Date.now()<recipesUntil;
+function recipeGate(fn){
+  if(role()!=='owner'||tillLock()){ toast('Recipes are for owners only'); return; }
+  if(recipesOpen()){ recipesUntil=Date.now()+120e3; fn(); return; }
+  let who=null;
+  pinPad('Owner PIN to open the recipes',async pin=>{ who=await whosePin(pin); if(who&&SYNC.getOwners().includes(who)) return true; who=null; return 'Only an owner\'s PIN opens the recipes'; },
+    ()=>{ recipesUntil=Date.now()+120e3; if(who!==SYNC.me()) logApproval('open the recipes',who,'on '+SYNC.me()+'\'s device',true); fn(); });
+}
+const lockedRecipes=what=>`<div class="card" style="text-align:center"><p style="font-size:40px;margin:6px 0">🔒</p><b>${what} ${what.endsWith('s')?'are':'is'} locked</b><p class="note">Recipes are the business's secret. An owner's PIN opens them for 2 minutes.</p><button class="btn" id="recUnlock">🔓 Open with my PIN</button></div>`;
+document.addEventListener('pointerdown',()=>{ if(recipesOpen()) recipesUntil=Date.now()+120e3; },true);
+setInterval(()=>{ if(recipesUntil&&Date.now()>=recipesUntil){ recipesUntil=0; if(cur()==='recipes'||(cur()==='brew'&&brewTab==='plan')){ while(modalStack.length) closeModal(); render(); toast('Recipes locked again'); } } },5e3);
+// costs for managers allowed to see them, without the recipes: the owner's device keeps a cost a unit per product
+function syncProductCosts(){
+  if(role()!=='owner'||practice||!S.recipes.length) return;
+  const map={}; S.products.forEach(p=>{ const u=unitCost(p); if(u!=null) map[p.id]=Math.round(u); });
+  const x=S.costs.find(c=>c.id==='pcost'), j=JSON.stringify(map); if(x&&JSON.stringify(x.map||{})===j) return;
+  if(x) x.map=map; else S.costs.push({id:'pcost',kind:'pcosts',map}); save();
+}
+
 /* ---------- Setup → Ingredients and recipes ---------- */
 let recTab=lsGet('rs.rectab','inputs');
 SCREENS.recipes={
   title:()=>({h:'Products, recipes and ingredients',s:'Costs are ex GST'}),
   html(){
-    const tabs=[['inputs','🧴 Ingredients and packaging']].concat(seesCosts()?[['recipes','📖 Recipes'],['links','🔗 Products']]:[]);
+    const tabs=[['inputs','🧴 Ingredients and packaging']].concat(role()==='owner'?[['recipes','📖 Recipes 🔒'],['links','🔗 Products 🔒']]:[]);
     if(!tabs.some(t=>t[0]===recTab)) recTab='inputs';
     return rulesNotice()+`<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${recTab===k?'on':''}" data-rt="${k}">${v}</button>`).join('')}</div>
       ${role()==='owner'?`<div class="card"><div class="row" style="border:0"><div class="grow"><b>Import from the Batch Planning workbook</b><small>Brings in the ingredients, recipes and packaging. Till prices aren't changed.</small></div><label class="btn small" style="cursor:pointer">📂 Choose<input type="file" id="wbF" accept=".xlsx,.xlsm" hidden></label></div></div>`:''}`
-      +(recTab==='recipes'?recipesHtml():recTab==='links'?linksHtml():inputsHtml());
+      +(recTab==='recipes'?(recipesOpen()?recipesHtml():lockedRecipes('Recipes')):recTab==='links'?(recipesOpen()?linksHtml():lockedRecipes('Product recipes')):inputsHtml());
   },
   wire(){
     document.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{ recTab=b.dataset.rt; lsSet('rs.rectab',recTab); render(); });
+    const ru=$('#recUnlock'); if(ru) ru.onclick=()=>recipeGate(()=>render());
     const f=$('#wbF'); if(f) f.onchange=()=>{ if(f.files[0]) importWorkbook(f.files[0]); };
     $('#addIn')&&($('#addIn').onclick=()=>editInput({}));
     document.querySelectorAll('[data-in]').forEach(b=>b.onclick=()=>editInput(S.inputs.find(i=>i.id===b.dataset.in)));
@@ -309,6 +335,7 @@ function recipesHtml(){
     <p class="note">Recipes are only ever seen by owners.</p></div>`;
 }
 function editRecipe(src,done){
+  if(!recipesOpen()){ recipeGate(()=>editRecipe(src,done)); return; }
   const isNew=!src.id, r=JSON.parse(JSON.stringify(Object.assign({name:'',yield:1000,unit:'ml',lines:[]},src)));
   const ins=S.inputs.filter(i=>i.cat!=='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ m.innerHTML=`<h2>${isNew?'Add a recipe':esc(r.name)}</h2>
@@ -341,6 +368,7 @@ function linksHtml(){
       return `<button class="row prow" data-link="${p.id}"><div class="grow">${esc(prodName(p))}${iss.map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${r?esc(r.name)+(p.fill>0?' · '+fmtQty(p.fill,r.unit)+' each':'')+(c!=null?' · costs '+c2(c)+' · sells '+c2(Math.round(p.price/1.15))+' ex GST · margin '+Math.round((1-c/(p.price/1.15))*100)+'%':''):p.noRecipe?'Bought in, not made here':''}</small></div><span class="chev">›</span></button>`; }).join('')}</div>`;
 }
 function editLink(p,done,keepV){
+  if(!recipesOpen()){ recipeGate(()=>editLink(p,done,keepV)); return; }
   const v=keepV||JSON.parse(JSON.stringify({recipe:p.recipe||(p.noRecipe?'-':''),fill:p.fill||'',pack:p.pack||[],noPack:!!p.noPack})), packs=S.inputs.filter(i=>i.cat==='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ const r=S.recipes.find(x=>x.id===v.recipe);
       m.innerHTML=`<h2>${esc(prodName(p))}</h2>
