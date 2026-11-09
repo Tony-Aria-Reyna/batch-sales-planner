@@ -446,7 +446,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.wholesale = 2300; save(); });
   await page.click('[data-go="orders"]'); await page.waitForSelector('#oNew'); await page.click('#oNew'); await page.waitForSelector('#oOk');
   await page.fill('#oN', 'Test Corner Store'); await page.fill('#oD', await page.evaluate(() => dk(addDays(kd(nzDay()), 2))));
-  await page.selectOption('#oAdd', { label: await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); return prodName(p) + ' · ' + c2(2300); }) });
+  await page.fill('#oAdd', 'test oil'); await page.dispatchEvent('#oAdd', 'change');
   await page.fill('[data-oq="0"]', '3'); await page.dispatchEvent('[data-oq="0"]', 'change'); await page.waitForTimeout(40);
   ok(/\$69\.00/.test(await text(page)) && /\$60\.00 ex GST/.test(await text(page)), 'wholesale order priced at the wholesale price, with the ex-GST total');
   await page.click('#oOk'); await page.waitForTimeout(60);

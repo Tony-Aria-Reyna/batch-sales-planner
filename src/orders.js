@@ -98,20 +98,21 @@ function editOrder(src){
       <label class="note" for="oN">Customer name</label><input class="txt" id="oN" value="${esc(o.customer.name)}" autocapitalize="words">
       <div class="formrow"><div><label class="note" for="oE">Email (optional)</label><input class="txt" id="oE" type="email" autocapitalize="none" value="${esc(o.customer.email||'')}"></div>
         <div><label class="note" for="oPh">Phone (optional)</label><input class="txt" id="oPh" inputmode="tel" value="${esc(o.customer.phone||'')}"></div></div>
+      <label class="note" for="oA">Delivery address</label><input class="txt" id="oA" autocomplete="street-address" value="${esc(o.customer.address||'')}" placeholder="Street, suburb, town (printed on the packing slip)">
       <label class="note" for="oD">Send by</label><input class="txt" id="oD" type="date" value="${o.due}">
-      <h3>What</h3>${o.lines.map((l,i)=>`<div class="lrow"><div class="grow ltxt"><b>${esc(l.name)}</b><small>${c2(l.unit)} each${ws?' ('+c2(Math.round(l.unit/1.15))+' ex GST)':''}</small></div><input class="txt qty" type="number" min="0" data-oq="${i}" value="${l.qty}"><button class="qb rm" data-ox="${i}">✕</button></div>`).join('')}
-      <div class="formrow"><div><select class="txt" id="oAdd"><option value="">＋ Add a product…</option>${S.products.filter(p=>p.active!==false).map(p=>`<option value="${p.id}">${esc(prodName(p))} · ${c2(ws&&p.wholesale?p.wholesale:p.price)}</option>`).join('')}</select></div><div></div></div>
+      <h3>What</h3>${o.lines.map((l,i)=>`<div class="oline"><div class="ltxt"><b>${esc(l.name)}</b><small>${c2(l.unit)} each${ws?' ('+c2(Math.round(l.unit/1.15))+' ex GST)':''}</small></div><input class="txt qty" type="number" min="0" data-oq="${i}" value="${l.qty}"><button class="qb rm" data-ox="${i}">✕</button></div>`).join('')}
+      <input class="txt" id="oAdd" list="oAddL" autocomplete="off" placeholder="＋ Add a product: type to search…"><datalist id="oAddL">${S.products.filter(p=>p.active!==false).map(p=>`<option value="${esc(prodName(p))}">${c2(ws&&p.wholesale?p.wholesale:p.price)}</option>`).join('')}</datalist>
       <p><b>Total ${c2(orderTotal(o))}</b> incl. GST${ws?' · '+c2(Math.round(orderTotal(o)/1.15))+' ex GST':''}</p>
       <div class="row"><div class="grow">Paid already</div><div class="seg"><button data-pd="1" class="${o.paid?'on':''}">Yes</button><button data-pd="0" class="${!o.paid?'on':''}">No</button></div></div>
       <label class="note" for="oNo">Notes (optional)</label><textarea class="txt" id="oNo" rows="2">${esc(o.note||'')}</textarea>
       <div class="mact"><button class="btn alt" id="oCx">Cancel</button><button class="btn" id="oOk">Save</button></div>`;
-    const grab=()=>{ const s=m.querySelector('#oS'); if(s) o.place=s.value; o.customer.name=m.querySelector('#oN').value.trim(); o.customer.email=m.querySelector('#oE').value.trim(); o.customer.phone=m.querySelector('#oPh').value.trim();
+    const grab=()=>{ const s=m.querySelector('#oS'); if(s) o.place=s.value; o.customer.name=m.querySelector('#oN').value.trim(); o.customer.email=m.querySelector('#oE').value.trim(); o.customer.phone=m.querySelector('#oPh').value.trim(); o.customer.address=m.querySelector('#oA').value.trim().slice(0,200);
       o.due=m.querySelector('#oD').value; o.note=m.querySelector('#oNo').value.trim(); m.querySelectorAll('[data-oq]').forEach(i=>o.lines[+i.dataset.oq].qty=Math.max(0,Math.floor(+i.value||0))); };
     m.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{ grab(); o.source=b.dataset.src; o.lines.forEach(l=>{ const p=S.products.find(x=>x.id===l.pid); if(p) l.unit=o.source==='wholesale'&&p.wholesale?p.wholesale:p.price; }); draw(); });
-    const s=m.querySelector('#oS'); if(s) s.onchange=()=>{ grab(); const p=S.places.find(x=>x.id===s.value); if(p) o.customer.name=p.name; draw(); };
+    const s=m.querySelector('#oS'); if(s) s.onchange=()=>{ grab(); const p=S.places.find(x=>x.id===s.value); if(p){ o.customer.name=p.name; if(!o.customer.address&&p.address) o.customer.address=p.address; } draw(); };
     m.querySelectorAll('[data-oq]').forEach(i=>i.onchange=()=>{ grab(); draw(); });
     m.querySelectorAll('[data-ox]').forEach(b=>b.onclick=()=>{ grab(); o.lines.splice(+b.dataset.ox,1); draw(); });
-    m.querySelector('#oAdd').onchange=e=>{ grab(); const p=S.products.find(x=>x.id===e.target.value); if(!p) return; const ex=o.lines.find(l=>l.pid===p.id);
+    m.querySelector('#oAdd').onchange=e=>{ grab(); const q=e.target.value.trim().toLowerCase(), p=S.products.find(x=>x.id===e.target.value)||S.products.find(x=>x.active!==false&&prodName(x).toLowerCase()===q)||(q.length>1?S.products.find(x=>x.active!==false&&prodName(x).toLowerCase().includes(q)):null); if(!p){ toast('No product called that'); return; } const ex=o.lines.find(l=>l.pid===p.id);
       if(ex) ex.qty++; else o.lines.push({pid:p.id,name:prodName(p),qty:1,unit:o.source==='wholesale'&&p.wholesale?p.wholesale:p.price}); draw(); };
     m.querySelectorAll('[data-pd]').forEach(b=>b.onclick=()=>{ grab(); o.paid=b.dataset.pd==='1'; draw(); });
     m.querySelector('#oCx').onclick=close;
