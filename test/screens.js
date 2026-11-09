@@ -539,7 +539,8 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#bk'); await page.click('#goAudit'); await page.waitForTimeout(100);
   const log = await text(page);
   ok(!/Add float|Give a discount|Open Setup|See the takings|Correct a sale/.test(log), 'things the owner did on their own are not in the log');
-  ok(['Void a sale', 'End the day', 'Close the day', 'See the sales'].every(a => log.includes(a)) && /approved by Admin/.test(log) && /in till mode/.test(log), 'approvals asked for in till mode (a worker at the till) are logged with who and when');
+  ok(log.includes('Void a sale') && /approved by Admin/.test(log) && /in till mode/.test(log), 'real approvals asked for in till mode (a worker at the till) are logged with who and when');
+  ok(!/End the day|Close the day|See the sales/.test(log), 'everyday checks an owner approves (seeing the sales, ending and closing the day) are not logged');
   ok(await page.evaluate(() => S.sessions[0].floatAdds[0].approvedBy === 'admin@example.com' && S.sales.some(s => s.manualDiscount && s.manualDiscount.approvedBy)), 'who approved floats and discounts is still kept on the records themselves');
   await page.screenshot({ path: path.join(shots, '19-ipad-approvals-log.png'), fullPage: true });
   await page.click('#bk'); await page.click('#bk');
