@@ -661,6 +661,31 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && !!(await page.$('#clkStop')), '"Yes, still going" keeps it running');
   await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.every(c => c.end)), 'Stop stops it');
   ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
+  // buying: suppliers, the order email (copied to the main owner), on order, arrived
+  await page.evaluate(() => { window.opened = []; openLink = u => opened.push(u);
+    const i = { id: 'inBw', name: 'Beeswax', cat: 'ingredient', price: 2000, pack: 1000, unit: 'g', supplier: 'Bee Supplies', supplierEmail: 'orders@bees.example', supplierLink: '' }; S.inputs.push(i);
+    moveStock({ kind: 'count', input: 'inBw', qty: 300 }); i.warnAt = 500;
+    S.shopping.push({ id: 'shBw', item: 'Beeswax', qty: 2, size: '1 kg', input: 'inBw', done: false, by: SYNC.me(), at: Date.now() }); save();
+    listTab = 'shop'; stack = ['home', 'lists']; render(); });
+  await page.waitForSelector('[data-draft="bee supplies"]');
+  ok(/🏪 Bee Supplies/.test(await text(page)), 'shopping list grouped by supplier');
+  await page.click('[data-draft="bee supplies"]'); await page.waitForSelector('#oNo');
+  const mail = await page.evaluate(() => decodeURIComponent(opened[0] || ''));
+  ok(/^mailto:orders@bees\.example\?/.test(mail) && /- 2 × Beeswax 1 kg/.test(mail), 'Draft order email: to the supplier, with the items');
+  ok(await page.evaluate(() => /cc=/.test(opened[0]) === (SYNC.getMainOwner() !== SYNC.me())), 'the order email is copied to the main owner (unless that\'s you)');
+  await page.click('#oNo'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => S.todos.some(t => t.order && /Send the order to Bee Supplies/.test(t.text) && !t.done)), '"Not yet": a to-do to send it');
+  await page.evaluate(() => { listTab = 'todo'; render(); }); await page.waitForTimeout(60);
+  await page.evaluate(() => { const t = S.todos.find(x => x.order && !x.done); document.querySelector('.ltxt[data-todo="' + t.id + '"]').click(); }); await page.waitForSelector('#oYes');
+  ok(await page.evaluate(() => opened.length === 2), 'tapping the to-do reopens the same draft');
+  await page.click('#oYes'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => S.shopping.find(x => x.id === 'shBw').ordered.status === 'sent' && S.todos.filter(t => t.order).every(t => t.done)), '"Yes, sent": on order, and the to-do is ticked off');
+  await page.evaluate(() => { brewTab = 'stock'; stack = ['home', 'brew']; render(); }); await page.waitForSelector('[data-arrived]');
+  ok(/🚚 On order/.test(await text(page)) && /Running low/.test(await text(page)) && /Beeswax/.test(await text(page)), 'Stock: on order (with when it\'s due) and running low');
+  await page.click('[data-arrived]'); await page.waitForSelector('#aOk'); await page.click('#aOk'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.shopping.find(x => x.id === 'shBw').done && inputStock('inBw') === 300 + S.shopping.filter(x => x.ordered && x.ordered.status === 'arrived' && /beeswax/i.test(x.item)).reduce((n, x) => n + x.gotQty * 1000, 0) && inputStock('inBw') >= 2300), 'Arrived: checked off and into stock (300 g + each pack that came)');
+  ok(await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.warnAt = 999; const r = stockIdeas().some(x => /Make more Test Oil/.test(x.t)); p.warnAt = 0; return r; }), 'a product below its "warn me at" level becomes an action');
+  await page.evaluate(() => { const i = S.inputs.findIndex(x => x.id === 'inBw'); S.inputs.splice(i, 1); save(); });
   // the Profit screen
   await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForSelector('#hProf'); await page.click('#hProf'); await page.waitForSelector('.profhead');
   await page.click('[data-pp="fy"]'); await page.waitForSelector('.profhead');

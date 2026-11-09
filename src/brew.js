@@ -190,11 +190,13 @@ function stockHtml(){
   const rows=prods.map(p=>({p,st:stockOf(p.id)}));
   const tm=typeof todaysMarkets==='function'?todaysMarkets():[];
   return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="sPack">🧺 Pack for ${tm[0]?esc(tm[0].title):'a market'}</button><button class="btn alt" id="sCount">🔢 Count stock</button></div>
-      <p class="note">Stock is a guide. The till never stops a sale because of it: if something's in the car, sell it.</p></div>
-    <div class="card"><div class="stockhead"><span></span><b>At home</b><b>Out with me</b></div>${rows.map(({p,st})=>`<button class="stockrow" data-st="${p.id}"><span class="grow">${esc(prodName(p))}</span><b class="${st&&st.home<=0?'zero':''}">${st?st.home:'–'}</b><b>${st&&st.out?st.out:''}</b></button>`).join('')}</div>`;
+      <p class="note">Stock is a guide. The till never stops a sale because of it: if something's in the car, sell it.</p>
+      ${canManage()?'<div class="mact" style="justify-content:flex-start"><button class="btn alt small" id="sWarn">⚠️ Warn me at…</button></div>':''}</div>
+    ${lowHtml()}${onOrderHtml()}
+    <div class="card"><div class="stockhead"><span></span><b>At home</b><b>Out with me</b></div>${rows.map(({p,st})=>`<button class="stockrow" data-st="${p.id}"><span class="grow">${esc(prodName(p))}</span><b class="${st&&st.home<=0?'zero':st&&p.warnAt>0&&st.total<=p.warnAt?'low':''}">${st?st.home:'–'}</b><b>${st&&st.out?st.out:''}</b></button>`).join('')}</div>`;
 }
 function wireStock(){
-  $('#sPack').onclick=packForMarket; $('#sCount').onclick=()=>countStock();
+  $('#sPack').onclick=packForMarket; $('#sCount').onclick=()=>countStock(); wireLow();
   document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>fixStock(S.products.find(p=>p.id===b.dataset.st)));
 }
 // one screen: each product with a count, pre-filled from the last time at this market
@@ -274,12 +276,17 @@ function editInput(src,done){
         <div><label class="note" for="iK">Pack size (in the unit below)</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
       <label class="tickrow freebox ${i.free?'green':'red'}" id="iFreeBox" style="${i.price>0?'display:none':''}"><input type="checkbox" id="iFree" ${i.free?'checked':''}><span><b>Yes, this is free</b> <small>(e.g. grown at home), so $0 is right</small></span></label>
       <label class="note" for="iU">Measured</label><select class="txt" id="iU">${UNITS.map(u=>`<option value="${u}" ${i.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select>
-      <label class="note" for="iS">Supplier (optional)</label><input class="txt" id="iS" value="${esc(i.supplier||'')}">
+      <label class="note" for="iS">Supplier (optional)</label><input class="txt" id="iS" value="${esc(i.supplier||'')}" list="iSl"><datalist id="iSl">${[...new Set(S.inputs.map(x=>x.supplier).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+      <div class="formrow"><div><label class="note" for="iSe">Their email (to order)</label><input class="txt" id="iSe" type="email" autocapitalize="none" value="${esc(i.supplierEmail||'')}" placeholder="orders@…"></div>
+        <div><label class="note" for="iSw">or their website</label><input class="txt" id="iSw" type="url" autocapitalize="none" value="${esc(i.supplierLink||'')}" placeholder="https://…"></div></div>
       <label class="note" for="iH">How much you have now (optional, starts tracking it)</label><input class="txt" id="iH" type="number" min="0" step="any" placeholder="${i.id&&inputStock(i.id)!=null?inputStock(i.id):'not tracked'}">
       <div class="mact">${isNew?'':'<button class="btn danger" id="iD">Delete</button>'}<button class="btn alt" id="iC">Cancel</button><button class="btn" id="iOk">Save</button></div>`;
     // the "free" tick only appears at $0: red until it's ticked, then green
     const fb=m.querySelector('#iFreeBox'), fr=m.querySelector('#iFree'), paint=()=>{ const zero=!(toCents(m.querySelector('#iP').value||'0')>0); fb.style.display=zero?'':'none'; fb.classList.toggle('green',zero&&fr.checked); fb.classList.toggle('red',zero&&!fr.checked); };
     m.querySelector('#iP').oninput=paint; fr.onchange=paint; paint();
+    // a supplier already used on another ingredient: fill in their email and website
+    m.querySelector('#iS').onchange=()=>{ const k=m.querySelector('#iS').value.trim().toLowerCase(), o=S.inputs.find(x=>x.id!==i.id&&(x.supplier||'').trim().toLowerCase()===k&&(x.supplierEmail||x.supplierLink));
+      if(o){ const e=m.querySelector('#iSe'), w=m.querySelector('#iSw'); if(!e.value) e.value=o.supplierEmail||''; if(!w.value) w.value=o.supplierLink||''; } };
     let cat=i.cat; m.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{ cat=b.dataset.cat; m.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on',x===b)); });
     m.querySelector('#iC').onclick=close;
     const d=m.querySelector('#iD'); if(d) d.onclick=()=>{ if(S.recipes.some(r=>(r.lines||[]).some(l=>l.input===i.id))||S.products.some(p=>(p.pack||[]).some(l=>l.input===i.id))){ toast('It\'s used in a recipe or product: take it out there first'); return; }
@@ -287,8 +294,10 @@ function editInput(src,done){
     m.querySelector('#iOk').onclick=()=>{ const name=m.querySelector('#iN').value.trim(), price=toCents(m.querySelector('#iP').value||'0'), pack=+m.querySelector('#iK').value, unit=m.querySelector('#iU').value;
       if(!name){ toast('Type the name'); return; } if(!(pack>0)){ toast('Type the pack size'); return; } const free=!(price>0)&&m.querySelector('#iFree').checked;
       if(!(price>0)&&!free){ toast('Type the price, or tick "Yes, this is free"'); return; }
+      const se=m.querySelector('#iSe').value.trim(), sw=m.querySelector('#iSw').value.trim();
+      if(se&&!isEmail(se)){ toast('Check the supplier\'s email'); return; } if(sw&&!/^https?:\/\/\S+\.\S+/.test(sw)){ toast('The website should start with https://'); return; }
       const changed=!isNew&&(price!==i.price||pack!==i.pack);
-      Object.assign(i,{name:name.slice(0,80),cat,price:price>0?price:0,free:free&&!(price>0),pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),updated:Date.now()});
+      Object.assign(i,{name:name.slice(0,80),cat,price:price>0?price:0,free:free&&!(price>0),pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),supplierEmail:se.slice(0,120),supplierLink:sw.slice(0,300),updated:Date.now()});
       if(isNew){ i.id=SYNC.newId('inputs'); S.inputs.push(i); } else Object.assign(S.inputs.find(x=>x.id===i.id),i);
       if(isNew||changed) S.prices.push({id:SYNC.newId('prices'),input:i.id,item:i.name,cents:price,pack,unit,date:nzDay(),at:Date.now(),by:SYNC.me(),from:'setup'});
       const h=m.querySelector('#iH').value; if(h!=='') moveStock({kind:'count',input:i.id,qty:Math.max(0,+h)});

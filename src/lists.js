@@ -45,7 +45,7 @@ function wireTodo(){
     S.todos.push({id:SYNC.newId('todos'),text,who,done:false,due:'',by:SYNC.me(),at:Date.now()}); save(); render(); });
   document.querySelectorAll('[data-tw]').forEach(b=>b.onclick=()=>{ todoWho=b.dataset.tw; lsSet('rs.todowho',todoWho); render(); });
   document.querySelectorAll('[data-tick]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.tick); if(!t) return; t.done=!t.done; t.doneAt=t.done?Date.now():null; t.doneBy=t.done?SYNC.me():null; save(); render(); });
-  document.querySelectorAll('.ltxt[data-todo]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.todo); if(!t) return; if(t.setup&&!t.done&&typeof finishSetup==='function') finishSetup(t.setup); else openTodo(t); });
+  document.querySelectorAll('.ltxt[data-todo]').forEach(b=>b.onclick=()=>{ const t=S.todos.find(x=>x.id===b.dataset.todo); if(!t) return; if(t.setup&&!t.done&&typeof finishSetup==='function') finishSetup(t.setup); else if(t.order&&!t.done) reopenOrder(t.order); else openTodo(t); });
 }
 // change a to-do (also opened from the Calendar). Helpers can change only their own and can't hand it on.
 function openTodo(src){
@@ -76,7 +76,7 @@ function shopHtml(){
       <div class="grow ltxt"><b>${esc(x.item)}</b><small>${esc([x.done?qs(x.gotQty,x.gotSize):qs(x.qty,x.size),x.done?'bought '+nzDate(new Date(x.doneAt),{day:'numeric',month:'short'}):(x.by&&x.by!==SYNC.me()?'added by '+personName(x.by):'')].filter(Boolean).join(' · '))}</small></div>
       ${!x.done&&(canManage()||x.by===SYNC.me())?`<button class="qb rm" data-unshop="${x.id}" aria-label="Remove">✕</button>`:''}</div>`;
   return `<div class="card">${addBar('shNew','Add to the shopping list… e.g. Beeswax 1 kg')}</div>
-    <div class="card"><h3>To buy</h3>${want.length?want.map(row).join(''):'<p class="note">Nothing on the list.</p>'}</div>
+    ${canManage()&&want.length?shopGroupsHtml(want,row):`<div class="card"><h3>To buy</h3>${want.length?want.map(row).join(''):'<p class="note">Nothing on the list.</p>'}</div>`}
     ${got.length?`<div class="card"><h3>Bought</h3>${got.slice(0,30).map(row).join('')}${canManage()?'<div class="mact" style="justify-content:flex-start"><button class="btn alt small" id="shClear">Clear the bought list</button></div>':''}</div>`:''}`;
 }
 // "Beeswax 1 kg" → item Beeswax, size 1 kg; "2 x jars" → qty 2
@@ -91,6 +91,7 @@ function wireShop(){
   document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>{ const x=S.shopping.find(y=>y.id===b.dataset.buy); if(!x) return;
     if(x.done){ x.done=false; x.doneAt=null; save(); render(); return; } confirmBought(x); });
   document.querySelectorAll('[data-unshop]').forEach(b=>b.onclick=()=>{ const i=S.shopping.findIndex(y=>y.id===b.dataset.unshop); if(i>=0){ S.shopping.splice(i,1); save(); render(); } });
+  wireShopGroups();
   const c=$('#shClear'); if(c) c.onclick=()=>confirmBox('Clear the bought list?','The prices paid are kept for costs.','Clear',()=>{ for(let i=S.shopping.length-1;i>=0;i--) if(S.shopping[i].done) S.shopping.splice(i,1); save(); render(); });
 }
 // what was actually bought: one tap if it's as listed, or tweak the size, how many and the price
