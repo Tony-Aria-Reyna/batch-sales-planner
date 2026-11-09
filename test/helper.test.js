@@ -100,6 +100,11 @@ const nm = mails.length; b.notified = patches.filter(p => p[0] === 'businesses/b
 mails.length = 0; db['businesses/b1/events'] = []; b.notified = {}; clock = { day: '2026-11-17', mins: 7 * 60 + 30 }; ctx.notifyTick(b); ok(mails.length === 0, 'no briefing on a day with nothing on');
 clock = { day: first, mins: 8 * 60 }; b.notified = {}; ctx.notifyTick(b); ok(mails.some(m => /Last month: \$250\.00/.test(m.subject)), 'the 1st of the month: last month\'s summary');
 b.settings.summaries = { time: '07:00', monthly: false }; mails.length = 0; b.notified = {}; ctx.notifyTick(b); ok(!mails.some(m => /Last month/.test(m.subject)), 'a summary switched off in the app isn\'t sent');
+// ---- the action plan in the emails, with links into the app
+ctx.getDoc = p => p === 'businesses/b1/clock/actions' ? { list: [{ t: 'Raise the price of Lip balm', d: 'You keep 30%.', go: 'setup:products' }, { t: 'Send the order to Bee Supplies', d: 'Not sent yet.', go: 'lists:shop' }], at: Date.now() } : null;
+const apx = ctx.actionPlan(b);
+ok(/What to do next/.test(apx.html) && /#go=setup%3Aproducts/.test(apx.html) && /Raise the price of Lip balm/.test(apx.text), 'emails: "What to do next" with links that open the app at the right place');
+ctx.getDoc = () => null; ok(ctx.actionPlan(b).html === '', 'no plan saved: nothing added');
 // ---- the drive to each place, by road
 const asked = [];
 ctx.Maps = { DirectionFinder: { Mode: { DRIVING: 'driving' } }, newDirectionFinder: () => { const q = {}; const f = { setOrigin: o => (q.o = o, f), setDestination: d => (q.d = d, f), setMode: () => f, setRegion: () => f,

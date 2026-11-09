@@ -191,7 +191,7 @@ body.practicing #main{padding-bottom:80px}
 .profhead.bad{border:2px solid #e9b4ae}.profhead.mid{border:2px solid #f0d58a}.profhead.good{border:2px solid #b9d3a8}
 .sure{font-size:13px;padding:3px 10px;border-radius:99px;margin-left:6px;vertical-align:middle}.sure.good{background:#dfe9d9;color:var(--green)}.sure.mid{background:#fdf0cc;color:#7a5b0b}.sure.bad{background:#fbe3e0;color:#8c1d18}
 ol.ideas{margin:0;padding:0;list-style:none;counter-reset:i}ol.ideas li{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line,#e5e1d2);counter-increment:i}
-ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;display:grid;place-items:center}ol.ideas .grow{flex:1;min-width:0}ol.ideas small{display:block;color:var(--muted,#686a5a)}ol.ideas .btn{flex:none}
+ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;display:grid;place-items:center}ol.ideas .grow{flex:1;min-width:0}@media(max-width:600px){ol.ideas li{flex-wrap:wrap}ol.ideas .grow{flex-basis:calc(100% - 40px)}ol.ideas .btn{margin-left:38px}}ol.ideas small{display:block;color:var(--muted,#686a5a)}ol.ideas .btn{flex:none}
 .ordst{color:var(--lav);font-weight:700}.lowcard{border:2px solid #f0d58a}.stockrow b.low{color:#9a6a00}.arrow{border-bottom:1px solid var(--line);padding:8px 0}
 .clockgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.clockgrid .btn{min-height:72px;font-size:17px;display:flex;flex-direction:column;align-items:center;justify-content:center}.clockgrid small{font-size:12px;font-weight:600;opacity:.85}
 .clockbar{border:2px solid var(--green2)}.clockbar.long{border-color:var(--warn);background:#fff4d6}
@@ -564,9 +564,10 @@ SCREENS.home={
       ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything…</span></button>'}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''}">${tiles.map(t=>`<button class="tile ${t.id==='sell'?'sell':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`).join('')}</section>
+      ${homeIdeasHtml()}
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
-  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); const hc=$('#hClock'); if(hc) hc.onclick=()=>go('clock'); const hpf=$('#hProf'); if(hpf) hpf.onclick=()=>go('profit');
+  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); const hc=$('#hClock'); if(hc) hc.onclick=()=>go('clock'); const hpf=$('#hProf'); if(hpf) hpf.onclick=()=>go('profit'); wireHomeIdeas();
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
@@ -961,7 +962,7 @@ function rulesNotice(){ return missingCols.size?`<div class="card" style="border
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
-  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); SYNC.getMyDevices().then(d=>{ myDevices=d; if(cur()==='home') render(); refreshPush(); }).catch(()=>{}); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; }
+  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); SYNC.getMyDevices().then(d=>{ myDevices=d; if(cur()==='home') render(); refreshPush(); }).catch(()=>{}); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; else deepLink(); }
     const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);
     if(what==='orders'||what==='business') try{ settleOrders(); }catch(e){}
     if(!typing) render(); gate(null); },60);

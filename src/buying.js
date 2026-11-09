@@ -113,11 +113,11 @@ function warnLevels(){
 // for the action plans: stock and orders that need doing
 function stockIdeas(){
   if(!canManage()) return []; const out=[];
-  lowProducts().forEach(x=>out.push({score:x.st.total<=0?85:65,t:'Make more '+prodName(x.p),d:(x.st.total<=0?'None left':x.st.total+' left')+' (you asked to be warned at '+x.p.warnAt+').',lbl:'Plan a brew',act:()=>{ brewTab='next'; lsSet('rs.brewtab','next'); go('brew'); }}));
-  lowInputs().filter(x=>!onListOrOrder(x.i)).forEach(x=>out.push({score:60,t:'Buy '+x.i.name,d:fmtQty(x.n,x.i.unit)+' left (warn at '+fmtQty(x.i.warnAt,x.i.unit)+').',lbl:'Add to the list',act:()=>{ addToShopping(x.i); save(); listTab='shop'; lsSet('rs.listtab','shop'); go('lists'); toast('On the shopping list'); }}));
+  lowProducts().forEach(x=>out.push({score:x.st.total<=0?85:65,t:'Make more '+prodName(x.p),d:(x.st.total<=0?'None left':x.st.total+' left')+' (you asked to be warned at '+x.p.warnAt+').',lbl:'Plan a brew',go:'brew:next',act:()=>{ brewTab='next'; lsSet('rs.brewtab','next'); go('brew'); }}));
+  lowInputs().filter(x=>!onListOrOrder(x.i)).forEach(x=>out.push({score:60,t:'Buy '+x.i.name,d:fmtQty(x.n,x.i.unit)+' left (warn at '+fmtQty(x.i.warnAt,x.i.unit)+').',lbl:'Add to the list',go:'lists:shop',act:()=>{ addToShopping(x.i); save(); listTab='shop'; lsSet('rs.listtab','shop'); go('lists'); toast('On the shopping list'); }}));
   const drafts={}; S.shopping.filter(x=>!x.done&&x.ordered&&x.ordered.status==='drafted').forEach(x=>drafts[x.ordered.id]=x.ordered);
-  Object.values(drafts).forEach(o=>out.push({score:70,t:'Send the order to '+supplierInfo(o.supplier).name,d:'The draft hasn\'t been sent yet.',lbl:'Open the draft',act:()=>reopenOrder(o.id)}));
+  Object.values(drafts).forEach(o=>out.push({score:70,t:'Send the order to '+supplierInfo(o.supplier).name,d:'The draft hasn\'t been sent yet.',lbl:'Open the draft',go:'lists:shop',act:()=>reopenOrder(o.id)}));
   onOrderGroups().filter(l=>l[0].ordered.eta&&l[0].ordered.eta<nzDay()).forEach(l=>{ const o=l[0].ordered, s=supplierInfo(o.supplier);
-    out.push({score:55,t:'Chase '+s.name,d:'Your order was due '+nzDate(kd(o.eta),{weekday:'short',day:'numeric',month:'short'})+'. Arrived? Tick it off in Stock.',lbl:'See the order',act:()=>{ brewTab='stock'; lsSet('rs.brewtab','stock'); go('brew'); }}); });
+    out.push({score:55,t:'Chase '+s.name,d:'Your order was due '+nzDate(kd(o.eta),{weekday:'short',day:'numeric',month:'short'})+'. Arrived? Tick it off in Stock.',lbl:'See the order',go:'brew:stock',act:()=>{ brewTab='stock'; lsSet('rs.brewtab','stock'); go('brew'); }}); });
   return out;
 }

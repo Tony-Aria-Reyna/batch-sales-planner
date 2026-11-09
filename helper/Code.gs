@@ -616,6 +616,14 @@ function mailOwners(b, m) {
 const H = { wrap: (title, sub, inner) => '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f;margin-bottom:4px">' + esc(title) + '</h2><p style="color:#686a5a;margin-top:0">' + esc(sub) + '</p>' + inner + '<p style="color:#686a5a">Open the app for more: ' + APP_URL + '</p></div>',
   h3: t => '<h3 style="margin:18px 0 6px">' + esc(t) + '</h3>', list: l => '<ul style="margin:0;padding-left:20px">' + l.map(x => '<li style="margin:3px 0">' + esc(x) + '</li>').join('') + '</ul>',
   table: rows => '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' };
+// "What to do next": the owners' action plan, saved by the app (owner-only), each with a link into the app
+function actionPlan(b) {
+  const p = getDoc('businesses/' + b._id + '/clock/actions'); if (!p || !p.list || !p.list.length || Date.now() - (p.at || 0) > 14 * 864e5) return { html: '', text: '' };
+  const l = p.list.slice(0, 5), link = g => APP_URL + '#go=' + encodeURIComponent(g || 'profit');
+  const html = H.h3('What to do next') + '<ol style="margin:0;padding-left:20px">' + l.map(x => '<li style="margin:6px 0"><a href="' + link(x.go) + '" style="color:#2f3b1f;font-weight:bold">' + esc(x.t) + '</a><br><span style="color:#686a5a">' + esc(x.d || '') + '</span></li>').join('') + '</ol>'
+    + (p.list.length > 5 ? '<p><a href="' + link('profit') + '" style="color:#2f3b1f">Show more ideas</a></p>' : '');
+  return { html: html, text: 'What to do next:\n' + l.map((x, i) => (i + 1) + '. ' + x.t + ' — ' + link(x.go)).join('\n') };
+}
 // today's briefing; nothing is sent on a day with nothing on
 function dailyBriefing(b, day) {
   const events = listDocs('businesses/' + b._id + '/events').filter(e => occursOn(e, day)).sort((x, y) => (x.time || '').localeCompare(y.time || ''));
@@ -627,12 +635,12 @@ function dailyBriefing(b, day) {
   const out = events.some(e => e.type === 'market') ? productsOut(b) : [];
   const evs = events.map(e => (ty[e.type] || '📌') + ' ' + (e.title || '') + (e.time ? ' ' + t12(e.time) + (e.end ? '–' + t12(e.end) : '') : ''));
   const tds = todos.slice(0, 15).map(t => (t.due < day ? '⚠️ overdue: ' : '') + t.text + (t.who ? ' (' + (names[t.who] || t.who) + ')' : ''));
-  const when = Utilities.formatDate(new Date(day + 'T12:00:00Z'), 'Pacific/Auckland', 'EEEE d MMMM');
-  let html = (evs.length ? H.h3('On today') + H.list(evs) : '') + (tds.length ? H.h3('To do') + H.list(tds) : '')
+  const when = Utilities.formatDate(new Date(day + 'T12:00:00Z'), 'Pacific/Auckland', 'EEEE d MMMM'), ap = actionPlan(b);
+  let html = ap.html + (evs.length ? H.h3('On today') + H.list(evs) : '') + (tds.length ? H.h3('To do') + H.list(tds) : '')
     + (out.length ? H.h3('Out of stock before the market') + H.list(out) : '') + (orders.length ? H.h3('Orders due in the next 3 days') + H.list(orders.map(o => ((o.customer || {}).name || 'Order') + ', due ' + o.due)) : '')
     + (ys.length ? H.h3('Yesterday') + '<p>' + esc(money(yt) + ' from ' + ys.length + ' sale' + (ys.length === 1 ? '' : 's')) + '</p>' : '');
   const text = [when, evs.length ? 'On today:\n' + evs.join('\n') : '', tds.length ? 'To do:\n' + tds.join('\n') : '', out.length ? 'Out of stock: ' + out.join(', ') : '',
-    orders.length ? 'Orders due soon: ' + orders.map(o => ((o.customer || {}).name || 'Order') + ' ' + o.due).join(', ') : '', ys.length ? 'Yesterday: ' + money(yt) + ' from ' + ys.length + ' sales' : ''].filter(Boolean).join('\n\n');
+    orders.length ? 'Orders due soon: ' + orders.map(o => ((o.customer || {}).name || 'Order') + ' ' + o.due).join(', ') : '', ys.length ? 'Yesterday: ' + money(yt) + ' from ' + ys.length + ' sales' : '', ap.text].filter(Boolean).join('\n\n');
   return { subject: '☀️ Today: ' + (evs[0] || tds[0] || '').replace(/^\S+ /, '').slice(0, 60) + (evs.length + tds.length > 1 ? ' and ' + (evs.length + tds.length - 1) + ' more' : ''), html: H.wrap('Today, ' + when, b.name || 'Rata & Smudge', html), text: text };
 }
 // a week, month or year: sales, products and markets, against the one before
@@ -652,8 +660,9 @@ function periodSummary(b, kind, from, to, pfrom, pto) {
   const rows = [['Takings (incl GST)', money(R.total)], ['Compared', vs(R.total, P.total) || '—'], ['Sales', String(R.count)], ['Average sale', R.count ? money(Math.round(R.total / R.count)) : '—'],
     ['Markets', String(R.markets) + (P.markets ? ' (' + P.markets + ' before)' : '')], ['Selling days', String(R.days)], ['GST in the takings', money(R.gst)]]
     .concat(best ? [['Best day', fmt(best) + ', ' + money(R.byDay[best])]] : []);
-  const html = H.table(rows) + (Object.keys(R.ch).length ? H.h3('Where it sold') + H.list(Object.keys(R.ch).sort((x, y) => R.ch[y] - R.ch[x]).map(k => (chn[k] || k) + ': ' + money(R.ch[k]))) : '')
+  let html = H.table(rows) + (Object.keys(R.ch).length ? H.h3('Where it sold') + H.list(Object.keys(R.ch).sort((x, y) => R.ch[y] - R.ch[x]).map(k => (chn[k] || k) + ': ' + money(R.ch[k]))) : '')
     + (top.length ? H.h3('Best sellers') + H.list(top.map(k => R.items[k].qty + ' × ' + k + ' (' + money(R.items[k].total) + ')')) : '') + '<p style="color:#686a5a">Profit and costs: Reports in the app.</p>';
-  const text = range + '\n' + rows.map(r => r[0] + ': ' + r[1]).join('\n') + (top.length ? '\n\nBest sellers:\n' + top.map(k => R.items[k].qty + ' × ' + k).join('\n') : '');
+  let text = range + '\n' + rows.map(r => r[0] + ': ' + r[1]).join('\n') + (top.length ? '\n\nBest sellers:\n' + top.map(k => R.items[k].qty + ' × ' + k).join('\n') : '');
+  const ap = actionPlan(b); html += ap.html; text += ap.text ? '\n\n' + ap.text : '';
   return { subject: (kind === 'Week' ? '📊 Last week: ' : kind === 'Month' ? '📊 Last month: ' : '📊 Last year: ') + money(R.total) + (vs(R.total, P.total) ? ' (' + vs(R.total, P.total).split(' on ')[0] + ')' : ''), html: H.wrap(kind === 'Year' ? 'Your year' : 'Your ' + kind.toLowerCase(), range, html), text: text };
 }

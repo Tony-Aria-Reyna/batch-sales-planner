@@ -659,7 +659,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/over 10 hours\. Still working\?/.test(await text(page)), 'after 10 hours the home screen asks if you\'re still working');
   await page.screenshot({ path: path.join(shots, '41-clock-10h.png') });
   await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && !!(await page.$('#clkStop')), '"Yes, still going" keeps it running');
-  await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.every(c => c.end)), 'Stop stops it');
+  await page.click('#clkStop'); await page.waitForTimeout(60); ok(await page.evaluate(() => !clockRunning() && S.clock.filter(c => c.kind === 'owner').every(c => c.end)), 'Stop stops it');
   ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
   // buying: suppliers, the order email (copied to the main owner), on order, arrived
   await page.evaluate(() => { window.opened = []; openLink = u => opened.push(u);
@@ -695,6 +695,18 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const d = profCache; return d.H.market > 0 && d.H.clock >= 60 && d.H.brew === 150; }), 'Profit: hours from markets, the time clock and brew days (no double counting)');
   await page.screenshot({ path: path.join(shots, '42-profit.png'), fullPage: true });
   const gapBtn = await page.$('[data-gap]'); if (gapBtn) { await gapBtn.click(); await page.waitForTimeout(150); ok(await page.evaluate(() => cur() !== 'profit' || !!document.querySelector('.modal')), 'a Fix button takes you to the fix'); await page.evaluate(() => { while (modalStack.length) closeModal(); }); }
+  // action plans on the home screen, saved for the emails, and links that open the app at the right place
+  await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForTimeout(100);
+  ok(/What to do next/.test(await text(page)) && (await page.$$('[data-idea]')).length >= 1 && (await page.$$('[data-idea]')).length <= 5, 'home: what to do next (five at most)');
+  await page.screenshot({ path: path.join(shots, '43-home-actions.png'), fullPage: true });
+  await page.setViewportSize({ width: 412, height: 915 }); await page.evaluate(() => render()); await page.waitForTimeout(100); await page.screenshot({ path: path.join(shots, '43b-phone-home-actions.png'), fullPage: true });
+  await page.evaluate(() => { stack = ['home', 'profit']; render(); }); await page.waitForTimeout(100); await page.screenshot({ path: path.join(shots, '43c-phone-profit.png') });
+  await page.setViewportSize({ width: 1180, height: 820 }); await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => { const c = S.clock.find(x => x.id === 'actions'); return c && c.list.length >= 1 && c.list.every(x => x.go); }), 'the owners\' action plan is kept (owner-only) for the summary emails');
+  await page.evaluate(() => { location.hash = '#go=brew:stock'; }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 3000 }).catch(() => {});
+  ok(await page.evaluate(() => cur() === 'brew' && brewTab === 'stock' && !location.hash), 'a link with #go=brew:stock opens Stock');
+  await page.evaluate(() => { location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 3000 }).catch(() => {});
+  ok(await page.evaluate(() => cur() === 'profit'), 'a link with #go=profit opens Real profit');
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.mgrCosts === true), 'an owner can let managers see recipes and costs');

@@ -44,20 +44,20 @@ const sureness=g=>{ const n=Math.max(0,100-g.reduce((a,x)=>a+x.w,0)); return n>=
 function profitIdeas(from,to,R,H){
   const ideas=[], tgt=hourTarget();
   const mk=Object.entries(R.byPlace).filter(([k,p])=>p.group==='markets'&&p.days>0).map(([k,p])=>{ const net=p.ex-p.cogs-p.fees-p.mileage-p.staff, mins=H.byPlace[k]||0; return {k,p,net,mins,ph:perHour(net,mins)}; });
-  mk.filter(x=>x.net<0&&x.p.days>=2).forEach(x=>ideas.push({score:90,t:'Think about dropping '+x.p.name,d:'It lost '+c2(-x.net)+' over '+x.p.days+' days once fees, fuel, staff and stock are taken off.',lbl:'See the market',act:()=>{ repTab='places'; lsSet('rs.reptab','places'); go('reports'); }}));
-  mk.filter(x=>x.net>0&&x.ph!=null&&x.ph<tgt).forEach(x=>ideas.push({score:60,t:'Make '+x.p.name+' pay better',d:'It earns '+c2(x.ph)+' an hour of your time. A bigger range, a better spot or sharing the stall would lift it.',lbl:'See the market',act:()=>{ repTab='places'; lsSet('rs.reptab','places'); go('reports'); }}));
+  mk.filter(x=>x.net<0&&x.p.days>=2).forEach(x=>ideas.push({score:90,t:'Think about dropping '+x.p.name,d:'It lost '+c2(-x.net)+' over '+x.p.days+' days once fees, fuel, staff and stock are taken off.',lbl:'See the market',go:'reports:places',act:()=>{ repTab='places'; lsSet('rs.reptab','places'); go('reports'); }}));
+  mk.filter(x=>x.net>0&&x.ph!=null&&x.ph<tgt).forEach(x=>ideas.push({score:60,t:'Make '+x.p.name+' pay better',d:'It earns '+c2(x.ph)+' an hour of your time. A bigger range, a better spot or sharing the stall would lift it.',lbl:'See the market',go:'reports:places',act:()=>{ repTab='places'; lsSet('rs.reptab','places'); go('reports'); }}));
   const best=mk.filter(x=>x.ph!=null&&x.ph>=tgt).sort((a,b)=>b.ph-a.ph)[0];
-  if(best) ideas.push({score:70,t:'Book more days at '+best.p.name,d:'Your best market: '+c2(best.ph)+' an hour, '+c2(Math.round(best.net/best.p.days))+' a day.',lbl:'Open the calendar',act:()=>go('calendar')});
+  if(best) ideas.push({score:70,t:'Book more days at '+best.p.name,d:'Your best market: '+c2(best.ph)+' an hour, '+c2(Math.round(best.net/best.p.days))+' a day.',lbl:'Open the calendar',go:'calendar',act:()=>go('calendar')});
   const prods=Object.entries(R.byProduct).map(([pid,v])=>{ const p=S.products.find(x=>x.id===pid), u=p?unitCost(p):null, ex=v.total/1.15; return {p,v,u,ex,m:u!=null&&ex>0?1-u*v.qty/ex:null}; }).filter(x=>x.p);
-  prods.filter(x=>x.m!=null&&x.m<0.35&&x.v.qty>=3).sort((a,b)=>b.v.qty-a.v.qty).slice(0,3).forEach(x=>ideas.push({score:80,t:'Raise the price of '+prodName(x.p),d:'You keep only '+Math.round(x.m*100)+'% of each sale after its cost, and it sold '+x.v.qty+'.',lbl:'Change the price',act:()=>requirePin(()=>{ go('setup'); setTimeout(()=>editProduct(x.p,()=>render()),50); })}));
+  prods.filter(x=>x.m!=null&&x.m<0.35&&x.v.qty>=3).sort((a,b)=>b.v.qty-a.v.qty).slice(0,3).forEach(x=>ideas.push({score:80,t:'Raise the price of '+prodName(x.p),d:'You keep only '+Math.round(x.m*100)+'% of each sale after its cost, and it sold '+x.v.qty+'.',lbl:'Change the price',go:'setup:products',act:()=>requirePin(()=>{ go('setup'); setTimeout(()=>editProduct(x.p,()=>render()),50); })}));
   const star=prods.filter(x=>x.m!=null&&x.m>=0.6).sort((a,b)=>(b.ex-(b.u||0)*b.v.qty)-(a.ex-(a.u||0)*a.v.qty))[0];
-  if(star) ideas.push({score:55,t:'Make more '+prodName(star.p),d:'Your best earner: '+Math.round(star.m*100)+'% margin, '+star.v.qty+' sold.',lbl:'Plan a brew',act:()=>go('brew')});
+  if(star) ideas.push({score:55,t:'Make more '+prodName(star.p),d:'Your best earner: '+Math.round(star.m*100)+'% margin, '+star.v.qty+' sold.',lbl:'Plan a brew',go:'brew:next',act:()=>go('brew')});
   const so={}; S.sessions.filter(s=>s.date>=from&&s.date<=to&&s.checkin&&s.checkin.soldOut).forEach(s=>s.checkin.soldOut.forEach(id=>so[id]=(so[id]||0)+1));
-  Object.entries(so).filter(([,n])=>n>=2).forEach(([id,n])=>{ const p=S.products.find(x=>x.id===id); if(p) ideas.push({score:75,t:'Take more '+prodName(p)+' to markets',d:'It sold out '+n+' times: those were lost sales.',lbl:'Plan a brew',act:()=>go('brew')}); });
+  Object.entries(so).filter(([,n])=>n>=2).forEach(([id,n])=>{ const p=S.products.find(x=>x.id===id); if(p) ideas.push({score:75,t:'Take more '+prodName(p)+' to markets',d:'It sold out '+n+' times: those were lost sales.',lbl:'Plan a brew',go:'brew:next',act:()=>go('brew')}); });
   const since=dk(addDays(kd(nzDay()),-60)), sold60=new Set(S.sales.filter(s=>!s.voided&&s.date>=since).flatMap(s=>(s.lines||[]).map(l=>l.pid)));
   const idle=S.products.filter(p=>p.active!==false&&p.price>0&&!sold60.has(p.id)&&(p.created||0)<Date.now()-60*864e5);
-  if(idle.length&&S.sales.length>20) ideas.push({score:35,t:idle.length+' product'+(idle.length===1?' hasn\'t':'s haven\'t')+' sold in 2 months',d:idle.slice(0,4).map(prodName).join(', ')+(idle.length>4?'…':'')+'. Put them on special or stop making them.',lbl:'See the products',act:()=>requirePin(()=>{ go('setup'); setTimeout(()=>go('products'),30); })});
-  if(H.total>0&&R.net>0&&perHour(R.net,H.total)<tgt) ideas.push({score:50,t:'Your time is worth more than '+c2(perHour(R.net,H.total))+' an hour',d:'Look at which markets and products earn the least for the time they take (below).',lbl:'See the markets',act:()=>{ const el=$('#pfMk'); if(el) el.scrollIntoView({behavior:'smooth'}); }});
+  if(idle.length&&S.sales.length>20) ideas.push({score:35,t:idle.length+' product'+(idle.length===1?' hasn\'t':'s haven\'t')+' sold in 2 months',d:idle.slice(0,4).map(prodName).join(', ')+(idle.length>4?'…':'')+'. Put them on special or stop making them.',lbl:'See the products',go:'setup:products',act:()=>requirePin(()=>{ go('setup'); setTimeout(()=>go('products'),30); })});
+  if(H.total>0&&R.net>0&&perHour(R.net,H.total)<tgt) ideas.push({score:50,t:'Your time is worth more than '+c2(perHour(R.net,H.total))+' an hour',d:'Look at which markets and products earn the least for the time they take (below).',lbl:'See the markets',go:'profit',act:()=>{ const el=$('#pfMk'); if(el) el.scrollIntoView({behavior:'smooth'}); }});
   if(typeof stockIdeas==='function') stockIdeas().forEach(x=>ideas.push(x));
   return ideas.sort((a,b)=>b.score-a.score);
 }
@@ -110,3 +110,38 @@ SCREENS.profit={
       m.querySelector('#tgC').onclick=close; m.querySelector('#tgOk').onclick=()=>{ const v=toCents(m.querySelector('#tgV').value); if(!(v>0)){ toast('Type an amount, e.g. 25'); return; } S.settings.hourTarget=v; save(); close(); render(); }; });
   }
 };
+
+/* ================= Action plans everywhere: the home screen, and the summary emails =================
+   The same list as the Profit screen (owners), or just stock and orders (managers). The top five, then
+   "Show more ideas". Owners' copy is saved (owner-only) for the helper to put in the briefing and summaries,
+   each with a link that opens the app at the right place (#go=…). */
+function homeIdeas(){
+  if(tillLock()||!canManage()) return [];
+  if(role()!=='owner') return stockIdeas().sort((a,b)=>b.score-a.score);
+  const to=nzDay(), from=dk(addDays(kd(to),-60)), R=crunch(from,to,'all'), H=ownerHours(from,to), l=profitIdeas(from,to,R,H);
+  const g=profitGaps(from,to,R)[0]; if(g) l.push({score:40,t:g.t,d:g.d,lbl:g.fix,go:'profit',act:g.act});
+  return l.sort((a,b)=>b.score-a.score);
+}
+let homeIdeasList=[];
+function homeIdeasHtml(){ homeIdeasList=homeIdeas(); return homeIdeasList.length?ideasCard(homeIdeasList):''; }
+function wireHomeIdeas(){ if(homeIdeasList.length) wireActionIdeas(homeIdeasList); saveActionPlan(homeIdeasList); }
+// keep the owners' list for the emails (only when it changes, and at most every 10 minutes)
+function saveActionPlan(l){
+  if(role()!=='owner'||practice||missingCols.has('clock')) return;
+  const list=l.slice(0,8).map(x=>({t:x.t,d:x.d,go:x.go||'profit'})), key=JSON.stringify(list), c=clockList().find(x=>x.id==='actions');
+  if(c&&c.key===key) return; const titles=list.map(x=>x.t).join('|'); if(c&&c.titles===titles&&Date.now()-c.at<10*60e3) return;   // only the figures changed: not more than every 10 minutes
+  if(c) Object.assign(c,{list,key,titles,at:Date.now()}); else clockList().push({id:'actions',kind:'plan',list,key,titles,at:Date.now()}); save();
+}
+// open the app at a place: #go=profit, #go=brew:stock, #go=lists:shop, #go=setup:products …
+function runGo(g){
+  const [scr,tab]=String(g||'').split(':'), owner=role()==='owner';
+  if(tillLock()) return;
+  if(scr==='brew'){ if(tab){ brewTab=tab; lsSet('rs.brewtab',tab); } stack=['home','brew']; render(); return; }
+  if(scr==='lists'){ if(tab){ listTab=tab; lsSet('rs.listtab',tab); } stack=['home','lists']; render(); return; }
+  if(scr==='reports'&&owner){ if(tab){ repTab=tab; lsSet('rs.reptab',tab); } stack=['home','reports']; render(); return; }
+  if((scr==='profit'||scr==='clock')&&owner){ stack=['home',scr]; render(); return; }
+  if(scr==='calendar'||scr==='attention'){ stack=['home',scr]; render(); return; }
+  if(scr==='setup'&&canManage()){ requirePin(()=>{ stack=['home','setup']; if(tab&&SCREENS[tab]) stack.push(tab); render(); }); return; }
+}
+function deepLink(){ const m=location.hash.match(/^#go=([\w:-]+)/); if(!m) return; history.replaceState(null,'',location.pathname+location.search); setTimeout(()=>runGo(m[1]),600); }
+addEventListener('hashchange',()=>{ if(SYNC.businessId&&SYNC.businessId()) deepLink(); });
