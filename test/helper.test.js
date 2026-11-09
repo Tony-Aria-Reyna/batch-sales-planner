@@ -62,6 +62,7 @@ ok(np.some(p => p.stage === 'listening') && np.findIndex(p => p.stage === 'think
 ok(!calls[0].contents[0].parts.some(p => /Lessons/.test(p.text || '')) && calls[1].contents[0].parts[0].text.indexOf("'lav oil' means") > 0 && /Lip balm 15g/.test(calls[1].contents[0].parts[0].text), 'drafts are worked out with the products and the lessons learnt');
 const ready = np.find(p => p.status === 'ready');
 ok(ctx.cleanDraft({ kind: 'todo', task: 'Add a camera to the fuel tool' }).todo.text === 'Add a camera to the fuel tool' && ctx.cleanDraft({ kind: 'todo', todo: { title: 'Label jars' } }).todo.text === 'Label jars' && ctx.cleanDraft({ kind: 'idea', idea: { description: 'Rose balm' } }).idea.text === 'Rose balm', 'a to-do or idea is kept whatever the model calls the field (task, title, description)');
+ok(ctx.cleanDraft({ kind: 'help', help: { topic: 'price: Change a price' } }).help.topic === 'price' && ctx.kindsFor('helper').includes('help'), 'a how-to question becomes a help topic (helpers too)');
 ok(/todo \{text, who, due, time\}/.test(calls[1].contents[0].parts[0].text) && /never leave it empty/.test(calls[1].contents[0].parts[0].text), 'the instructions name every field (a to-do\'s text included)');
 ok(ready.drafts.map(d => d.kind).join(',') === 'shopping,question', 'a helper only gets their kinds (no calendar entry, no cost)');
 ok(calls[1].generationConfig.thinkingConfig.thinkingLevel === 'low', 'thinking is kept low for speed');

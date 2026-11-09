@@ -65,12 +65,13 @@ function searchAll(q){
 }
 function openSearch(){
   modal((m,close)=>{ let q='', hits=[];
-    const draw=()=>{ hits=searchAll(q); const groups=[...new Set(hits.map(h=>h.group))];
-      m.querySelector('#sR').innerHTML=!q.trim()?'<p class="note">Type part of a name or what you want to do, e.g. "stall fee", "lav oil", "Matakana", "add a helper".</p>'
+    const draw=()=>{ hits=searchAll(q); const groups=[...new Set(hits.map(h=>h.group))], hp=q.trim().length>2?helpMatch(q,HELP_ASK.test(q)):null;
+      m.querySelector('#sR').innerHTML=(hp?helpCard(hp):'')+(!q.trim()?'<p class="note">Type part of a name or what you want to do, e.g. "stall fee", "lav oil", "Matakana", "add a helper".</p>'
         :hits.length?groups.map(g=>{ const l=hits.filter(h=>h.group===g).slice(0,g==='Screens and settings'?5:8); return `<h3 style="margin:14px 0 4px">${esc(g)}</h3>`+l.map(h=>`<button class="frow" data-si="${hits.indexOf(h)}"><span class="grow"><b>${esc(h.title)}</b>${h.sub?`<small>${esc(h.sub)}</small>`:''}</span><span class="chev">›</span></button>`).join(''); }).join('')
-        :'<p class="note">Nothing found. Try fewer or different words.</p>';
+        :hp?'':'<p class="note">Nothing found. Try fewer or different words.</p>');
+      wireHelp(m,close);
       m.querySelectorAll('[data-si]').forEach(b=>b.onclick=()=>{ const h=hits[+b.dataset.si]; close(); h.open(); }); };
-    m.innerHTML=`<h2>🔍 Find anything</h2><input class="txt" id="sQ" type="search" placeholder="e.g. stall fee, lav oil, Matakana" autocomplete="off" enterkeyhint="search"><div class="findlist" id="sR"></div>
+    m.innerHTML=`<h2>🔍 Find anything</h2><input class="txt" id="sQ" type="search" placeholder="e.g. how do I change a price? · lav oil · Matakana" autocomplete="off" enterkeyhint="search"><div class="findlist" id="sR"></div>
       <div class="mact"><button class="btn alt" id="sC">Close</button></div>`;
     m.querySelector('#sQ').oninput=e=>{ q=e.target.value; draw(); };
     m.querySelector('#sC').onclick=close; draw();

@@ -165,9 +165,9 @@ function del(path) {
 // VOICE_MONTHLY_LIMIT (optional, notes a month, default 600). Nothing here is ever sent to the app.
 // Steps, each written to the note so the app can show them: 'listening' (writing down what was said),
 // 'thinking' (working out what to do, with the words already on screen), 'looking' (reading a photo), then ready.
-const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea', 'order', 'question', 'made', 'count', 'cost', 'fuel', 'contact', 'price', 'recipe'];
+const VOICE_KINDS = ['event', 'todo', 'shopping', 'idea', 'order', 'question', 'help', 'made', 'count', 'cost', 'fuel', 'contact', 'price', 'recipe'];
 // what each role may draft. Helpers: their own to-dos and shopping, questions, and stock news (sent to the owners to confirm).
-function kindsFor(role) { return role === 'helper' ? ['todo', 'shopping', 'question', 'made', 'count'] : role === 'manager' ? VOICE_KINDS.filter(k => k !== 'recipe') : VOICE_KINDS; }
+function kindsFor(role) { return role === 'helper' ? ['todo', 'shopping', 'question', 'help', 'made', 'count'] : role === 'manager' ? VOICE_KINDS.filter(k => k !== 'recipe') : VOICE_KINDS; }
 function prop(k, d) { return PropertiesService.getScriptProperties().getProperty(k) || d; }
 
 // the app calls this the moment a note is saved: { bid, id }. The note itself is read from the database,
@@ -259,6 +259,7 @@ function processNote(b, id) {
     const allowed = kindsFor(role), now = new Date(), todayK = today();
     const context = Object.assign({ today: todayK, weekday: Utilities.formatDate(now, 'Pacific/Auckland', 'EEEE'), time: Utilities.formatDate(now, 'Pacific/Auckland', 'HH:mm'),
       speaker: { email: note.by, role: role } }, businessSummary(b, role));
+    if (Array.isArray(note.helpTopics)) context.help_topics = note.helpTopics.slice(0, 80).map(x => str(x, 80));
     const lessons = String(st.aiLessons || '').slice(0, 3000);
     const instructions = [
       'You are the assistant for a small New Zealand natural-products business (balms, oils, teas) that sells at markets, from its farm shop, online and wholesale to shops.',
@@ -271,6 +272,7 @@ function processNote(b, id) {
       'idea {text, kind}: text is the idea in a few words; kind is idea, call (someone to call) or product (a product idea).',
       'order {customer, lines, due, note}: an order from a shop or customer. customer is their name (a place name if it matches). lines are {product, qty}, product copied exactly from products when it matches. due is the send-by date or "". Whenever there is an order, also add a todo to send it, due a day before the send-by date (or "" if none).',
       'question {ask, from, to, product, text}: they are asking something. ask is one of sales (takings), profit, whatson (calendar and to-dos), stock (how many of a product), other. from and to are the dates it covers (YYYY-MM-DD; "today" means both are today; "this week" is Monday to Sunday). product is copied exactly from products when about one product. text is the question in their words.',
+      'help {topic}: they ask how to do something in the app, or where to find something (e.g. "how do I change a price?", "where do I add a market?"). topic is the id of the best fit from help_topics (the part before the colon). Use help, not question, for how-to questions.',
       'made {product, qty}: products just made. product copied exactly from products, qty a number.',
       'count {lines}: a stock count. lines are {product, qty}.',
       'cost {what, cents, date, place}: money spent by the business (a stall fee, equipment, postage). what, cents (the amount in cents INCLUDING GST), date, place (exact name from markets_and_places or "").',
@@ -319,6 +321,7 @@ function cleanDraft(d) {
   if (d.kind === 'shopping') o.shopping = { item: str(x.item, 120), qty: Math.max(1, Math.min(999, Number(x.qty) || 1)), size: str(x.size, 40) };
   if (d.kind === 'order') o.order = { customer: str(x.customer, 80), due: date(x.due), note: str(x.note, 500), lines: lines(x.lines, 'product').map(l => Object.assign(l, { qty: Math.max(1, l.qty) })) };
   if (d.kind === 'idea') o.idea = { text: str(x.text), kind: ['idea', 'call', 'product'].indexOf(x.kind) >= 0 ? x.kind : 'idea' };
+  if (d.kind === 'help') o.help = { topic: str(pick('topic', 'id'), 40).split(':')[0].trim() };
   if (d.kind === 'question') o.question = { ask: ['sales', 'profit', 'whatson', 'stock', 'other'].indexOf(x.ask) >= 0 ? x.ask : 'other', from: date(x.from), to: date(x.to), product: str(x.product, 120), text: str(x.text, 300) };
   if (d.kind === 'made') o.made = { product: str(x.product, 120), qty: num(x.qty, 9999) };
   if (d.kind === 'count') o.count = { lines: lines(x.lines, 'product') };

@@ -66,7 +66,8 @@ function typedNote(opts={}){
 }
 function typedText(t,opts={}){
   const cmd=commandOf(t); if(cmd&&opts.parentApi){ opts.parentApi.command(cmd); return; }
-  const q=!opts.parentApi&&localQuestion(t); if(q){ showAnswer(t,answerQuestion(q)); return; }
+  if(!opts.parentApi&&HELP_ASK.test(t)){ const h=helpMatch(t,true); if(h){ showHelp(h,t); return; } if(!voiceReady()){ toast('I couldn\'t find that one. Try 🔍 Find anything on the home screen.'); return; } }
+  const q=!opts.parentApi&&localQuestion(t); if(q){ showAnswer(t,answerQuestion(q),answerLink(q)); return; }
   sendNote({text:t.slice(0,2000)},opts);
 }
 // a photo (fuel pump, invoice, receipt, recipe card, handwritten list, sign-up sheet): made small on the device first
@@ -100,7 +101,7 @@ function sendNote(n,opts={}){
   const id=SYNC.newId('voicenotes'), at=Date.now(), pieces=[], media=n.audio||n.image||'';
   for(let i=0;i*CHUNK<media.length;i++) pieces.push(media.slice(i*CHUNK,(i+1)*CHUNK));
   pieces.forEach((d,i)=>S.voicenotes.push({id:id+'-'+i,kind:'chunk',note:id,i,data:d,by:SYNC.me(),at}));
-  S.voicenotes.push(Object.assign({id,kind:'note',by:SYNC.me(),at,status:'new',mime:n.mime||'',secs:n.secs||0,chunks:pieces.length,text:n.text||'',drive:!!opts.drive},
+  S.voicenotes.push(Object.assign({id,kind:'note',by:SYNC.me(),at,status:'new',mime:n.mime||'',secs:n.secs||0,chunks:pieces.length,text:n.text||'',drive:!!opts.drive,helpTopics:helpFor().map(h=>h.id+': '+h.t)},
     opts.prev?{prev:opts.prev,parent:opts.parent||''}:{}));
   save(); pingHelper(id);
   waitForNote(id,opts);
@@ -198,10 +199,19 @@ function answerQuestion(q){
     const st=stockOf(p.id); return st?`${prodName(p)}: ${st.total} in stock (${st.home} at home${st.out?', '+st.out+' out with you':''}).`:`${prodName(p)}: stock isn't counted yet. Count it under Brew → Stock.`; }
   return 'I can\'t answer that one yet. I can tell you sales, profit, what\'s on, and how many of a product you have.';
 }
-function showAnswer(question,answer){
+// where to look behind an answer: a link to the screen it came from
+function answerLink(q){
+  if(q.ask==='sales') return canManage()?(role()==='owner'?{t:'📈 Open Reports',go:()=>go('reports')}:{t:'💰 Open the till',go:()=>go('sell')}):null;
+  if(q.ask==='profit') return role()==='owner'?{t:'📈 Open Reports',go:()=>go('reports')}:null;
+  if(q.ask==='whatson') return {t:'📅 Open the calendar',go:()=>{ if(q.from){ calSel=q.from; calMonth=null; } go('calendar'); }};
+  if(q.ask==='stock') return {t:'📦 Open Stock',go:()=>{ brewTab='stock'; go('brew'); }};
+  return null;
+}
+function showAnswer(question,answer,link){
   say(answer);
-  modal((m,close)=>{ m.innerHTML=`<h2>💬 ${esc(question)}</h2><p class="answer">${esc(answer)}</p><div class="mact"><button class="btn alt" id="aAgain">🔊 Read it again</button><button class="btn" id="aOk">OK</button></div>`;
-    m.querySelector('#aAgain').onclick=()=>say(answer); m.querySelector('#aOk').onclick=()=>{ hush(); close(); }; });
+  modal((m,close)=>{ m.innerHTML=`<h2>💬 ${esc(question)}</h2><p class="answer">${esc(answer)}</p><div class="mact"><button class="btn alt" id="aAgain">🔊 Read it again</button>${link?`<button class="btn alt" id="aGo">${esc(link.t)} ›</button>`:''}<button class="btn" id="aOk">OK</button></div>`;
+    m.querySelector('#aAgain').onclick=()=>say(answer); m.querySelector('#aOk').onclick=()=>{ hush(); close(); };
+    const ag=m.querySelector('#aGo'); if(ag) ag.onclick=()=>{ hush(); close(); link.go(); }; });
 }
 function assistantHelp(){
   modal((m,close)=>{ m.innerHTML=`<h2>❓ Using the assistant</h2>
@@ -255,7 +265,7 @@ function clashOf(e){
   return hit?`You already have ${hit.title} that day${hit.time?' at '+t12(hit.time):''}.`:'';
 }
 function reviewNote(n,opts={}){
-  const drafts=(n.drafts||[]).map(d=>JSON.parse(JSON.stringify(d))), state=drafts.map(d=>d.kind==='question'?'answered':draftAllowed(d)?'open':'blocked');
+  const drafts=(n.drafts||[]).map(d=>JSON.parse(JSON.stringify(d))).filter(d=>d.kind!=='help'||HELP_GUIDE.some(h=>h.id===(d.help||{}).topic)), state=drafts.map(d=>d.kind==='question'||d.kind==='help'?'answered':draftAllowed(d)?'open':'blocked');
   const answers=drafts.map(d=>d.kind==='question'?answerQuestion(d.question):'');
   const settle=status=>{ const x=S.voicenotes.find(y=>y.id===n.id); if(!x) return; x.status=status; x.settledAt=Date.now();
     // what was changed before saving: kept so the assistant can learn from it (never costs, prices or recipes)
@@ -271,7 +281,8 @@ function reviewNote(n,opts={}){
     const placeSel=(d,i,k,label,filter)=>`<label class="note" for="d${i}${k}">${label}</label><select class="txt ${(d.unsure||[]).includes(k)?'unsure':''}" id="d${i}${k}" data-di="${i}" data-dk="${k}"><option value="">${k==='place'&&d.kind==='cost'?'The whole business':'Not one of the saved places'}</option>${S.places.filter(p=>!p.gone&&(!filter||filter(p))).map(p=>`<option ${p.name===d[d.kind][k]?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`;
     const card=(d,i)=>{ const blocked=state[i]==='blocked', done=state[i]!=='open';
       let body='';
-      if(d.kind==='question') return `<div class="card draft answer"><h3>💬 ${esc(draftLine(d))}</h3><p class="answer">${esc(answers[i])}</p></div>`;
+      if(d.kind==='help') return helpCard(HELP_GUIDE.find(h=>h.id===d.help.topic));
+      if(d.kind==='question'){ const lk=answerLink(d.question); return `<div class="card draft answer"><h3>💬 ${esc(draftLine(d))}</h3><p class="answer">${esc(answers[i])}</p>${lk?`<button class="btn alt" data-alink="${i}">${esc(lk.t)} ›</button>`:''}</div>`; }
       if(d.kind==='event') body=`<div class="bigseg">${Object.entries(CAL_TYPES).map(([k,v])=>`<button data-ety="${i}:${k}" class="${d.event.type===k?'on':''}">${v.ic} ${v.t}</button>`).join('')}</div>`+field(d,i,'title','What')
         +`<div class="formrow"><div>${field(d,i,'date','Date','date')}</div><div>${field(d,i,'days','Days','number','min="1" max="7"')}</div></div><div class="formrow"><div>${field(d,i,'time','Starts','time')}</div><div>${field(d,i,'end','Finishes','time')}</div></div>`
         +(d.event.type==='market'?placeSel(d,i,'place','Market'):'')+`<p class="note clash" id="d${i}clash">${esc(clashOf(d.event))}</p>`;
@@ -308,6 +319,8 @@ function reviewNote(n,opts={}){
       m.querySelectorAll('[data-drop]').forEach(b=>b.onclick=()=>{ state[+b.dataset.drop]='dropped'; draw(); });
       m.querySelectorAll('[data-save1]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.save1, why=saveDraft(drafts[i]); if(why){ toast(why); return; } state[i]='saved'; save(); draw(); });
       m.querySelector('#rAgain').onclick=speakAll;
+      wireHelp(m,()=>{ settle(state.includes('saved')?'done':'discarded'); hush(); close(); });
+      m.querySelectorAll('[data-alink]').forEach(b=>b.onclick=()=>{ const lk=answerLink(drafts[+b.dataset.alink].question); settle(state.includes('saved')?'done':'discarded'); hush(); close(); lk.go(); });
       const yes=m.querySelector('#rYes'); if(yes) yes.onclick=api.confirm;
       const no=m.querySelector('#rNo'); if(no) no.onclick=api.cancel;
       const lt=m.querySelector('#rLater'); if(lt) lt.onclick=api.later;
