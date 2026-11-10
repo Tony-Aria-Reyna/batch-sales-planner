@@ -493,6 +493,31 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#oConf'); await page.waitForTimeout(40);
   ok(await page.evaluate(() => S.orders.find(x => x.id === 'email-abc').status === 'new') && await oil() === before - 5, 'Confirm makes it a normal order, with stock untouched until packed');
   await page.click('#oC');
+  // shops: a consignment shop (drop off, a stock count, owed, paid), wholesale terms, and a friend's product sold here
+  await page.evaluate(() => { S.places.push({ id: 'shopC', name: 'Gift Barn', group: 'shops', channel: 'wholesale', mode: 'consign', commission: 30, terms: 14, km: 50, address: '', float: 0 });
+    S.places.push({ id: 'shopW', name: 'Herb Store', group: 'shops', channel: 'wholesale', mode: 'buy', terms: 7, km: 0, address: '', float: 0 });
+    S.orders.push({ id: 'oldW', source: 'wholesale', status: 'sent', paid: false, at: Date.now() - 12 * 864e5, date: dk(addDays(kd(nzDay()), -12)), sentAt: Date.now() - 12 * 864e5, by: SYNC.me(), place: 'shopW', customer: { name: 'Herb Store' }, lines: [{ pid: '', name: 'x', qty: 1, unit: 1000 }], discount: 0, shipping: 0, total: 1000, gst: 130 });
+    save(); orderTab = 'shops'; render(); });
+  await page.waitForSelector('[data-cdrop="shopC"]');
+  const oil0 = await oil();
+  await page.click('[data-cdrop="shopC"]'); await page.waitForSelector('[data-cq]');
+  await page.fill(`[data-cq="${await page.evaluate(() => S.products.find(x => x.name === 'Test Oil').id)}"]`, '5'); await page.click('#cmOk'); await page.waitForTimeout(80);
+  ok(await oil() === oil0 - 5 && await page.evaluate(() => Object.values(atShop('shopC'))[0] === 5 && S.costs.some(c => c.kind === 'trip' && c.place === 'shopC')), 'Drop off: 5 leave home stock and show at the shop, with the drive counted');
+  await page.click('[data-csold="shopC"]'); await page.waitForSelector('[data-cm="left"]'); await page.click('[data-cm="left"]'); await page.fill('[data-cs]', '3'); await page.waitForTimeout(40);
+  ok(/2 sold/.test(await page.textContent('#csSum')), 'a stock count of 3 left means 2 sold');
+  await page.click('#csOk'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const o = S.orders.find(x => x.source === 'consign' && x.place === 'shopC'); const p = S.products.find(x => x.name === 'Test Oil'); return o && o.lines[0].qty === 2 && o.discount === Math.round(2 * p.price * 0.3) && owedBy('shopC') === o.total && atShop('shopC')[p.id] === 3; }) && await oil() === oil0 - 5, 'their sales become an order less 30% commission, owed to her; stock isn\'t taken twice');
+  await page.click('[data-cpaid="shopC"]'); await page.click('#cY'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => owedBy('shopC') === 0), '"They paid" settles it');
+  ok(await page.evaluate(() => overdueOrders().some(o => o.id === 'oldW') && orderIdeas().some(i => /past the shop's terms/.test(i.t))), 'an unpaid order past a shop\'s 7-day terms goes on What to do next');
+  ok(await page.evaluate(() => { const R = crunch(dk(addDays(kd(nzDay()), -1)), nzDay(), 'all'); const P = R.byPlace.shopC; return P && P.total > 0 && P.days >= 1 && P.mileage === Math.round(50 * R.vc.perKm); }), 'Real profit counts the shop like a market (takings and the drive)');
+  await page.evaluate(() => { const p = { id: 'friendSoap', name: 'Friend Soap', size: '', price: 2000, colour: 'other', active: true, consignFrom: 'Christine', consignKeep: 25 }; S.products.push(p);
+    S.sales.push({ id: 'sfriend', sessionId: 'x', channel: 'farmgate', where: '', date: nzDay(), at: Date.now(), lines: [{ pid: 'friendSoap', name: 'Friend Soap', qty: 1, unit: 2000, amount: 2000 }], total: 2000, gst: 261, method: 'cash', by: SYNC.me(), voided: false }); save(); render(); });
+  ok(await page.evaluate(() => { const x = othersOwed().find(y => y.who === 'Christine'); return x && x.owe === 1500 && costAt('friendSoap', Date.now()) === 1500; }) && /Christine/.test(await text(page)), 'a friend\'s product: she keeps 25%, owes Christine $15 of a $20 sale');
+  await page.locator('[data-opaid="Christine"]').click(); await page.click('#cY'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => othersOwed().find(y => y.who === 'Christine').owe === 0), '"Paid them" starts the count again');
+  await page.screenshot({ path: path.join(shots, '35-shops.png') });
+  await page.evaluate(() => { const i = S.products.findIndex(x => x.id === 'friendSoap'); S.products.splice(i, 1); const j = S.sales.findIndex(x => x.id === 'sfriend'); S.sales.splice(j, 1); orderTab = 'open'; save(); render(); });
   // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
   await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });
   await page.waitForSelector('[data-pay="afterpay"]');

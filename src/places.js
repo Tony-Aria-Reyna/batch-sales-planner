@@ -62,9 +62,18 @@ function editPlace(src,done){
       <div class="formrow"><div><label class="note" for="pFee">Usual stall fee ($)</label><input class="txt" id="pFee" inputmode="decimal" value="${f&&f.cents?(f.cents/100).toFixed(2):''}" placeholder="optional"></div>
         <div><label class="note" for="pFd">The fee covers</label><select class="txt" id="pFd">${[1,2,3,4,5,6,7].map(n=>`<option value="${n}" ${(f&&f.days||1)===n?'selected':''}>${n} day${n>1?'s':''}</option>`).join('')}</select></div></div>
       <p class="note">A fee covering several days is shared across the days you sell there. Fees are only seen by owners and managers.</p>
+      <div id="pShop" style="${p.channel==='wholesale'?'':'display:none'}"><h3>For a shop</h3>
+        <div class="bigseg"><button data-pm="buy" class="${p.mode!=='consign'?'on':''}">🚚 They buy (wholesale)</button><button data-pm="consign" class="${p.mode==='consign'?'on':''}">🤝 Consignment (sale or return)</button></div>
+        <div class="formrow"><div><label class="note" for="pTerm">Pays within (days)</label><input class="txt" id="pTerm" inputmode="numeric" value="${p.terms||''}" placeholder="e.g. 14"></div>
+          <div id="pComW" style="${p.mode==='consign'?'':'display:none'}"><label class="note" for="pCom">Their commission (%)</label><input class="txt" id="pCom" inputmode="decimal" value="${p.commission||''}" placeholder="e.g. 30"></div></div>
+        <div id="pShelfW" style="${p.mode==='consign'?'':'display:none'}"><label class="note" for="pShelf">They sell it at</label><select class="txt" id="pShelf"><option value="retail" ${p.shelf!=='wholesale'?'selected':''}>Your retail price</option><option value="wholesale" ${p.shelf==='wholesale'?'selected':''}>Your wholesale price</option></select></div>
+        <label class="note" for="pE">Their email (optional, for orders)</label><input class="txt" id="pE" type="email" autocapitalize="none" value="${esc(p.email||'')}"></div>
       <label class="note" for="pNo">Notes (optional)</label><textarea class="txt" id="pNo" rows="2" placeholder="e.g. pay the market manager in cash on the day">${esc(p.note||'')}</textarea>
       <div class="mact">${isNew?'':'<button class="btn danger" id="pDel">Remove…</button>'}<button class="btn alt" id="pC">Cancel</button><button class="btn" id="pOk">Save</button></div>`;
     m.querySelector('#pC').onclick=close;
+    let mode=p.mode==='consign'?'consign':'buy';
+    m.querySelector('#pG').onchange=()=>{ const g=placeGroups().find(x=>x.id===m.querySelector('#pG').value); m.querySelector('#pShop').style.display=g&&g.channel==='wholesale'?'':'none'; };
+    m.querySelectorAll('[data-pm]').forEach(b=>b.onclick=()=>{ mode=b.dataset.pm; m.querySelectorAll('[data-pm]').forEach(x=>x.classList.toggle('on',x===b)); m.querySelector('#pComW').style.display=m.querySelector('#pShelfW').style.display=mode==='consign'?'':'none'; });
     const del=m.querySelector('#pDel'); if(del) del.onclick=()=>confirmBox('Remove '+p.name+'?','It disappears from the lists. Past sales and calendar entries keep its name.','Remove',()=>{ const x=S.places.find(y=>y.id===p.id); if(x){ x.gone=true; save(); } close(); done&&done(); },true);
     m.querySelector('#pOk').onclick=()=>{
       const name=m.querySelector('#pN').value.trim(); if(!name){ toast('Type the name'); return; }
@@ -74,6 +83,9 @@ function editPlace(src,done){
       const g=placeGroups().find(x=>x.id===m.querySelector('#pG').value)||BASE_GROUPS[0];
       const addr=m.querySelector('#pA').value.trim().slice(0,200);
       if(km!==(+src.km||0)) p.kmAuto=false; if(addr!==(src.address||'')){ delete p.route; delete p.lat; delete p.lng; if(p.kmAuto!==false) p.kmAuto=true; }
+      const tT=m.querySelector('#pTerm').value.trim(), terms=tT?Math.round(+tT):0; if(tT&&!(terms>=0&&terms<366)){ toast('Type the days to pay, e.g. 14'); return; }
+      const cT=m.querySelector('#pCom').value.trim(), com=cT?+cT.replace('%',''):0; if(cT&&!(com>=0&&com<=90)){ toast('Type the commission as a percentage, e.g. 30'); return; }
+      if(g.channel==='wholesale') Object.assign(p,{mode,terms,commission:mode==='consign'?com:0,shelf:m.querySelector('#pShelf').value,email:m.querySelector('#pE').value.trim().slice(0,120)});
       Object.assign(p,{name:name.slice(0,80),group:g.id,channel:g.channel,address:addr,km:km||0,float:fl||0,note:m.querySelector('#pNo').value.trim().slice(0,500)});
       if(isNew){ p.id=SYNC.newId('places'); S.places.push(p); } else { const x=S.places.find(y=>y.id===p.id); if(x){ ['route','lat','lng'].forEach(k=>{ if(!(k in p)) delete x[k]; }); Object.assign(x,p); } }
       const fid='fee-'+p.id, fx=S.costs.find(c=>c.id===fid), days=+m.querySelector('#pFd').value||1;

@@ -30,11 +30,12 @@ function saleWhere(s){
   const group=pl?pl.group:(TYPE_GROUP[s.channel]||s.channel||'other');
   return {group,place:pl?pl.id:'',placeName:pl?pl.name:(s.where||ses.name||''),session:ses};
 }
-function orderWhere(o){ const pl=S.places.find(p=>p.id===o.place); return {group:o.source==='shopify'?'online':o.source==='wholesale'?(pl?pl.group:'shops'):'custom',place:pl?pl.id:'',placeName:pl?pl.name:((o.customer||{}).name||'')}; }
+function orderWhere(o){ const pl=S.places.find(p=>p.id===o.place); return {group:o.source==='shopify'?'online':o.source==='wholesale'||o.source==='consign'?(pl?pl.group:'shops'):'custom',place:pl?pl.id:'',placeName:pl?pl.name:((o.customer||{}).name||'')}; }
 const groupName=g=>{ const x=(typeof placeGroups==='function'?placeGroups():[]).find(y=>y.id===g); return x?x.name:{tours:'Garden tours',custom:'Custom orders',other:'Other'}[g]||g; };
 const groupChannel=g=>{ const x=(typeof placeGroups==='function'?placeGroups():[]).find(y=>y.id===g); return x?x.channel:'retail'; };
 // the cost of one unit when it was sold: the most recent batch made before the sale, else today's recipe cost
 function costAt(pid,at){
+  const cp=S.products.find(x=>x.id===pid); if(cp&&cp.consignFrom) return Math.round((cp.price||0)*(100-(+cp.consignKeep||0))/100);   // someone else's product: what's passed on to them
   const b=S.batches.filter(x=>x.status==='made'&&x.unitCost&&x.unitCost[pid]!=null&&(x.madeAt||x.at)<=at).sort((a,c)=>(c.madeAt||c.at)-(a.madeAt||a.at))[0];
   if(b) return b.unitCost[pid]; const p=S.products.find(x=>x.id===pid); const u=p?unitCost(p):null; return u==null?null:Math.round(u);
 }
@@ -73,6 +74,8 @@ function crunch(from,to,chan){
     const staff=names.reduce((n,nm)=>{ const r=pay.find(p=>(p.name||'').toLowerCase()===nm.toLowerCase()), rec=(S.clock||[]).find(c=>c.kind==='helper'&&c.session===ses.id&&(c.who||'').toLowerCase()===nm.toLowerCase()); return n+(r?(r.day?r.day:Math.round((r.hourly||0)*(rec?rec.mins/60:hours))):0); },0);
     R.fees+=feeEx; R.mileage+=mil; R.staff+=staff; R.days.add(ses.date);
     const p=w.placeName&&R.byPlace[w.place||w.placeName]; if(p){ p.fees+=feeEx; p.mileage+=mil; p.staff+=staff; p.days++; } }
+  for(const c of S.costs){ if(c.kind!=='trip'||!inRange(c.date||'')) continue; const pl=S.places.find(p=>p.id===c.place); if(!pl) continue; const w={group:pl.group,place:pl.id,placeName:pl.name}; if(!keep(w)) continue;
+    const mil=Math.round((+c.km||0)*vc.perKm); R.mileage+=mil; const p=R.byPlace[pl.id]||(R.byPlace[pl.id]={name:pl.name,group:pl.group,total:0,ex:0,cogs:0,fees:0,mileage:0,staff:0,days:0}); p.mileage+=mil; p.days++; }
   for(const c of S.costs){ if(c.kind==='other'&&inRange(c.date||'')&&(chan==='all'||c.place===chan.slice(2))) R.otherCosts+=Math.round((c.cents||0)/(c.gst===false?1:1.15)); }
   R.ex=R.revenue-R.gst; R.gross=R.ex-R.cogs; R.net=R.gross-R.fees-R.mileage-R.staff-R.otherCosts; R.vc=vc;
   return R;

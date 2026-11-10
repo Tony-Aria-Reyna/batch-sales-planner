@@ -6,7 +6,7 @@
    sent, if nobody packed it in the app). The send-by date shows on the Calendar.
    Prices: retail prices include GST, as on the till; a product's wholesale price is also kept GST-inclusive,
    and shown ex GST where that's what shops expect. */
-const ORDER_SOURCES={shopify:'🛍️ Shopify',wholesale:'🚚 Wholesale',custom:'✍️ Custom'};
+const ORDER_SOURCES={shopify:'🛍️ Shopify',wholesale:'🚚 Wholesale',custom:'✍️ Custom',consign:'🤝 Consignment'};
 const ORDER_STATUS={check:'📥 Check it',new:'New',packed:'Packed',sent:'Sent',cancelled:'Cancelled'};
 let orderTab=lsGet('rs.ordertab','open');
 const orderUnits=o=>(o.lines||[]).reduce((n,l)=>n+(+l.qty||0),0);
@@ -19,7 +19,8 @@ SCREENS.orders={
   title:()=>({h:'Orders',s:'Wholesale, custom and Shopify'}),
   html(){
     if(missingCols.has('orders')) return rulesNotice();
-    const tabs=[['open','To do ('+openOrders().length+')'],['sent','Sent'],['all','All']];
+    const tabs=[['open','To do ('+openOrders().length+')'],['sent','Sent'],['all','All'],['shops','🏪 Shops'+(overdueOrders().length?' ⚠️':'')]];
+    if(orderTab==='shops') return `<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${orderTab===k?'on':''}" data-ot="${k}">${v}</button>`).join('')}</div>${shopsHtml()}`;
     let l=orderTab==='open'?openOrders():orderTab==='sent'?S.orders.filter(o=>o.status==='sent'):S.orders.slice();
     l=l.sort((a,b)=>orderTab==='open'?((a.due||'9')+a.at).localeCompare((b.due||'9')+b.at):(b.at||0)-(a.at||0)).slice(0,100);
     const sh=S.settings.shopifyShop, st=S.shopifyHelper;
@@ -28,10 +29,11 @@ SCREENS.orders={
         <p class="note">${sh?`🛍️ Shopify (${esc(sh)}): ${st&&st.lastRun?'checked '+agoText(st.lastRun)+(st.error?' · ⚠️ '+esc(st.error):''):'waiting for the business helper to be set up'}`:'Shopify isn\'t connected yet (Setup → Shopify).'}</p></div>
       <div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${orderTab===k?'on':''}" data-ot="${k}">${v}</button>`).join('')}</div>
       <div class="card">${l.length?l.map(o=>`<button class="orow" data-ord="${o.id}"><span class="grow"><b>${esc(o.customer&&o.customer.name||'Customer')}${o.shopify?' · '+esc(o.shopify.name||''):''}</b>
-          <small>${o.fromEmail?'📥 From email · ':''}${ORDER_SOURCES[o.source]||''} · ${orderUnits(o)} item${orderUnits(o)===1?'':'s'} · ${c2(orderTotal(o))}${o.paid?' · paid':' · not paid'} · ${esc(dueLabel(o))}</small></span>
+          <small>${o.fromEmail?'📥 From email · ':''}${ORDER_SOURCES[o.source]||''} · ${orderUnits(o)} item${orderUnits(o)===1?'':'s'} · ${c2(orderTotal(o))}${o.paid?' · paid':payDue(o)?(payDue(o)<nzDay()?' · ⚠️ payment overdue':' · payment due '+nzDate(kd(payDue(o)),{day:'numeric',month:'short'})):' · not paid'} · ${esc(dueLabel(o))}</small></span>
           <span class="ost ${o.status}">${ORDER_STATUS[o.status]||o.status}</span></button>`).join(''):'<p class="note">No orders here.</p>'}</div>`;
   },
   wire(){
+    if(orderTab==='shops'){ document.querySelectorAll('[data-ot]').forEach(b=>b.onclick=()=>{ orderTab=b.dataset.ot; lsSet('rs.ordertab',orderTab); render(); }); wireShops(); return; }
     if(!$('#oNew')) return;
     $('#oNew').onclick=()=>editOrder({});
     document.querySelectorAll('[data-ot]').forEach(b=>b.onclick=()=>{ orderTab=b.dataset.ot; lsSet('rs.ordertab',orderTab); render(); });
@@ -49,13 +51,13 @@ function openOrder(o){
       <p>${[c.email,c.phone,c.address].filter(Boolean).map(esc).join('<br>')}</p>
       ${o.status==='check'&&o.fromEmail?`<div class="card nudge"><b>📥 From email: check it</b><small>${esc(o.fromEmail.from||'')}${o.fromEmail.subject?' · “'+esc(o.fromEmail.subject)+'”':''}${o.fromEmail.ref?' · their ref '+esc(o.fromEmail.ref):''}</small>
         <small>The assistant read this from the email. Check the products and quantities against it, then Confirm.</small>${o.fromEmail.link?`<p><a class="linkb" href="${esc(o.fromEmail.link)}" target="_blank" rel="noopener">✉️ Open the email</a></p>`:''}</div>`:''}
-      <p><b>${ORDER_STATUS[o.status]}</b> · ${esc(dueLabel(o))} · ${o.paid?'paid':'not paid'}</p>
+      <p><b>${ORDER_STATUS[o.status]}</b> · ${esc(dueLabel(o))} · ${o.paid?'paid':payDue(o)?(payDue(o)<nzDay()?'⚠️ payment was due ':'payment due ')+nzDate(kd(payDue(o)),{weekday:'short',day:'numeric',month:'short'})+' ('+termsOf(o)+'-day terms)':'not paid'}</p>
       <div class="card packslip">${(o.lines||[]).map((l,i)=>`<div class="lrow"><b class="pqty">${l.qty} ×</b><div class="grow ltxt"><b>${esc(l.name)}</b><small>${c2(l.unit)} each${l.pid?'':' · not linked to a till product'}</small></div>${!l.pid&&o.status!=='sent'?`<button class="btn small alt" data-linkl="${i}">Link</button>`:''}</div>`).join('')}
         <p class="note">${o.discount?'Discount −'+c2(o.discount)+' · ':''}${o.shipping?'Shipping '+c2(o.shipping)+' · ':''}<b>Total ${c2(orderTotal(o))}</b> incl. GST ${c2(Math.round(orderTotal(o)*3/23))}</p></div>
       ${o.note?`<p class="note">📝 ${esc(o.note)}</p>`:''}
       ${unmatched.length&&o.status!=='sent'?'<p class="note">Link each line to a till product so stock comes off when it\'s packed.</p>':''}
       ${o.status==='check'?`<button class="btn bigyes" id="oConf">✅ Confirm order</button>`:''}
-      <div class="mact">${o.source!=='shopify'?'<button class="btn alt" id="oEd">Change</button>':''}${o.status!=='cancelled'?'<button class="btn alt" id="oSlip">🖨️ Packing slip</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
+      <div class="mact">${o.source!=='shopify'&&o.source!=='consign'?'<button class="btn alt" id="oEd">Change</button>':''}${o.status!=='cancelled'?'<button class="btn alt" id="oSlip">🖨️ Packing slip</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
         ${o.status==='new'?'<button class="btn" id="oPack">📦 Packed</button>':''}${o.status==='packed'?'<button class="btn" id="oSend">🚚 Sent</button>':''}
         ${o.status!=='cancelled'&&o.status!=='sent'?`<button class="btn danger" id="oX">${o.status==='check'?'Not an order':'Cancel order'}</button>`:''}<button class="btn alt" id="oC">Close</button></div>`;
     const set=ch=>{ Object.assign(o,ch,{changed:Date.now(),changedBy:SYNC.me()}); orderStock(o); save(); draw(); render(); };
@@ -153,6 +155,7 @@ function orderIdeas(){
   if(e.length) l.push({score:93,t:'📥 '+e.length+' order email'+(e.length===1?'':'s')+' to check',d:e.map(o=>(o.customer&&o.customer.name)||'Customer').slice(0,3).join(', ')+'. Check and confirm so it can be packed.',lbl:'Check',go:'orders',act:()=>openOrder(e[0])});
   const late=todo.filter(o=>o.due&&o.due<=t), rest=todo.filter(o=>!(o.due&&o.due<=t));
   if(late.length) l.push({score:90,t:'📦 '+late.length+' order'+(late.length===1?'':'s')+' to pack '+(late.some(o=>o.due<t)?'(late)':'today'),d:late.map(o=>(o.customer&&o.customer.name)||'Customer').slice(0,3).join(', '),lbl:'Pack',go:'orders',act:()=>openOrder(late[0])});
+  const od=overdueOrders(); if(od.length) l.push({score:80,t:'💰 '+od.length+' unpaid order'+(od.length===1?'':'s')+' past the shop\'s terms',d:od.slice(0,3).map(o=>((o.customer&&o.customer.name)||'Customer')+' '+c2(o.total!=null?o.total:orderTotal(o))).join(', '),lbl:'Open',go:'orders',act:()=>openOrder(od[0])});
   if(rest.length) l.push({score:55,t:'📦 '+rest.length+' order'+(rest.length===1?'':'s')+' not packed yet',d:rest.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).slice(0,3).map(o=>((o.customer&&o.customer.name)||'Customer')+' · '+dueLabel(o)).join(', '),lbl:'Open',go:'orders',act:()=>go('orders')});
   return l;
 }

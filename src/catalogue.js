@@ -73,24 +73,31 @@ function editProduct(p,done){
   const isNew=!p; p=p||{name:'',size:'',price:0,colour:'',active:true};
   const wasOff=!isNew&&p.active===false;
   modal((m,close)=>{ let col=p.colour||'';
-    const draw=()=>{ const n=m.querySelector('#eN'),z=m.querySelector('#eZ'),pr=m.querySelector('#eP'); const ww=m.querySelector('#eW'); const nw=m.querySelector('#eNW'); const keep=n?{n:n.value,z:z.value,p:pr.value,w:ww?ww.value:'',nw:nw?nw.checked:false}:{n:p.name,z:p.size||'',p:p.price?(p.price/100).toFixed(2):'',w:p.wholesale?(p.wholesale/100).toFixed(2):'',nw:!!p.noWholesale};
+    const draw=()=>{ const n=m.querySelector('#eN'),z=m.querySelector('#eZ'),pr=m.querySelector('#eP'); const ww=m.querySelector('#eW'); const nw=m.querySelector('#eNW'); const cf=m.querySelector('#eCF'); const keep=n?{n:n.value,z:z.value,p:pr.value,w:ww?ww.value:'',nw:nw?nw.checked:false,cf:cf.checked,cfn:m.querySelector('#eCFn').value,cfk:m.querySelector('#eCFk').value}:{n:p.name,z:p.size||'',p:p.price?(p.price/100).toFixed(2):'',w:p.wholesale?(p.wholesale/100).toFixed(2):'',nw:!!p.noWholesale,cf:!!p.consignFrom,cfn:p.consignFrom||'',cfk:p.consignKeep!=null?String(p.consignKeep):''};
       m.innerHTML=`<h2>${isNew?'Add a product':'Edit product'}</h2>
         <label class="note">Name</label><input class="txt" id="eN" value="${esc(keep.n)}" autocapitalize="words">
         <label class="note">Size (e.g. 50ml, 30g, Balm, Gift set)</label><input class="txt" id="eZ" value="${esc(keep.z)}">
         <label class="note">Price, including GST</label><input class="txt" id="eP" inputmode="decimal" value="${esc(keep.p)}" placeholder="25.00">
         <label class="note">Wholesale price, including GST</label><input class="txt" id="eW" inputmode="decimal" value="${esc(keep.w)}" placeholder="for shop orders">
         <label class="tickrow"><input type="checkbox" id="eNW" ${keep.nw?'checked':''}><span>Not sold wholesale</span></label>
+        <label class="tickrow"><input type="checkbox" id="eCF" ${keep.cf?'checked':''}><span>Someone else's product (I sell it for them)</span></label>
+        <div id="eCFw" class="formrow" style="${keep.cf?'':'display:none'}"><div><label class="note" for="eCFn">Whose</label><input class="txt" id="eCFn" value="${esc(keep.cfn)}" autocapitalize="words" placeholder="e.g. Christine"></div>
+          <div><label class="note" for="eCFk">I keep (%)</label><input class="txt" id="eCFk" inputmode="decimal" value="${esc(keep.cfk)}" placeholder="e.g. 25"></div></div>
         <p class="note">Button colour</p><div class="colours">${Object.entries(COLOURS).map(([k,v])=>`<button data-c="${k}" class="${(col||guessColour(keep.n,keep.z))===k?'on':''}" style="background:${v[0]};color:${v[1]}">${v[2]}</button>`).join('')}</div>
         ${isNew?'':`<div class="row"><div class="grow">Show on the till</div><div class="seg"><button data-a="1" class="${p.active!==false?'on':''}">Show</button><button data-a="0" class="${p.active===false?'on':''}">Hide</button></div></div>`}
         <div class="mact">${isNew?'':'<button class="btn danger" id="eD">Delete</button>'}<button class="btn alt" id="eC">Cancel</button><button class="btn" id="eS">Save</button></div>`;
       m.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{ col=b.dataset.c; draw(); });
       m.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{ p.active=b.dataset.a==='1'; draw(); });
       m.querySelector('#eC').onclick=close;
+      m.querySelector('#eCF').onchange=e=>{ m.querySelector('#eCFw').style.display=e.target.checked?'':'none'; };
       const d=m.querySelector('#eD'); if(d) d.onclick=()=>{ close(); confirmBox('Delete '+prodName(p)+'?','Past sales keep their record. To stop selling it for now, Hide it instead.','Delete',()=>{ removeProduct(p); save(); render(); },true); };
       m.querySelector('#eS').onclick=()=>{ const name=m.querySelector('#eN').value.trim(), size=m.querySelector('#eZ').value.trim(), c=toCents(m.querySelector('#eP').value);
         if(!name){ toast('Type the product name'); return; } if(!(c>0)){ toast('Type a price, e.g. 25'); return; }
         const wT=m.querySelector('#eW').value.trim(), w=wT?toCents(wT):0; if(wT&&!(w>0)){ toast('Type the wholesale price, e.g. 18'); return; }
-const doSave=()=>{         Object.assign(p,{name,size,price:c,wholesale:w||0,noWholesale:!(w>0)&&m.querySelector('#eNW').checked,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
+        const cfOn=m.querySelector('#eCF').checked, cfn=m.querySelector('#eCFn').value.trim(), cfk=+m.querySelector('#eCFk').value.replace('%','');
+        if(cfOn&&!cfn){ toast('Type whose product it is'); return; } if(cfOn&&!(cfk>=0&&cfk<=100)){ toast('Type the share you keep, e.g. 25'); return; }
+const doSave=()=>{         if(cfOn) Object.assign(p,{consignFrom:cfn.slice(0,40),consignKeep:cfk}); else { delete p.consignFrom; delete p.consignKeep; }
+        Object.assign(p,{name,size,price:c,wholesale:w||0,noWholesale:!(w>0)&&m.querySelector('#eNW').checked,colour:col||guessColour(name,size),active:p.active!==false,updated:Date.now()});
         if(isNew){ p.id=SYNC.newId('products'); S.products.push(p); }
         save(); close(); render(); toast('Saved '+prodName(p)+' at '+money(c/100)); if(done) done(p); };
         if(wasOff&&p.active!==false) withTillPin(name,doSave); else doSave(); };
