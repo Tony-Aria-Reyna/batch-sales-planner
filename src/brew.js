@@ -261,7 +261,9 @@ setInterval(()=>{ if(recipesUntil&&Date.now()>=recipesUntil){ recipesUntil=0; if
 function syncProductCosts(){
   if(role()!=='owner'||practice||!S.recipes.length) return;
   const map={}; S.products.forEach(p=>{ const u=unitCost(p); if(u!=null) map[p.id]=Math.round(u); });
-  const x=S.costs.find(c=>c.id==='pcost'), j=JSON.stringify(map); if(x&&JSON.stringify(x.map||{})===j) return;
+  // compared key by key: the database hands maps back in a different order, which once made this save on every redraw
+  const x=S.costs.find(c=>c.id==='pcost'), old=x&&x.map||{}, ks=Object.keys(map), same=x&&ks.length===Object.keys(old).length&&ks.every(k=>old[k]===map[k]);
+  if(same||Date.now()-(syncProductCosts.at||0)<60e3) return; syncProductCosts.at=Date.now();
   if(x) x.map=map; else S.costs.push({id:'pcost',kind:'pcosts',map}); save();
 }
 

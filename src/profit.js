@@ -132,7 +132,7 @@ function wireHomeIdeas(){ if(homeIdeasList.length) wireActionIdeas(homeIdeasList
 function saveActionPlan(l){
   if(role()!=='owner'||practice||missingCols.has('clock')) return;
   const list=l.slice(0,8).map(x=>({t:x.t,d:x.d,go:x.go||'profit'})), key=JSON.stringify(list), c=clockList().find(x=>x.id==='actions');
-  if(c&&c.key===key) return; const titles=list.map(x=>x.t).join('|'); if(c&&c.titles===titles&&Date.now()-c.at<10*60e3) return;   // only the figures changed: not more than every 10 minutes
+  if(c&&c.key===key) return; if(Date.now()-(saveActionPlan.at||0)<60e3) return; saveActionPlan.at=Date.now(); const titles=list.map(x=>x.t).join('|'); if(c&&c.titles===titles&&Date.now()-c.at<10*60e3) return;   // only the figures changed: not more than every 10 minutes
   if(c) Object.assign(c,{list,key,titles,at:Date.now()}); else clockList().push({id:'actions',kind:'plan',list,key,titles,at:Date.now()}); save();
 }
 // open the app at a place: #go=profit, #go=brew:stock, #go=lists:shop, #go=setup:products …

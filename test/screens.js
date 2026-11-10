@@ -718,6 +718,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const d = profCache; return d.H.market > 0 && d.H.clock >= 60 && d.H.brew === 150; }), 'Profit: hours from markets, the time clock and brew days (no double counting)');
   await page.screenshot({ path: path.join(shots, '42-profit.png'), fullPage: true });
   const gapBtn = await page.$('[data-gap]'); if (gapBtn) { await gapBtn.click(); await page.waitForTimeout(150); ok(await page.evaluate(() => cur() !== 'profit' || !!document.querySelector('.modal')), 'a Fix button takes you to the fix'); await page.evaluate(() => { while (modalStack.length) closeModal(); }); }
+  // regression: the home screen must not keep saving and redrawing itself (it flashed and swallowed taps)
+  ok(await page.evaluate(() => new Promise(res => { stack = ['home']; render(); const r0 = render; let n = 0; window.render = function () { n++; return r0.apply(this, arguments); };
+    setTimeout(() => { window.render = r0; res(n); }, 3000); })) <= 2, 'the home screen settles: no endless saving and redrawing');
   // action plans on the home screen, saved for the emails, and links that open the app at the right place
   await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForTimeout(100);
   ok(/What to do next/.test(await text(page)) && (await page.$$('[data-idea]')).length >= 1 && (await page.$$('[data-idea]')).length <= 5, 'home: what to do next (five at most)');
@@ -752,7 +755,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => role() === 'owner' && !S.todos.some(t => t.id === 'practicetodo') && S.recipes.length > 0 && !document.querySelector('#practiceBar')), 'going back reloads as the owner, with the practice thrown away');
   await page.evaluate(() => { stack = ['home', 'setup']; setupOpen = true; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#viewAs'); await page.click('#vaMe'); await page.waitForSelector('#practiceBar');
-  ok(await page.evaluate(() => role() === 'owner' && SYNC.me() === 'admin@example.com' && S.recipes.length > 0 && document.querySelectorAll('.tile').length === 8 && /Test mode/.test(document.querySelector('#practiceBar').textContent)), 'Owner test mode: everything as normal (all tiles, recipes), with the test-mode bar');
+  ok(await page.evaluate(() => role() === 'owner' && SYNC.me() === 'admin@example.com' && S.recipes.length > 0 && document.querySelectorAll('.tile').length === 8 && /Owner test mode/.test(document.querySelector('.practicenote').textContent) && !!document.querySelector('#practiceBar')), 'Owner test mode: everything as normal (all tiles, recipes), with the test-mode bar');
   const salesBefore = await page.evaluate(() => Object.keys(JSON.parse(localStorage.mockdb)).filter(k => /\/products\//.test(k)).length);
   await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); p.price = 1; S.products.push({ id: 'testmodeprod', name: 'Test mode only', price: 500, colour: 'other', active: true }); save(); render(); });
   await page.waitForTimeout(150);

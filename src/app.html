@@ -153,7 +153,9 @@ body:has(.rcal) main{min-height:0}
 .prodrow{gap:12px}.prodrow.offtill .grow b{text-decoration:line-through;color:var(--muted)}.prodrow.offtill{opacity:.75}
 .findlist .frow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 6px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;min-height:56px;cursor:pointer}.findlist .frow.off{color:var(--muted)}.findlist .frow.off b{text-decoration:line-through}.findlist .frow small{display:block}
 .freebox{border-radius:14px;padding:12px 14px;border:2px solid}.freebox.red{background:#fbe4e1;border-color:var(--danger);color:var(--danger)}.freebox.green{background:#e3efdb;border-color:var(--ok);color:var(--ok)}
-.practicebar{flex:none;background:#fff;color:#5d3f70;font-weight:800;font-size:14px;padding:8px 12px;border-radius:99px;line-height:1.2;max-width:46vw;text-align:center}
+.practicebar{flex:none;background:#fff;color:#5d3f70;font-weight:800;font-size:13px;padding:7px 11px;border-radius:99px;line-height:1.15;white-space:nowrap;text-align:center}
+body.practicing #syncPill{display:none}
+.practicenote{display:block;font-size:12px;font-weight:700;color:#efe6f5;letter-spacing:.02em}
 body.practicing .top{background:#806092}
 
 .homesearch{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;margin:4px 0 14px;padding:0 18px;border-radius:16px;background:#fff;border:2px solid var(--line);font-size:19px;color:var(--muted);text-align:left}
@@ -468,7 +470,9 @@ function startPractice(email,r,label){
   if(typeof loadCart==='function') loadCart(); stack=['home']; render(); toast('Viewing as '+label+'. Nothing is saved.');
 }
 function endPractice(){ location.reload(); }
-function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar">${practice.role==='owner'&&practice.email===SYNC.me()?'🧪 Test mode':'👁 As '+esc(practice.label)} · nothing saved<br><u>Go back</u></button>`:''; }
+function practiceBar(){ return practice?`<button class="practicebar" id="practiceBar" aria-label="Leave test mode">✕ Exit</button>`:''; }
+// the purple header says which test view this is, under the screen's title
+const practiceNote=()=>practice?`<span class="practicenote">${practice.role==='owner'&&practice.email===SYNC.me()?'🧪 Owner test mode':'👁 Viewing as '+esc(practice.label)} · nothing is saved</span>`:'';
 function viewAsPicker(){
   modal((m,close)=>{ const others=SYNC.getMembers().filter(e=>e!==SYNC.me());
     m.innerHTML=`<h2>👁 View as</h2><p class="note">See the app exactly as they would: only what they can see and do. Practice freely: nothing you do is saved, and it's all thrown away when you go back.</p>
@@ -521,7 +525,7 @@ function render(){
   if(cur()!=='sell') keepAwake(false);
   if(cur()!=='recipes'&&!(cur()==='brew'&&brewTab==='plan')) recipesUntil=0;   // leaving the recipes locks them again
   $('#top').innerHTML=`${cur()!=='home'&&!lock?'<button class="back" id="bk" aria-label="Back"><b>‹</b> Back</button>':''}
-    <div class="title"><h1>${esc(t.h)}</h1>${t.s?`<small>${esc(t.s)}</small>`:''}</div>
+    <div class="title"><h1>${esc(t.h)}</h1>${practice?practiceNote():t.s?`<small>${esc(t.s)}</small>`:''}</div>
     ${practiceBar()}${typeof clockChip==='function'?clockChip():''}<span class="syncpill" id="syncPill"></span>
     ${cur()==='home'&&canManage()?'<button class="cog" id="cog" aria-label="Setup">⚙️</button>':''}${lock?'<button class="tlock" id="tlk">🔒 Till mode</button>':''}`;
   const tl=$('#tlk'); if(tl) tl.onclick=()=>toast('Locked to selling. Use "Leave till mode" and the PIN to unlock.');
@@ -539,7 +543,7 @@ let pendingWrites=false;
 function drawSync(){
   const p=$('#syncPill'); if(!p) return;
   const off=!navigator.onLine;
-  if(off||pendingWrites){ p.className='syncpill wait'; p.textContent=off?'📴 Offline · saved on this device':'⏳ Saved on this device, will sync'; }
+  if(off||pendingWrites){ p.className='syncpill wait'; p.textContent=off?'📴 Offline · saved on this device':'⏳ Syncing'; }
   else { p.className='syncpill'; p.textContent='✓ Saved'; }
 }
 addEventListener('online',drawSync); addEventListener('offline',drawSync);
