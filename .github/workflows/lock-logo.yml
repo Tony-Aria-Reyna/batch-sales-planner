@@ -1,8 +1,11 @@
-# Run by hand (Actions → Lock the logo → Run workflow): takes Rata & Smudge's logo from rataandsmudge.co.nz
-# once and commits it to the dev branch, so the app's branding stays fixed even if the website changes.
+# Runs when this file changes on the dev branch (edit the "run" line below to take a new logo): takes Rata & Smudge's logo from rataandsmudge.co.nz
+# (run 1) once and commits it to the dev branch, so the app's branding stays fixed even if the website changes.
 name: Lock the logo
 on:
   workflow_dispatch:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/lock-logo.yml']
 permissions:
   contents: write
 jobs:
