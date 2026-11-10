@@ -10,8 +10,8 @@ import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 
 // every sub-collection the rules allow, and which ones each role may read
 export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts',
-  'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'voicenotes', 'pay', 'clock', 'asks'];
-const OWNER_ONLY = ['recipes', 'pay', 'clock'];                                     // recipes are the business's secret; pay is private
+  'places', 'events', 'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'voicenotes', 'pay', 'clock', 'asks', 'errors'];
+const OWNER_ONLY = ['recipes', 'pay', 'clock', 'errors'];                                     // recipes are the business's secret; pay is private
 const HELPER_COLS = ['products', 'deals', 'sessions', 'sales', 'places', 'events', 'plans', 'stockmoves', 'shopping', 'todos', 'voicenotes', 'asks'];
 const MINE_ONLY = { todos: 'who', voicenotes: 'by', asks: 'by' };                       // a helper sees only their own of these
 // managers see recipes (and costs worked out from them) only when an owner switches that on; pay stays owners-only
@@ -144,12 +144,16 @@ export function start(businessId, state, changed) {
     if (first) { first = false; listenCols(); }                   // the role decides which collections we may read
   }, err => onChange('error', err)));
 }
+let waitingSaleIds = [];
+// sales made on this device that haven't reached the database yet (no signal at the market)
+export const waitingSales = () => waitingSaleIds.length;
 function listenCols() {
   const role = myRole(), allowed = readableCols(role, !!(S.settings && S.settings.mgrCosts));
   for (const c of allowed) {
     const ref = role === 'helper' && MINE_ONLY[c] ? query(collection(db, 'businesses', bid, c), where(MINE_ONLY[c], '==', me())) : collection(db, 'businesses', bid, c);
     unsub.push(onSnapshot(ref, { includeMetadataChanges: true }, snap => {
       markPending(c, snap.metadata.hasPendingWrites);
+      if (c === 'sales') waitingSaleIds = snap.docs.filter(x => x.metadata && x.metadata.hasPendingWrites).map(x => x.id);
       const list = snap.docs.map(x => Object.assign({ id: x.id }, x.data()));
       mergeArray(S[c], list);
       const m = synced.cols[c]; m.clear(); S[c].forEach(x => m.set(x.id, JSON.stringify(clean(x))));

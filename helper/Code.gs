@@ -246,6 +246,7 @@ function processNote(b, id) {
   const fail = msg => patch(path, { status: 'failed', error: msg, doneAt: Date.now() });
   if (st.aiPaused) return fail('The assistant is paused in Setup.');
   if (use.notes >= Number(prop('VOICE_MONTHLY_LIMIT', '600'))) return fail('This month\'s assistant limit has been reached.');
+  if (overAiLimit(b, use)) return fail('This month\'s assistant limit (NZ$' + aiLimitOf(b) + ') has been reached. An owner can raise it in Setup → Voice assistant.');
   if (!prop('GEMINI_API_KEY', '')) return fail('The assistant has no Gemini key yet (Script properties).');
   const isPhoto = /^image\//.test(note.mime || '');
   patch(path, { status: 'working', workingAt: Date.now(), stage: isPhoto ? 'looking' : note.text ? 'thinking' : 'listening' });
@@ -308,13 +309,25 @@ function processNote(b, id) {
     const command = ['confirm', 'cancel', 'later'].indexOf(ans.command) >= 0 ? ans.command : '';
     patch(path, { status: 'ready', stage: 'ready', heard: isPhoto ? String(ans.heard || '').slice(0, 2000) : heard, say: String(ans.say || '').slice(0, 500), command: command, drafts: drafts, doneAt: Date.now(), error: '' });
     pieces.forEach(c => del('businesses/' + b._id + '/voicenotes/' + c._id));      // the recording or photo is not kept
-    patch('businesses/' + b._id, { aiUsage: { month: month, notes: use.notes + 1, inTok: use.inTok + inTok, outTok: use.outTok + outTok } });
+    addAiUsage(b, inTok, outTok, 1);
     // "tell me when it's ready": a notification to that person's devices
     if (note.notify && st.vapidKey) { try { DEV_CACHE = null; pushTo(b, [note.by], 'todos', '🎙 Ready to check', String(ans.say || 'Your note has been worked out.').slice(0, 160), 'note-' + id); } catch (e) { Logger.log(e); } }
   } catch (e) {
     if (e.gemini) { patch(path, { status: 'new', stage: '', error: String(e.message).slice(0, 200), workingAt: 0 }); throw e; }
     throw e;
   }
+}
+// The assistant's monthly limit (Setup → Voice assistant, default NZ$5). The cost is an estimate from the token
+// counts Gemini reports, at the rates in Script properties (US$ per million tokens), so it is approximate.
+function aiLimitOf(b) { const v = ((b.settings || {}).aiLimit); return v != null && v !== '' ? Number(v) : 5; }
+function aiNzd(inTok, outTok) { return (inTok * Number(prop('AI_USD_IN_PER_M', '0.5')) + outTok * Number(prop('AI_USD_OUT_PER_M', '3'))) / 1e6 * Number(prop('USD_TO_NZD', '1.75')); }
+function overAiLimit(b, use) { return aiLimitOf(b) > 0 && (use.nzd || aiNzd(use.inTok || 0, use.outTok || 0)) >= aiLimitOf(b); }
+function addAiUsage(b, inTok, outTok, notes) {
+  const month = Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM'), cur = getDoc('businesses/' + b._id) || {};
+  const use = (cur.aiUsage && cur.aiUsage.month === month) ? cur.aiUsage : { month: month, notes: 0, inTok: 0, outTok: 0 };
+  const i = (use.inTok || 0) + inTok, o = (use.outTok || 0) + outTok;
+  const nu = { month: month, notes: (use.notes || 0) + (notes || 0), inTok: i, outTok: o, nzd: Math.round(aiNzd(i, o) * 100) / 100 };
+  patch('businesses/' + b._id, { aiUsage: nu }); b.aiUsage = nu;
 }
 function geminiMime(m) { m = String(m || '').split(';')[0]; return m === 'audio/mp4' || m === 'audio/x-m4a' ? 'audio/m4a' : (m || 'audio/webm'); }
 function str(x, n) { return String(x == null ? '' : x).slice(0, n || 200); }
@@ -486,6 +499,7 @@ function emailOrdersTick(b, force) {
   let err = '', added = 0;
   try {
     if (!prop('GEMINI_API_KEY', '')) throw new Error('No Gemini key in the helper yet');
+    if (overAiLimit(b, (b.aiUsage && b.aiUsage.month === Utilities.formatDate(new Date(), 'Pacific/Auckland', 'yyyy-MM')) ? b.aiUsage : {})) throw new Error('The assistant\'s monthly limit is reached, so order emails wait until next month or until it\'s raised');
     const label = GmailApp.getUserLabelByName(ORDER_LABEL) || GmailApp.createLabel(ORDER_LABEL);
     const threads = GmailApp.search('to:' + addr + ' -label:"' + ORDER_LABEL + '" newer_than:14d', 0, 10);
     const prods = listDocs('businesses/' + b._id + '/products').filter(p => p.active !== false);
@@ -503,7 +517,7 @@ function emailOrdersTick(b, force) {
           'Our products: ' + JSON.stringify(prods.map(p => p.name + (p.size ? ' ' + p.size : ''))) + '. Our shops: ' + JSON.stringify(places.filter(p => p.channel === 'wholesale').map(p => p.name)) + '.\n\n' +
           'From: ' + msg.getFrom() + '\nSubject: ' + msg.getSubject() + '\nDate: ' + msg.getDate() + '\n\n' + body;
         let d = {};
-        try { d = JSON.parse(gemini([{ text: prompt }], true).text || '{}'); } catch (e) { if (e.gemini) throw e; d = { is_order: true, note: 'Couldn\'t read this one: open the email.' }; }
+        try { const r = gemini([{ text: prompt }], true); addAiUsage(b, r.usage.promptTokenCount || 0, r.usage.candidatesTokenCount || 0, 0); d = JSON.parse(r.text || '{}'); } catch (e) { if (e.gemini) throw e; d = { is_order: true, note: 'Couldn\'t read this one: open the email.' }; }
         if (d.is_order === false) continue;   // not an order (a question, a newsletter): skipped, and labelled with the rest of the thread
         const from = msg.getFrom(), fromMail = (from.match(/<([^>]+)>/) || [, from])[1].trim();
         const shop = places.filter(p => p.channel === 'wholesale').find(p => norm(p.name) && (norm(p.name) === norm(d.customer) || (p.email && String(p.email).toLowerCase() === fromMail.toLowerCase())));

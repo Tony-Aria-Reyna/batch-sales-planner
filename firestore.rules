@@ -140,6 +140,11 @@ service cloud.firestore {
                               || (resource.data.status == 'waiting' && request.resource.data.status == 'cancelled')));
         allow delete: if canManage(bid);
       }
+      // The app health log: any member's device notes a fault in their own name; only owners read or clear it.
+      match /errors/{id} {
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.msg is string && request.resource.data.msg.size() <= 300;
+        allow read, delete: if isMember(bid) && roleIn(biz(bid)) == 'owner';
+      }
       // This device's push-notification address, one per person; the business helper sends the alerts.
       match /devices/{who} {
         allow read, write: if isMember(bid) && who == email();

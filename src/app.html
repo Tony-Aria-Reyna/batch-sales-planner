@@ -189,6 +189,7 @@ body.practicing .top{background:#806092}
 @media (max-width:700px){.season{grid-template-columns:repeat(4,1fr)}}
 .addrlist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:#fff;margin:4px 0 8px;overflow:hidden}.addrlist button{text-align:left;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:#fff;font:inherit;font-size:16px}.addrlist small{padding:6px 14px;color:var(--muted)}
 .themes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.theme{border:2px solid var(--line);border-radius:12px;background:#fff;padding:8px;font:inherit;display:flex;flex-direction:column;align-items:center;gap:6px}.theme.on{border-color:var(--green)}.theme span{display:flex}.theme b{font-size:15px}.theme small{font-size:12px;color:var(--muted);text-align:center}.theme i{width:22px;height:22px;display:block}
+.readybar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0 10px}.readybar i{display:block;height:100%;background:var(--ok)}
 .blink{animation:blink 1.1s ease-in-out infinite}@keyframes blink{50%{opacity:.35}}
 .pqty{flex:none;font-size:22px;min-width:52px}.packslip{background:#fbfaf5}
 #printSlip{position:fixed;inset:0;z-index:300;background:#fff;overflow:auto;padding:24px}
@@ -488,7 +489,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, emailHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], clock:[], asks:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, emailHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], clock:[], asks:[], errors:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -588,10 +589,15 @@ let pendingWrites=false;
 function drawSync(){
   const p=$('#syncPill'); if(!p) return;
   const off=!navigator.onLine;
-  if(off||pendingWrites){ p.className='syncpill wait'; p.textContent=off?'📴 Offline · saved on this device':'⏳ Syncing'; }
+  const ws=SYNC.waitingSales?SYNC.waitingSales():0;
+  if(off||pendingWrites){ p.className='syncpill wait'; p.textContent=off?(ws?'📴 '+ws+' sale'+(ws===1?'':'s')+' on this device only':'📴 Offline · saved on this device'):(ws?'⏳ Sending '+ws+' sale'+(ws===1?'':'s'):'⏳ Syncing'); }
   else { p.className='syncpill'; p.textContent='✓ Saved'; }
 }
 addEventListener('online',drawSync); addEventListener('offline',drawSync);
+// closing the app (or the browser tab) while sales are still only on this device: ask first
+addEventListener('beforeunload',e=>{ if(SYNC.waitingSales&&SYNC.waitingSales()){ e.preventDefault(); e.returnValue=''; } });
+// on the till: a clear warning while sales are waiting for signal
+function waitingSalesNote(){ const n=SYNC.waitingSales?SYNC.waitingSales():0; return n?`<div class="card nudge waitnote"><b>📶 ${n} sale${n===1?' is':'s are'} saved on this ${esc(typeof deviceLabel==='function'?deviceLabel():'device')} only</b><small>No signal yet. Keep selling: they send themselves when there's signal. Don't sign out, clear the browser or delete the app until this says ✓ Saved.</small></div>`:''; }
 
 /* ================= home ================= */
 const TILES=[
@@ -622,10 +628,10 @@ SCREENS.home={
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''} ${tiles.some(t=>t.id==='clock')?'owner8':''}">${tiles.map(t=>{ if(t.id==='clock') return clockTile();
         return `<button class="tile ${t.id==='sell'?'sell':''} ${t.id==='profit'||t.id==='setup'?'wide':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`; }).join('')}</section>
-      ${homeIdeasHtml()}
+      ${typeof readyCardHtml==='function'?readyCardHtml():''}${homeIdeasHtml()}
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
-  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); wireHomeIdeas(); syncProductCosts();
+  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); if(typeof wireReady==="function") wireReady(); wireHomeIdeas(); syncProductCosts();
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
@@ -693,7 +699,8 @@ SCREENS.setup={
         <button class="btn small ${S.settings.voiceOn&&!S.settings.aiPaused?'alt':''}" id="aiOn">${S.settings.voiceOn&&!S.settings.aiPaused?'Pause':'Switch on'}</button></div>
       <label class="note" for="vUrl">Helper web address (makes replies near-instant; from the helper's Deploy → Web app)</label><input class="txt" id="vUrl" inputmode="url" autocapitalize="none" value="${esc(S.settings.voiceUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
       <div class="row"><div class="grow"><b>Instant link</b><small id="linkState">${S.helperSeen&&S.helperSeen.at?'Last heard from the helper (version '+esc(String(S.helperSeen.version||'?'))+') '+nzDate(new Date(S.helperSeen.at),{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}):'Not tested yet'}</small></div><button class="btn small alt" id="linkTest">Test the link</button></div>
-      <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out':'No notes yet'}</small></div></div>
+      <div class="row"><div class="grow"><b>This month</b><small>${S.aiUsage&&S.aiUsage.month===nzDay().slice(0,7)?S.aiUsage.notes+' note'+(S.aiUsage.notes===1?'':'s')+' worked out'+(aiSpent()!=null?' · about NZ$'+aiSpent().toFixed(2)+' of the NZ$'+aiLimit()+' limit':''):'No notes yet'}</small></div></div>
+      ${role()==='owner'?`<div class="row"><div class="grow"><b>Monthly limit (NZ$)</b><small>The assistant pauses itself when this month's estimate reaches it</small></div><input class="txt" id="aiLim" inputmode="decimal" style="width:110px;min-height:48px" value="${aiLimit()}"></div>`:''}
       <label class="note" for="aiLessons"><b>What it has learnt</b> · from the changes people make to its drafts, worked out each evening. Change or delete any line; it's never emailed.</label>
       <textarea class="txt" id="aiLessons" rows="5" placeholder="Nothing yet">${esc(S.settings.aiLessons||'')}</textarea></div>`:''}
 
@@ -731,6 +738,8 @@ SCREENS.setup={
       <div class="mact" style="justify-content:flex-start"><button class="btn" id="addPerson">＋ Add a person</button>${own&&!practice?'<button class="btn alt" id="viewAs">👁 View as…</button>':''}</div>
       ${own?`<div class="row"><div class="grow"><b>Managers can see costs and margins</b><small>${st.mgrCosts?'On: managers see what each product costs to make and its margin. Recipes stay owners-only.':'Off: costs are for owners only. Recipes are always owners-only.'}</small></div><button class="switch ${st.mgrCosts?'on':''}" id="mgrCosts" role="switch" aria-checked="${!!st.mgrCosts}" aria-label="Managers can see costs and margins"><i></i></button></div>`:''}</div>
 
+    ${typeof errorsCardHtml==='function'?errorsCardHtml():''}
+
     <div class="card"><h3>🔒 PINs and approvals</h3>
       <p class="note">Each owner and manager has their <b>own</b> 4-digit PIN. A PIN is needed to open Setup, see sales, give a discount, add an item that isn't on the till, correct or void a sale, end the day and leave till mode. Every approval is logged with who approved it and when. Helpers never see the PINs.</p>
       <div class="row"><div class="grow"><b>Your PIN</b><small>${myPin()?'Set '+nzDate(new Date(myPin().set||Date.now()),{day:'numeric',month:'short',year:'numeric'})+' · shown in the log as '+esc(personName(SYNC.me())):'Not set yet'}</small></div><button class="btn small" id="setPin">${myPin()?'Change my PIN':'Set my PIN'}</button></div>
@@ -758,6 +767,7 @@ SCREENS.setup={
     const mc=$('#mgrCosts'); if(mc) mc.onclick=()=>{ S.settings.mgrCosts=!S.settings.mgrCosts; save(); render(); toast(S.settings.mgrCosts?'Managers can now see recipes and costs (from their next app open)':'Recipes and costs are owners-only again'); };
     const mm=$('#minMarg'); if(mm) mm.onchange=()=>{ const v=Math.round(+mm.value); if(!(v>=0&&v<95)){ toast('Type a percentage, e.g. 20'); mm.value=minMargin(); return; } S.settings.minMargin=v; save(); toast('Saved'); };
     [['#swQueue','eftQueue'],['#swAfter','afterpayOn']].forEach(([id,k])=>{ const b=$(id); if(b) b.onclick=()=>{ S.settings[k]=!S.settings[k]; save(); render(); }; });
+    const aiL=$('#aiLim'); if(aiL) aiL.onchange=()=>{ const v=+aiL.value.replace(/[^0-9.]/g,''); if(!(v>=0&&v<=200)){ toast('Type a monthly limit in dollars, e.g. 5'); aiL.value=aiLimit(); return; } S.settings.aiLimit=v; save(); toast('Saved'); };
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
@@ -784,7 +794,7 @@ SCREENS.setup={
     $('#goAudit').onclick=()=>go('audit');
     document.querySelectorAll('[data-unpin]').forEach(b=>b.onclick=()=>{ const e=b.dataset.unpin; confirmBox('Remove '+personName(e)+'\'s PIN?','They won\'t be able to approve anything until they set a new one.','Remove',()=>{ const i=S.pins.findIndex(p=>p.id===e); if(i>=0) S.pins.splice(i,1); logApproval('remove a PIN',SYNC.me(),personName(e)); save(); render(); },true); });
     $('#howInst').onclick=showInstall;
-    $('#signOut').onclick=()=>confirmBox('Sign out?','You will need your Google account to sign back in.','Sign out',()=>SYNC.signOut());
+    $('#signOut').onclick=()=>{ const ws=SYNC.waitingSales?SYNC.waitingSales():0; confirmBox('Sign out?',(ws?'<b>'+ws+' sale'+(ws===1?' has':'s have')+' not been sent yet</b> (no signal). Signing out now could lose '+(ws===1?'it':'them')+'. Wait for ✓ Saved first. ':'')+'You will need your Google account to sign back in.','Sign out',()=>SYNC.signOut(),!!ws); };
     $('#dl').onclick=downloadData;
     const d=$('#del'); if(d) d.onclick=deleteFlow;
     if($('#invList')) drawInvites();
@@ -1030,7 +1040,7 @@ let rT=null, firstRender=true;
 // Parts of the business the database refused to share (usually: the Firebase rules haven't been
 // republished after an update). The app keeps working without them and says what's missing.
 const missingCols=new Set();
-const COL_TXT={clock:'the time clock',pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales',places:'markets and shops',events:'the calendar',plans:'the brew plan',ideas:'ideas',costs:'costs',prices:'ingredient prices',fuel:'fuel records',stockmoves:'stock',shopping:'the shopping list',voicenotes:'voice notes',pay:'pay rates',contacts:'customer contacts',asks:'requests to open a till'};
+const COL_TXT={clock:'the time clock',pins:'personal PINs',audit:'the approvals log',receipts:'emailed receipts',inputs:'ingredients',recipes:'recipes',batches:'batches',orders:'orders',todos:'lists',products:'products',deals:'deals',sessions:'selling days',sales:'sales',places:'markets and shops',events:'the calendar',plans:'the brew plan',ideas:'ideas',costs:'costs',prices:'ingredient prices',fuel:'fuel records',stockmoves:'stock',shopping:'the shopping list',voicenotes:'voice notes',pay:'pay rates',contacts:'customer contacts',asks:'requests to open a till',errors:'the app health log'};
 function rulesNotice(){ return missingCols.size?`<div class="card" style="border:2px solid var(--warn);background:#fff4d6"><b>⚠️ The database rules need updating.</b><p class="note" style="margin-bottom:0">These parts are switched off until the Firebase rules are republished: ${[...missingCols].map(c=>COL_TXT[c]||c).join(', ')}. ${canManage()?'Selling is not affected. The rules publish automatically with each update; if this stays, copy the latest rules into Firebase → Firestore → Rules → Publish, then reopen the app.':'Selling is not affected. Ask the owner.'}</p></div>`:''; }
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
@@ -1042,7 +1052,8 @@ function syncChanged(what,err){
 }
 let IS_ADMIN=false;
 function startBusiness(id){ firstRender=true; SYNC.start(id,S,syncChanged); SYNC.isAdmin().then(a=>{ IS_ADMIN=a; if(a&&cur()==='setup') render(); }); }
-SYNC.onPendingChange(v=>{ pendingWrites=v; drawSync(); });
+let lastWaiting=0;
+SYNC.onPendingChange(v=>{ pendingWrites=v; drawSync(); const ws=SYNC.waitingSales?SYNC.waitingSales():0; if(ws!==lastWaiting){ lastWaiting=ws; if(cur()==='sell'&&!modalStack.length) render(); } });
 
 /* ================= Android back button =================
    Back closes the pop-up, then the screen, then shows the Rata & Smudge screen; only then can the app close.

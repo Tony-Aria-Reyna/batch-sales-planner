@@ -556,6 +556,13 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { S.settings.brand = { unlocked: true, kit: 'own', own: ['#123456', '#654321', '#aa5500', '#fafafa'] }; save(); render(); });
   ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#123456'), 'or type its own colours from its brand guidelines');
   await page.evaluate(() => { S.settings.brand = {}; save(); render(); });
+  // getting started, the app health log, the assistant's monthly limit
+  ok(await page.evaluate(() => { const l = readySteps(); return l.length === 6 && l.find(x => x.k === 'products').ok && l.find(x => x.k === 'sale').ok; }), 'getting started: six steps, ticked off from what is already set up');
+  await page.evaluate(() => { logError('Test fault for the log', 'test'); });
+  ok(await page.evaluate(() => S.errors.some(e => e.msg === 'Test fault for the log' && e.by === SYNC.me() && e.screen)) && /App health/.test(await page.evaluate(() => errorsCardHtml())), 'a fault on any device is noted for the owners (App health)');
+  await page.evaluate(() => { logError('Test fault for the log', 'test'); });
+  ok(await page.evaluate(() => S.errors.filter(e => e.msg === 'Test fault for the log').length === 1), 'the same fault is noted once a day, not over and over');
+  ok(await page.evaluate(() => aiLimit() === 5 && waitingSalesNote() === ''), 'the assistant\'s monthly limit is NZ$5 unless changed; no unsent-sales warning when everything is saved');
   // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
   await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });
   await page.waitForSelector('[data-pay="afterpay"]');

@@ -142,7 +142,7 @@ function tillHtml(){
   const all=activeProducts(), cats=Object.keys(COLOURS).filter(k=>all.some(p=>(p.colour||'other')===k));
   if(tillFilter!=='all'&&!cats.includes(tillFilter)) tillFilter='all';
   const shown=tillFilter==='all'?all:all.filter(p=>(p.colour||'other')===tillFilter);
-  return `<div class="tbar">
+  return waitingSalesNote()+`<div class="tbar">
       ${undo?`<button class="btn danger" id="tUndo">↩ Undo last sale (${c2(lastSale.total)})</button>`:''}
       ${(()=>{ const q=eftQueue(); return q.length?`<button class="btn qbtn" id="tQueue">💳 EFTPOS queue: ${q.length} · ${c2(q.reduce((n,x)=>n+x.total,0))}</button>`:''; })()}
       ${helper?'':`<button class="btn alt" id="tList">🧾 Sales <span class="lk">🔒</span></button>`}
@@ -609,7 +609,7 @@ function dayTotals(d){
 function endDay(approver){
   const d=openDay(); if(!d) return; const t=dayTotals(d), added=floatAdded(d), expected=(d.float||0)+added+t.cash;
   modal((m,close)=>{ m.innerHTML=`<h2>🏁 End of the day</h2><p class="note">Opened with ${esc(personName(approver))}'s PIN.</p>
-    <div class="eod"><div><span>Sales</span><b>${t.count}</b></div><div><span>Takings</span><b>${c2(t.total)}</b></div><div><span>GST included</span><b>${c2(t.gst)}</b></div><div><span>Deals and discounts</span><b>${c2(t.discount)}</b></div></div>
+    ${waitingSalesNote()}<div class="eod"><div><span>Sales</span><b>${t.count}</b></div><div><span>Takings</span><b>${c2(t.total)}</b></div><div><span>GST included</span><b>${c2(t.gst)}</b></div><div><span>Deals and discounts</span><b>${c2(t.discount)}</b></div></div>
     <div class="card" style="margin:12px 0"><div class="row"><div class="grow">💳 EFTPOS<small>Check against the terminal's settlement</small></div><b>${c2(t.eftpos)}</b></div>
       ${t.afterpay?`<div class="row"><div class="grow">🟢 Afterpay</div><b>${c2(t.afterpay)}</b></div>`:''}
       ${eftQueue().length?`<div class="card nudge"><b>⚠️ ${eftQueue().length} sale${eftQueue().length===1?'':'s'} in the EFTPOS queue not paid yet (${c2(eftQueue().reduce((n,x)=>n+x.total,0))})</b><small>They aren't counted. Put them through, or take them off the queue, before ending the day.</small><button class="btn small" id="eQ">Open the queue</button></div>`:''}

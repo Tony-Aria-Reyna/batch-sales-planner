@@ -75,6 +75,9 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('owner can use the time clock', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/clock/c1'), { code: 'brewing', mins: 60 })));
   await t('manager cannot see the time clock', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/clock/c1'))));
   await t('helper cannot see the time clock', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/clock/c1'))));
+  await t('helper can note an app fault', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/errors/e1'), { by: HELPER, at: 1, msg: 'x' })));
+  await t('helper cannot read the fault log', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/errors/e1'))));
+  await t('owner reads the fault log', assertSucceeds(getDoc(doc(as(OWNER), 'businesses/b1/errors/e1'))));
   // a helper asks to open a market; only an owner or manager can approve it
   const ask = { by: HELPER, at: 1, date: '2026-11-10', status: 'waiting', placeName: 'Cromwell' };
   await t('helper can ask to open a market', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/asks/a1'), ask)));
