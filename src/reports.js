@@ -51,7 +51,7 @@ function vehicleCost(){
 /* ---------- crunch one period ---------- */
 function crunch(from,to,chan){
   const inRange=d=>d>=from&&d<=to, keep=w=>chan==='all'||(chan.startsWith('c:')?groupChannel(w.group)===chan.slice(2):chan.startsWith('g:')?w.group===chan.slice(2):w.place===chan.slice(2));
-  const R={count:0,revenue:0,gst:0,cogs:0,unknownCost:0,cash:0,eftpos:0,other:0,fees:0,mileage:0,staff:0,otherCosts:0,byDay:{},byGroup:{},byPlace:{},byProduct:{},byHour:Array(24).fill(0),byWeekday:Array(7).fill(0),days:new Set(),sales:[]};
+  const R={count:0,revenue:0,gst:0,cogs:0,unknownCost:0,cash:0,eftpos:0,afterpay:0,other:0,fees:0,mileage:0,staff:0,otherCosts:0,byDay:{},byGroup:{},byPlace:{},byProduct:{},byHour:Array(24).fill(0),byWeekday:Array(7).fill(0),days:new Set(),sales:[]};
   const add=(w,total,gst,date)=>{ const ex=total-gst; R.revenue+=total; R.gst+=gst; R.byDay[date]=(R.byDay[date]||0)+total;
     const g=R.byGroup[w.group]||(R.byGroup[w.group]={total:0,ex:0}); g.total+=total; g.ex+=ex;
     if(w.placeName){ const k=w.place||w.placeName, p=R.byPlace[k]||(R.byPlace[k]={name:w.placeName,group:w.group,total:0,ex:0,cogs:0,fees:0,mileage:0,staff:0,days:0}); p.total+=total; p.ex+=ex; } };
@@ -59,7 +59,7 @@ function crunch(from,to,chan){
     if(c==null){ R.unknownCost+=l.qty; return; } R.cogs+=c*l.qty; if(w.placeName){ const p=R.byPlace[w.place||w.placeName]; if(p) p.cogs+=c*l.qty; } };
   for(const s of S.sales){ if(s.voided||!inRange(s.date)) continue; const w=saleWhere(s); if(!keep(w)) continue;
     R.count++; add(w,s.total,s.gst!=null?s.gst:Math.round(s.total*3/23),s.date); R.sales.push(s);
-    if(s.method==='cash') R.cash+=s.total; else if(s.method==='eftpos') R.eftpos+=s.total; else R.other+=s.total;
+    if(s.method==='cash') R.cash+=s.total; else if(s.method==='eftpos') R.eftpos+=s.total; else if(s.method==='afterpay') R.afterpay+=s.total; else R.other+=s.total;
     const st=s.when||{}; if(st.hour!=null) R.byHour[st.hour]+=s.total; const wd=kd(s.date).getDay(); R.byWeekday[(wd+6)%7]+=s.total;
     (s.lines||[]).forEach(l=>lineCost(w,l,s.at)); }
   for(const o of S.orders){ if(o.status==='cancelled'||!inRange(o.date||'')) continue; const w=orderWhere(o); if(!keep(w)) continue;
@@ -119,7 +119,7 @@ function summaryRep(R,from,to){
     ${R.unknownCost?`<p class="note">⚠️ ${R.unknownCost} item${R.unknownCost===1?'':'s'} sold have no product cost yet (link their recipe in Setup → Ingredients and recipes), so profit is overstated.</p>`:''}
     <div class="card"><h3>Takings ${long?'by month':'by day'}</h3>${series.length?bars(series,c2):'<p class="note">No sales in this period.</p>'}</div>
     <div class="card"><h3>By channel</h3>${bars(Object.entries(R.byGroup).sort((a,b)=>b[1].total-a[1].total).map(([g,v])=>[(groupChannel(g)==='wholesale'?'Wholesale · ':'Retail · ')+groupName(g),v.total]),c2)}</div>
-    <div class="card"><h3>How people paid (till)</h3>${bars([['Cash',R.cash],['EFTPOS',R.eftpos],['Other',R.other]].filter(x=>x[1]),c2)}</div>
+    <div class="card"><h3>How people paid (till)</h3>${bars([['Cash',R.cash],['EFTPOS',R.eftpos],['Afterpay',R.afterpay],['Other',R.other]].filter(x=>x[1]),c2)}</div>
     <div class="card"><h3>Profit</h3><div class="ptable">
       <span>Sales ex GST</span><b>${c2(R.ex)}</b><span>Product cost</span><b>${neg(R.cogs)}</b><span><b>Gross profit</b></span><b>${c2(R.gross)}</b>
       <span>Stall fees</span><b>${neg(R.fees)}</b><span>Mileage</span><b>${neg(R.mileage)}</b><span>Staff</span><b>${neg(R.staff)}</b><span>Other costs</span><b>${neg(R.otherCosts)}</b>

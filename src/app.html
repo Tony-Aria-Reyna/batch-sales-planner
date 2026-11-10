@@ -182,6 +182,7 @@ body.practicing .top{background:#806092}
 .orow .grow{flex:1;min-width:0}.orow b{display:block;font-weight:600}.orow small{display:block;color:var(--muted);font-size:15px}
 .ost{flex:none;border-radius:99px;padding:5px 12px;font-weight:700;font-size:14px;background:#efe7d6}.ost.new{background:#fbe9c9;color:#8a5a0a}.ost.packed{background:#e2ecf7;color:#2a5a8a}.ost.sent{background:#e3efdb;color:var(--ok)}.ost.cancelled{background:#eee;color:#888}
 .asksteps{list-style:none;padding:0;margin:14px 0;font-size:20px;line-height:1.9}.asksteps .did{color:var(--leaf,#3b7a3b)}.asksteps .cur{animation:blink 1.1s ease-in-out infinite;font-weight:700}.asksteps .no{color:var(--rata,#b3261e);font-weight:700}
+.qbtn{background:#1f5fa8;color:#fff;animation:blink 1.6s ease-in-out infinite}.qrow{display:flex;align-items:center;gap:10px}.qrow .qtot{font-size:32px;display:block}
 .blink{animation:blink 1.1s ease-in-out infinite}@keyframes blink{50%{opacity:.35}}
 .pqty{flex:none;font-size:22px;min-width:52px}.packslip{background:#fbfaf5}
 #printSlip{position:fixed;inset:0;z-index:300;background:#fff;overflow:auto;padding:24px}
@@ -668,6 +669,8 @@ SCREENS.setup={
       <div class="row"><div class="grow"><b>Deals</b><small>${S.deals.length} deal${S.deals.length===1?'':'s'} · e.g. 3 for $50, applied by the till</small></div><button class="btn small" id="goDeals">Open</button></div>
       <div class="row"><div class="grow"><b>Lowest margin on a discount</b><small>The one-tap "margin" button when approving a discount</small></div><input class="txt" id="minMarg" inputmode="numeric" style="width:90px;min-height:48px" value="${minMargin()}"><span style="margin-left:6px">%</span></div>
       <div class="row"><div class="grow"><b>Usual cash float</b><small>Filled in for you when a selling day starts</small></div><input class="txt" id="defFloat" inputmode="decimal" style="width:130px;min-height:48px" value="${st.defaultFloat?(st.defaultFloat/100).toFixed(2):''}" placeholder="200.00"></div>
+      <div class="row"><div class="grow"><b>Busy-day EFTPOS queue</b><small>${st.eftQueue?'On: the EFTPOS screen offers “Pay on EFTPOS next”, so the till is free while someone else works the terminal from their phone.':'Off: every EFTPOS sale is paid before the next one.'}</small></div><button class="switch ${st.eftQueue?'on':''}" id="swQueue" role="switch" aria-checked="${!!st.eftQueue}" aria-label="Busy-day EFTPOS queue"><i></i></button></div>
+      <div class="row"><div class="grow"><b>Afterpay on the till</b><small>${st.afterpayOn?'On: an Afterpay button sits beside Cash and EFTPOS. It counts as card takings.':'Off'}</small></div><button class="switch ${st.afterpayOn?'on':''}" id="swAfter" role="switch" aria-checked="${!!st.afterpayOn}" aria-label="Afterpay on the till"><i></i></button></div>
       <div class="row"><div class="grow"><b>Helpers' names</b><small>${esc((st.staff||[]).join(', ')||'None yet')} · for "who served"</small></div><button class="btn alt small" id="goStaff">Change</button></div>
       <p class="note">Recipes, ingredients and the import from your Excel workbook come with the Brew screen.</p></div>
 
@@ -746,6 +749,7 @@ SCREENS.setup={
     const va=$('#viewAs'); if(va) va.onclick=viewAsPicker;
     const mc=$('#mgrCosts'); if(mc) mc.onclick=()=>{ S.settings.mgrCosts=!S.settings.mgrCosts; save(); render(); toast(S.settings.mgrCosts?'Managers can now see recipes and costs (from their next app open)':'Recipes and costs are owners-only again'); };
     const mm=$('#minMarg'); if(mm) mm.onchange=()=>{ const v=Math.round(+mm.value); if(!(v>=0&&v<95)){ toast('Type a percentage, e.g. 20'); mm.value=minMargin(); return; } S.settings.minMargin=v; save(); toast('Saved'); };
+    [['#swQueue','eftQueue'],['#swAfter','afterpayOn']].forEach(([id,k])=>{ const b=$(id); if(b) b.onclick=()=>{ S.settings[k]=!S.settings[k]; save(); render(); }; });
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };

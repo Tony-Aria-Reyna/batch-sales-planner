@@ -16,7 +16,9 @@ function nzStamp(t){
   return {local:p.year+'-'+p.month+'-'+p.day+' '+p.hour+':'+p.minute,weekday:p.weekday,hour:+p.hour,month:p.year+'-'+p.month,week:wy+'-W'+String(week).padStart(2,'0'),season};
 }
 const DAY_TYPES={market:'🧺 Market',farmgate:'🚪 Farm gate',tour:'🌿 Garden tour',shop:'🏪 Shop'};
-const PAY_TXT={cash:'💵 Cash',eftpos:'💳 EFTPOS',other:'🔖 Other'};
+const PAY_TXT={cash:'💵 Cash',eftpos:'💳 EFTPOS',afterpay:'🟢 Afterpay',other:'🔖 Other'};
+const payMethods=()=>['cash','eftpos'].concat(S.settings.afterpayOn?['afterpay']:[]).concat(['other']);
+const cardLike=m=>m==='eftpos'||m==='afterpay';
 const c2=c=>money((c||0)/100);
 // GST included in a GST-inclusive amount (15%): 3/23 of the total, rounded to the cent
 const gstOf=c=>Math.round((c||0)*3/23);
@@ -142,6 +144,7 @@ function tillHtml(){
   const shown=tillFilter==='all'?all:all.filter(p=>(p.colour||'other')===tillFilter);
   return `<div class="tbar">
       ${undo?`<button class="btn danger" id="tUndo">↩ Undo last sale (${c2(lastSale.total)})</button>`:''}
+      ${(()=>{ const q=eftQueue(); return q.length?`<button class="btn qbtn" id="tQueue">💳 EFTPOS queue: ${q.length} · ${c2(q.reduce((n,x)=>n+x.total,0))}</button>`:''; })()}
       ${helper?'':`<button class="btn alt" id="tList">🧾 Sales <span class="lk">🔒</span></button>`}
       ${lock?`<button class="btn alt" id="tUnlock">🔓 Leave till mode <span class="lk">🔒</span></button>`:(helper?'':`<button class="btn alt" id="tLock">🤝 Hand to a helper</button>`)}
       <button class="btn alt" id="tFind">🔍 Find</button>
@@ -157,7 +160,7 @@ function tillHtml(){
     <aside class="cart ${sheetOpen?'open':''}" id="cart">
       <div class="grab" id="cGrab"><i></i><span>${pc.lines.length?(sheetOpen?'▼ Hide items':'▲ Show items ('+cartCount()+')'):'Tap a product to start'}</span></div>
       <div class="ctot"><span>${cartCount()} item${cartCount()===1?'':'s'}${pc.lines.length?` · <button class="linkb" id="cClear">Clear</button>${pc.manual?'':` · <button class="linkb" id="cDisc" style="color:var(--green)">🏷️ Discount 🔒</button>`}`:''}</span><span class="tot"><b id="cTotal">${c2(pc.total)}</b>${gstLine(pc.total)}</span></div>
-      <div class="pay">${pc.total===0&&pc.lines.length&&pc.manual?`<button class="pb gift" id="giveAway" style="grid-column:1/-1">🎁 Give away · record it</button>`:['cash','eftpos','other'].map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
+      <div class="pay" style="grid-template-columns:repeat(${payMethods().length},1fr)">${pc.total===0&&pc.lines.length&&pc.manual?`<button class="pb gift" id="giveAway" style="grid-column:1/-1">🎁 Give away · record it</button>`:payMethods().map(k=>`<button class="pb ${k}" data-pay="${k}" ${pc.total>0?'':'disabled'}>${PAY_TXT[k]}</button>`).join('')}</div>
       ${correcting?`<div class="corr">✏️ Correcting the ${c2(correcting.total)} sale from ${nzTime(correcting.at)}. When you take payment, the old sale is voided and replaced. <button class="linkb" id="cCorrX">Cancel correction</button></div>`:''}
       <div class="clines">${cartLinesHtml(pc)}</div>
     </aside></div>`;
@@ -171,6 +174,7 @@ function wireTill(){
   document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ tillFilter=b.dataset.f; lsSet('rs.filter',tillFilter); render(); });
   const cl=$('#cClear'); if(cl) cl.onclick=()=>confirmBox('Clear this sale?','The items are taken off. Nothing has been charged.','Clear',()=>{ const c=correcting; cart=[]; cartDisc=null; saveCart(); render(); if(c) toast('Correction still open: add the right items, or cancel the correction'); });
   const cd=$('#cDisc'); if(cd) cd.onclick=giveDiscount;
+  const tq=$('#tQueue'); if(tq) tq.onclick=openQueue;
   const ga=$('#giveAway'); if(ga) ga.onclick=()=>{ const pc=priceCart(cart,cartDisc);
     confirmBox('Give these away?',esc(pc.lines.map(l=>l.qty+' × '+l.name).join(', '))+' at no charge, approved by '+esc(personName(pc.manual.approvedBy))+'. It\'s recorded as a gift, and the stock comes off.','Give away',()=>{ recordSale('gift',pc); toast('🎁 Recorded as a gift'); }); };
   document.querySelectorAll('[data-discx]').forEach(b=>b.onclick=()=>{ cartDisc=null; saveCart(); render(); });
@@ -374,7 +378,7 @@ function pay(method){
         m.innerHTML=`<h2>Check the order</h2><div class="pbody">${corrNote}<div class="clines">${cartLinesHtml(pc,true)}</div>
             ${pc.manual?'':`<p><button class="linkb" id="rDisc" style="color:var(--green)">🏷️ Add a discount 🔒</button></p>`}</div>
           <div class="pfoot"><div class="ctot" style="background:none;padding:6px 0"><span>${cartCount()} item${cartCount()===1?'':'s'}</span><span class="tot"><b>${c2(pc.total)}</b>${gstLine(pc.total)}</span></div>
-            <p class="note" style="margin:0 0 6px">Paying by</p><div class="seg" style="width:100%;margin-bottom:10px">${['cash','eftpos','other'].map(k=>`<button data-m="${k}" class="${method===k?'on':''}" style="flex:1">${PAY_TXT[k]}</button>`).join('')}</div>
+            <p class="note" style="margin:0 0 6px">Paying by</p><div class="seg" style="width:100%;margin-bottom:10px">${payMethods().map(k=>`<button data-m="${k}" class="${method===k?'on':''}" style="flex:1">${PAY_TXT[k]}</button>`).join('')}</div>
             <div class="paybig"><button class="btn alt" id="rBack">‹ Back to the till</button><button class="btn" id="rGo">Take payment ›</button></div>
             <p style="text-align:center;margin:12px 0 0"><button class="linkb" id="rCancel">Cancel this sale</button></p></div>`;
         m.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>{ changeQty(b.dataset.inc,1); draw(); });
@@ -400,11 +404,13 @@ function pay(method){
           m.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{ tendered=b.dataset.v==='exact'?pc.total:tendered+(+b.dataset.v); draw(); });
           const r=m.querySelector('#pR'); if(r) r.onclick=()=>{ tendered=0; draw(); };
           m.querySelector('#pOk').onclick=()=>go('confirm');
-        } else if(method==='eftpos'){
-          m.innerHTML=`${head}<div class="pbody">${corrNote}<p style="font-size:24px;text-align:center;margin:30px 0">Put <b>${c2(was?Math.max(0,diff):pc.total)}</b> through the EFTPOS terminal${was&&diff<=0?' (nothing more to charge)':''}.</p>
-              <p class="note" style="text-align:center">Wait until the terminal says <b>approved</b> or <b>declined</b>.</p></div>
+        } else if(cardLike(method)){ const ap=method==='afterpay', q=method==='eftpos'&&S.settings.eftQueue&&!was;
+          m.innerHTML=`${head}<div class="pbody">${corrNote}<p style="font-size:24px;text-align:center;margin:30px 0">${ap?`The customer pays <b>${c2(was?Math.max(0,diff):pc.total)}</b> with Afterpay`:`Put <b>${c2(was?Math.max(0,diff):pc.total)}</b> through the EFTPOS terminal`}${was&&diff<=0?' (nothing more to charge)':''}.</p>
+              <p class="note" style="text-align:center">${ap?'They tap their Afterpay card (in their phone wallet) on the terminal. ':''}Wait until it says <b>approved</b> or <b>declined</b>.</p>
+              ${q?`<button class="btn alt bigbtn" id="pQueue">📋 Busy? Pay on EFTPOS next<small style="display:block;font-weight:400">Puts this sale in the queue for whoever is on the terminal, and frees the till</small></button>`:''}</div>
             <div class="pfoot"><div class="paybig"><button class="btn danger" id="pCancel">Declined / cancel</button><button class="btn" id="pOk">✓ Approved</button></div></div>`;
           m.querySelector('#pOk').onclick=()=>go('confirm');
+          const pq=m.querySelector('#pQueue'); if(pq) pq.onclick=()=>{ queueSale(pc); payRedraw=null; close(); setSheet(false); render(); toast('📋 In the EFTPOS queue · '+c2(pc.total)); };
         } else {
           m.innerHTML=`${head}<div class="pbody">${corrNote}<label class="note">How was it paid? (e.g. bank transfer, voucher)</label><input class="txt" id="pN" value="${esc(note)}"></div>
             <div class="pfoot"><div class="paybig"><button class="btn danger" id="pCancel">Cancel sale</button><button class="btn" id="pOk">Paid</button></div></div>`;
@@ -414,7 +420,7 @@ function pay(method){
         return;
       }
       if(step==='confirm'){
-        const q=method==='cash'?`<b>${c2(tendered)}</b> cash received${tendered>pc.total?` and <b>${c2(tendered-pc.total)}</b> change given`:''}?`:method==='eftpos'?`Has the EFTPOS terminal <b>approved</b> ${c2(was?Math.max(0,diff):pc.total)}?`:`Paid <b>${c2(pc.total)}</b> by ${esc(note)}?`;
+        const q=method==='cash'?`<b>${c2(tendered)}</b> cash received${tendered>pc.total?` and <b>${c2(tendered-pc.total)}</b> change given`:''}?`:cardLike(method)?`Has ${method==='afterpay'?'Afterpay':'the EFTPOS terminal'} <b>approved</b> ${c2(was?Math.max(0,diff):pc.total)}?`:`Paid <b>${c2(pc.total)}</b> by ${esc(note)}?`;
         m.innerHTML=`<h2>Confirm the payment</h2><div class="pbody"><p style="font-size:26px;text-align:center;margin:40px 0 10px">${q}</p><p class="note" style="text-align:center">Only say yes once the money is really in.</p></div>
           <div class="pfoot"><div class="paybig"><button class="btn alt" id="cNo">No, go back</button><button class="btn" id="cYes">Yes, approved</button></div></div>`;
         m.querySelector('#cNo').onclick=()=>close.onBack();
@@ -558,10 +564,46 @@ function editFloat(){
 }
 
 /* ---------- end of day (with a PIN) ---------- */
+/* ---------- "Pay on EFTPOS next" queue (Setup → Till: on a busy day) ----------
+   The sale waits on the selling day (everyone at the market sees it), not in the takings. Whoever is on the
+   terminal opens the queue on their own phone, puts each one through and ticks it paid: only then is it a sale. */
+const eftQueue=()=>{ const d=openDay(); return ((d&&d.queue)||[]).slice().sort((a,b)=>a.at-b.at); };
+function queueSale(pc){
+  const d=openDay(); if(!d) return;
+  d.queue=(d.queue||[]).concat([{id:SYNC.newId('sales'),at:Date.now(),by:SYNC.me(),servedBy:servedBy()||'',total:pc.total,
+    pc:{lines:pc.lines,deals:pc.deals,manual:pc.manual||null,subtotal:pc.subtotal,discount:pc.discount,total:pc.total},belowCost:lossApproved()?{cost:lossOk.cost,approvedBy:lossOk.by}:null}]);
+  clearCart(); save();
+}
+function queuePaid(q){
+  const d=openDay(); if(!d||!q) return;
+  d.queue=(d.queue||[]).filter(x=>x.id!==q.id);
+  if(!S.sales.some(s=>s.id===q.id)){ const now=Date.now(), pc=q.pc;
+    S.sales.push(Object.assign({id:q.id,sessionId:d.id,channel:d.type,where:d.name||'',date:nzDay(new Date(now)),at:now,when:nzStamp(now),
+      lines:pc.lines,deals:pc.deals||[],manualDiscount:pc.manual||null,subtotal:pc.subtotal,discount:pc.discount,total:pc.total,gst:Math.round(pc.total*3/23),
+      method:'eftpos',by:SYNC.me(),servedBy:q.servedBy||'',voided:false,queuedAt:q.at,queuedBy:q.by},q.belowCost?{belowCost:q.belowCost}:{})); }
+  save();
+}
+function openQueue(){
+  modal((m,close)=>{ let tmr;
+    const draw=()=>{ const l=eftQueue(); if(!document.body.contains(m)){ clearInterval(tmr); return; }
+      m.innerHTML=`<h2>💳 EFTPOS queue</h2><p class="note">Oldest first. Put each total through the terminal, then tap Paid. It only counts as a sale once it's paid.</p>
+        ${l.length?l.map((q,i)=>`<div class="card qrow"><div class="grow"><b class="qtot">${c2(q.total)}</b><small>${i===0?'Next · ':''}${q.pc.lines.map(x=>x.qty+' × '+esc(x.name)).join(', ')}${q.servedBy?' · served by '+esc(q.servedBy):''} · ${agoText(q.at)}</small></div>
+          <button class="btn bigyes" data-qp="${q.id}">✓ Paid</button><button class="btn alt small" data-qx="${q.id}">Declined</button></div>`).join(''):'<p class="chkline">All paid. 🌿</p>'}
+        <div class="mact"><button class="btn alt" id="qC">Close</button></div>`;
+      m.querySelector('#qC').onclick=()=>{ clearInterval(tmr); close(); render(); };
+      m.querySelectorAll('[data-qp]').forEach(b=>b.onclick=()=>{ queuePaid(eftQueue().find(x=>x.id===b.dataset.qp)); toast('✓ Paid'); draw(); });
+      m.querySelectorAll('[data-qx]').forEach(b=>b.onclick=()=>{ const q=eftQueue().find(x=>x.id===b.dataset.qx); if(!q) return;
+        confirmBox('Card declined: '+c2(q.total),cart.length?'Take it off the queue (nothing charged). The till is busy, so it can\'t go back on it.':'Put it back on the till so they can pay another way?',cart.length?'Take it off':'Back to the till',()=>{
+          const d=openDay(); d.queue=(d.queue||[]).filter(x=>x.id!==q.id);
+          if(!cart.length){ q.pc.lines.forEach(l=>{ if(l.custom) cart.push({pid:l.pid,qty:l.qty,custom:typeof l.custom==='object'?l.custom:{name:l.name,size:l.size||'',price:l.unit}}); else if(l.pid) cart.push({pid:l.pid,qty:l.qty}); }); if(q.pc.manual) cartDisc=q.pc.manual; saveCart(); }
+          save(); clearInterval(tmr); close(); render(); }); });
+    };
+    draw(); tmr=setInterval(draw,2000); });
+}
 function dayTotals(d){
   const all=daySales(d), ok=all.filter(s=>!s.voided), by=k=>ok.filter(s=>s.method===k).reduce((n,s)=>n+s.total,0);
   const units={}; ok.forEach(s=>s.lines.forEach(l=>{ const k=l.name+(l.size?' · '+l.size:''); units[k]=(units[k]||0)+l.qty; }));
-  return {count:ok.length,total:ok.reduce((n,s)=>n+s.total,0),gst:ok.reduce((n,s)=>n+(s.gst||0),0),cash:by('cash'),eftpos:by('eftpos'),other:by('other'),
+  return {count:ok.length,total:ok.reduce((n,s)=>n+s.total,0),gst:ok.reduce((n,s)=>n+(s.gst||0),0),cash:by('cash'),eftpos:by('eftpos'),afterpay:by('afterpay'),other:by('other'),
     discount:ok.reduce((n,s)=>n+(s.discount||0),0),units,voids:all.filter(s=>s.voided&&s.voidReason!=='corrected'),corrections:all.filter(s=>s.voidReason==='corrected').length};
 }
 function endDay(approver){
@@ -569,6 +611,8 @@ function endDay(approver){
   modal((m,close)=>{ m.innerHTML=`<h2>🏁 End of the day</h2><p class="note">Opened with ${esc(personName(approver))}'s PIN.</p>
     <div class="eod"><div><span>Sales</span><b>${t.count}</b></div><div><span>Takings</span><b>${c2(t.total)}</b></div><div><span>GST included</span><b>${c2(t.gst)}</b></div><div><span>Deals and discounts</span><b>${c2(t.discount)}</b></div></div>
     <div class="card" style="margin:12px 0"><div class="row"><div class="grow">💳 EFTPOS<small>Check against the terminal's settlement</small></div><b>${c2(t.eftpos)}</b></div>
+      ${t.afterpay?`<div class="row"><div class="grow">🟢 Afterpay</div><b>${c2(t.afterpay)}</b></div>`:''}
+      ${eftQueue().length?`<div class="card nudge"><b>⚠️ ${eftQueue().length} sale${eftQueue().length===1?'':'s'} in the EFTPOS queue not paid yet (${c2(eftQueue().reduce((n,x)=>n+x.total,0))})</b><small>They aren't counted. Put them through, or take them off the queue, before ending the day.</small><button class="btn small" id="eQ">Open the queue</button></div>`:''}
       ${t.other?`<div class="row"><div class="grow">🔖 Other</div><b>${c2(t.other)}</b></div>`:''}
       <div class="row"><div class="grow">💵 Cash sales</div><b>${c2(t.cash)}</b></div>
       <div class="row"><div class="grow">Cash expected in the tin<small>Float ${c2(d.float)}${added?' + float added '+c2(added):''} + cash sales</small></div><b>${c2(expected)}</b></div>
@@ -580,7 +624,7 @@ function endDay(approver){
     const inp=m.querySelector('#eC'), out=m.querySelector('#eDiff');
     inp.oninput=()=>{ const c=toCents(inp.value); if(!(c>=0)){ out.className='change'; out.textContent='Count the tin, then type the total.'; return; } const diff=c-expected;
       out.className='change '+(diff===0?'ok':'bad'); out.innerHTML=diff===0?'✓ The cash is right':(diff>0?'Over by <b>'+c2(diff)+'</b>':'Short by <b>'+c2(-diff)+'</b>'); };
-    m.querySelector('#eK').onclick=close;
+    m.querySelector('#eK').onclick=close; const eq=m.querySelector('#eQ'); if(eq) eq.onclick=()=>{ close(); openQueue(); };
     m.querySelector('#eX').onclick=()=>{ const c=toCents(inp.value); if(!(c>=0)){ toast('Type the cash you counted first'); inp.focus(); return; }
       Object.assign(d,{status:'closed',closedAt:Date.now(),closedBy:SYNC.me(),closeApprovedBy:approver,countedCash:c,expectedCash:expected,floatAdded:added,totals:{count:t.count,total:t.total,gst:t.gst,cash:t.cash,eftpos:t.eftpos,other:t.other}});
       logApproval('close the day',approver,c2(t.total)+' taken; cash counted '+c2(c)+(c===expected?' (right)':(c>expected?' (over '+c2(c-expected)+')':' (short '+c2(expected-c)+')')));

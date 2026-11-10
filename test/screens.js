@@ -493,6 +493,23 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#oConf'); await page.waitForTimeout(40);
   ok(await page.evaluate(() => S.orders.find(x => x.id === 'email-abc').status === 'new') && await oil() === before - 5, 'Confirm makes it a normal order, with stock untouched until packed');
   await page.click('#oC');
+  // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
+  await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });
+  await page.waitForSelector('[data-pay="afterpay"]');
+  const qSales0 = await page.evaluate(() => S.sales.length);
+  await page.locator('.ptile[data-add]').first().click(); await page.click('[data-pay="eftpos"]'); await page.click('#rGo'); await page.waitForSelector('#pQueue');
+  await page.click('#pQueue'); await page.waitForSelector('#tQueue');
+  ok(await page.evaluate(n => S.sales.length === n && openDay().queue.length === 1 && cart.length === 0, qSales0), '"Pay on EFTPOS next" frees the till; the sale waits in the queue, not in the takings');
+  await page.click('#tQueue'); await page.waitForSelector('[data-qp]');
+  await page.screenshot({ path: path.join(shots, '34-eftpos-queue.png') });
+  await page.click('[data-qp]'); await page.waitForTimeout(80);
+  ok(await page.evaluate(n => S.sales.length === n + 1 && S.sales[S.sales.length - 1].method === 'eftpos' && S.sales[S.sales.length - 1].queuedAt && !openDay().queue.length, qSales0), 'ticked Paid: now it\'s a sale');
+  await page.click('#qC');
+  await page.locator('.ptile[data-add]').first().click(); await page.click('[data-pay="afterpay"]'); await page.click('#rGo'); await page.waitForSelector('#pOk');
+  ok(/Afterpay/.test(await text(page)) && !(await page.$('#pQueue')), 'Afterpay: its own step (no queue)');
+  await page.click('#pOk'); await page.click('#cYes'); await page.click('#apOk'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => S.sales[S.sales.length - 1].method === 'afterpay' && dayTotals(openDay()).afterpay > 0), 'an Afterpay sale is recorded and totalled separately');
+  await page.evaluate(() => { const d = S.sessions.find(x => x.id === 'qday'); if (d) Object.assign(d, { status: 'closed', closedAt: Date.now() }); S.settings.eftQueue = false; S.settings.afterpayOn = false; save(); stack = ['home', 'orders']; render(); });
   // a helper asks to open a market: the owner's window pops up (never during a sale), approve with a PIN, or decline with a reason
   await page.evaluate(() => { S.asks.push({ id: 'askT1', by: 'helper@example.com', byName: 'Sam', at: Date.now(), date: nzDay(), status: 'waiting', placeName: 'Pop-up Fair', eventId: '', placeId: '' }); });
   await page.waitForSelector('#akOk', { timeout: 5000 });
@@ -790,7 +807,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const c = S.clock.find(x => x.id === 'actions'); return c && c.list.length >= 1 && c.list.every(x => x.go); }), 'the owners\' action plan is kept (owner-only) for the summary emails');
   await page.evaluate(() => { location.hash = '#go=brew:stock'; }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 6000 }).catch(() => {});
   ok(await page.evaluate(() => cur() === 'brew' && brewTab === 'stock' && !location.hash), 'a link with #go=brew:stock opens Stock');
-  await page.evaluate(() => { location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 6000 }).catch(() => {});
+  for (let i = 0; i < 2 && !(await page.evaluate(() => cur() === 'profit')); i++) { await page.evaluate(() => { location.hash = ''; location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 6000 }).catch(() => {}); }
   ok(await page.evaluate(() => cur() === 'profit'), 'a link with #go=profit opens Real profit');
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);

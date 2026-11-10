@@ -84,7 +84,7 @@ function buildReceipt(b, sale, req) {
   const st = b.settings || {}, name = b.name || 'Rata & Smudge', no = receiptNo(sale);
   const when = Utilities.formatDate(new Date(sale.at), 'Pacific/Auckland', 'd MMMM yyyy, h:mm a');
   const gst = sale.gst != null ? sale.gst : gstOf(sale.total), excl = sale.total - gst;
-  const paid = { cash: 'Cash', eftpos: 'EFTPOS', other: 'Other' + (sale.note ? ' (' + sale.note + ')' : '') }[sale.method] || sale.method;
+  const paid = { cash: 'Cash', eftpos: 'EFTPOS', afterpay: 'Afterpay', other: 'Other' + (sale.note ? ' (' + sale.note + ')' : '') }[sale.method] || sale.method;
   const rows = (sale.lines || []).map(l => [l.qty + ' × ' + l.name + (l.size ? ' ' + l.size : ''), money(l.amount)])
     .concat((sale.deals || []).map(d => [d.name + (d.times > 1 ? ' ×' + d.times : ''), '−' + money(d.saving)]))
     .concat(sale.manualDiscount ? [['Discount' + (sale.manualDiscount.reason ? ' (' + sale.manualDiscount.reason + ')' : ''), '−' + money(sale.manualDiscount.amount)]] : []);
@@ -646,8 +646,8 @@ function marketReports(b, devs, once) {
           .concat((c.soldOut || []).length ? [['Sold out', c.soldOut.map(pn).filter(Boolean).join(', ')]] : []).concat(c.note ? [['Notes', c.note]] : []); };
       const counted = g.reduce((n, s) => n + (s.countedCash != null ? s.countedCash : 0), 0), expected = g.reduce((n, s) => n + (s.expectedCash != null ? s.expectedCash : 0), 0);
       const name = (g[0].name || 'Selling day'), when = Utilities.formatDate(new Date(g[0].openedAt || Date.now()), 'Pacific/Auckland', 'EEEE d MMMM');
-      const rows = [['Takings', money(total)], ['Sales', String(live.length)], ['Cash', money(by('cash'))], ['EFTPOS', money(by('eftpos'))], ['Other', money(by('other'))], ['GST in the takings', money(gst)],
-        ['Average sale', live.length ? money(Math.round(total / live.length)) : '—'], ['Voided', String(sales.length - live.length)]]
+      const rows = [['Takings', money(total)], ['Sales', String(live.length)], ['Cash', money(by('cash'))], ['EFTPOS', money(by('eftpos'))]].concat(by('afterpay') ? [['Afterpay', money(by('afterpay'))]] : []).concat([['Other', money(by('other'))], ['GST in the takings', money(gst)],
+        ['Average sale', live.length ? money(Math.round(total / live.length)) : '—'], ['Voided', String(sales.length - live.length)]])
         .concat(fee && fee.cents ? [['Stall fee', money(Math.round(fee.cents / Math.max(1, fee.days || 1))) + (fee.days > 1 ? ' (share of ' + money(fee.cents) + ' for ' + fee.days + ' days)' : '')]] : [])
         .concat(checkinRows(g))
         .concat(expected ? [['Cash counted against expected', money(counted) + ' / ' + money(expected) + (counted === expected ? ' ✓' : ' (' + (counted > expected ? 'over ' : 'short ') + money(Math.abs(counted - expected)) + ')')]] : []);
