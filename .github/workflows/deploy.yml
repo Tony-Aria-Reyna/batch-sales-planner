@@ -21,10 +21,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --omit=dev
-      - name: Fetch the logo from rataandsmudge.co.nz
+      - name: The logo (locked in the repository; fetched from rataandsmudge.co.nz only if it's missing)
         run: |
-          pip install --quiet pillow
-          python3 scripts/fetch-logo.py src/brand-logo.webp || echo "::warning::Logo not fetched; the app will show its icon instead"
+          if [ ! -f src/brand-logo.webp ]; then pip install --quiet pillow; python3 scripts/fetch-logo.py src/brand-logo.webp || echo "::warning::Logo not fetched; the app will show its icon instead"; fi
       - run: npm run build
       - name: Publish the security rules
         continue-on-error: true

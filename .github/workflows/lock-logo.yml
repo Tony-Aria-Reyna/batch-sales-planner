@@ -1,0 +1,21 @@
+# Run by hand (Actions → Lock the logo → Run workflow): takes Rata & Smudge's logo from rataandsmudge.co.nz
+# once and commits it to the dev branch, so the app's branding stays fixed even if the website changes.
+name: Lock the logo
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - run: pip install --quiet pillow && python3 scripts/fetch-logo.py src/brand-logo.webp
+      - run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add src/brand-logo.webp src/brand-logo.png
+          git commit -m "Lock the Rata & Smudge logo (from rataandsmudge.co.nz)" || echo "no change"
+          git push origin dev

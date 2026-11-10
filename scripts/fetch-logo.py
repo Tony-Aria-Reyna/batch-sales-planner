@@ -1,6 +1,7 @@
 """Downloads Rata & Smudge's logo from the business's own website and trims it for the app.
-Run by GitHub before each build (see .github/workflows/deploy.yml). The logo itself is not kept in
-this repository, so the app always shows the logo currently on rataandsmudge.co.nz.
+Run once by the "Lock the logo" GitHub workflow, which commits the result (src/brand-logo.webp for the app,
+src/brand-logo.png for emails), so the branding stays fixed even if the website changes. Run that workflow
+again to take a new logo from the website.
 If the logo moves, update LOGO_URL (right-click the logo on the website → Copy image address)."""
 import io, sys, urllib.request
 from PIL import Image
@@ -21,4 +22,6 @@ box = (max(0, min(xs) - pad), max(0, min(ys) - pad), min(w, max(xs) + pad), min(
 im = im.crop(box)
 im = im.resize((900, round(im.height * 900 / im.width)), Image.LANCZOS)
 im.save(OUT, 'WEBP', quality=86)
-print('logo saved', OUT, im.size)
+png = OUT.rsplit('.', 1)[0] + '.png'
+im.resize((600, round(im.height * 600 / im.width)), Image.LANCZOS).save(png, 'PNG', optimize=True)
+print('logo saved', OUT, png, im.size)

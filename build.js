@@ -25,4 +25,5 @@ fs.mkdirSync(path.join(out, 'fonts'), { recursive: true });
 fs.copyFileSync('src/fonts/cinzel-600.woff2', path.join(out, 'fonts', 'cinzel-600.woff2'));
 // her logo is fetched from her website by GitHub at build time (scripts/fetch-logo.py); without it the app shows its icon
 if (fs.existsSync('src/brand-logo.webp')) fs.copyFileSync('src/brand-logo.webp', path.join(out, 'brand-logo.webp'));
+if (fs.existsSync('src/brand-logo.png')) fs.copyFileSync('src/brand-logo.png', path.join(out, 'brand-logo.png'));
 console.log('built', version, (html.length / 1024).toFixed(0) + ' KB', '->', path.basename(out));
