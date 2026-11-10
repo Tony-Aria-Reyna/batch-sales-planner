@@ -182,6 +182,12 @@ body.practicing .top{background:#806092}
 .orow .grow{flex:1;min-width:0}.orow b{display:block;font-weight:600}.orow small{display:block;color:var(--muted);font-size:15px}
 .ost{flex:none;border-radius:99px;padding:5px 12px;font-weight:700;font-size:14px;background:#efe7d6}.ost.new{background:#fbe9c9;color:#8a5a0a}.ost.packed{background:#e2ecf7;color:#2a5a8a}.ost.sent{background:#e3efdb;color:var(--ok)}.ost.cancelled{background:#eee;color:#888}
 .pqty{flex:none;font-size:22px;min-width:52px}.packslip{background:#fbfaf5}
+#printSlip{position:fixed;inset:0;z-index:300;background:#fff;overflow:auto;padding:24px}
+#printSlip .slip{max-width:640px;margin:0 auto;color:#000;font-size:16px}#printSlip h1{margin:0;font-size:26px}#printSlip h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;margin:22px 0 4px;color:#555}
+#printSlip .to{font-size:20px;line-height:1.35;margin:0}#printSlip .sm{color:#555;font-size:14px}#printSlip table{width:100%;border-collapse:collapse;margin-top:18px}
+#printSlip th,#printSlip td{border-bottom:1px solid #ccc;padding:10px 6px;text-align:left}#printSlip td.q{font-size:20px;font-weight:700;width:60px}#printSlip td.tick{width:30px;font-size:20px}#printSlip .thanks{margin-top:24px;font-size:18px}
+#printSlip .mact{max-width:640px;margin:20px auto}
+@media print{body.printing>*:not(#printSlip){display:none!important}#printSlip{position:static;padding:0}#printSlip .noprint{display:none}}
 .rgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
 @media (max-width:760px){ .rgrid{grid-template-columns:1fr 1fr} }
 .rstat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px}.rstat span{display:block;color:var(--muted);font-size:14px;font-weight:600}.rstat b{display:block;font-size:26px;margin:2px 0}.rstat small{color:var(--muted);font-size:13px}
@@ -473,7 +479,7 @@ let toastT=null;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
 
 // the whole business, in memory. Filled and kept live by SYNC.
-const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], clock:[], receiptHelper:null };
+const S={ name:'', settings:{}, inputs:[], recipes:[], products:[], deals:[], sessions:[], sales:[], batches:[], orders:[], todos:[], pins:[], audit:[], receipts:[], contacts:[], aiUsage:null, shopifyHelper:null, emailHelper:null, places:[], events:[], plans:[], ideas:[], costs:[], prices:[], fuel:[], stockmoves:[], shopping:[], voicenotes:[], pay:[], clock:[], receiptHelper:null };
 const save=()=>SYNC.push();
 const role=()=>SYNC.myRole();
 const canManage=()=>['owner','manager'].includes(role());
@@ -631,7 +637,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=7;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=8;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -696,6 +702,11 @@ SCREENS.setup={
       <label class="note" for="shShop">Shop address</label><input class="txt" id="shShop" autocapitalize="none" value="${esc(S.settings.shopifyShop||'')}" placeholder="yourshop.myshopify.com">
       <div class="row"><div class="grow"><b>Last check</b><small>${S.shopifyHelper&&S.shopifyHelper.lastRun?agoText(S.shopifyHelper.lastRun)+(S.shopifyHelper.error?' · ⚠️ '+esc(S.shopifyHelper.error):' · OK'):'Not yet'}</small></div></div></div>`:''}
 
+    ${role()==='owner'?`<div class="card"><h3>📥 Orders by email</h3>
+      <p class="note">Shops and customers email orders to this address. Every 15 minutes the business helper reads new ones and drafts each as an order marked “📥 Check it” in Orders. Nothing is final until you press Confirm. An address like <b>rata.smudge+orders@gmail.com</b> lands in the business Gmail with no new account.</p>
+      <label class="note" for="oeMail">Orders address</label><input class="txt" id="oeMail" type="email" autocapitalize="none" value="${esc(S.settings.orderEmail||'')}" placeholder="rata.smudge+orders@gmail.com">
+      <div class="row"><div class="grow"><b>Last check</b><small>${S.emailHelper&&S.emailHelper.lastRun?agoText(S.emailHelper.lastRun)+(S.emailHelper.error?' · ⚠️ '+esc(S.emailHelper.error):' · OK'+(S.emailHelper.added?' · '+S.emailHelper.added+' drafted so far':'')):S.settings.orderEmail?'Waiting for the business helper (version 8)':'Not set up'}</small></div></div></div>`:''}
+
     <div class="card"><h3>💌 Customer contacts</h3>
       <div class="row"><div class="grow"><b>Loyalty programme and receipt-only emails</b><small>${(()=>{ const l=contactList(); return l.filter(c=>c.loyalty).length+' in the Loyalty programme · '+l.filter(c=>!c.loyalty).length+' receipt only'; })()}</small></div><button class="btn small" id="goContacts">Open</button></div></div>
 
@@ -735,6 +746,7 @@ SCREENS.setup={
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
+    const oe=$('#oeMail'); if(oe) oe.onchange=()=>{ const v=oe.value.trim().toLowerCase(); if(v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ toast('That doesn\'t look like an email address'); oe.value=S.settings.orderEmail||''; return; } S.settings.orderEmail=v; save(); toast('Saved'); };
     const ss=$('#shShop'); if(ss) ss.onchange=()=>{ const v=ss.value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,''); if(v&&!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(v)){ toast('Use the address ending in .myshopify.com'); ss.value=S.settings.shopifyShop||''; return; } S.settings.shopifyShop=v; save(); toast('Saved'); };
     const ao=$('#aiOn'); if(ao) ao.onclick=()=>{ if(S.settings.voiceOn&&!S.settings.aiPaused) S.settings.aiPaused=true; else { S.settings.voiceOn=true; S.settings.aiPaused=false; } save(); render(); };
     wireCheckins();

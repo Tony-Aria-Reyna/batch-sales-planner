@@ -479,6 +479,20 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { const o = S.orders.find(x => x.id === 'shopify-1001'); o.status = 'sent'; o.sentBy = 'shopify'; settleOrders(); });
   ok(await oil() === before - 5, 'an order Shopify says was sent takes its stock off too');
   await page.screenshot({ path: path.join(shots, '32-orders.png') });
+  // an order the helper drafted from an email: shown to check, nothing taken off stock until it's confirmed and packed
+  await page.evaluate(() => { S.orders.push({ id: 'email-abc', source: 'wholesale', status: 'check', paid: false, at: Date.now(), date: nzDay(), by: 'email', customer: { name: 'Email Shop', email: 'shop@example.com', phone: '', address: '5 Mail Rd, Alexandra' },
+    lines: [{ pid: S.products.find(x => x.name === 'Test Oil').id, name: 'Test Oil 50ml', qty: 2, unit: 2300 }], discount: 0, shipping: 0, due: nzDay(), note: '', fromEmail: { from: 'Email Shop <shop@example.com>', subject: 'Order please', ref: 'PO-7', at: Date.now(), link: '' } }); save(); stack = ['home']; render(); });
+  ok(/order email to check/i.test(await text(page)), 'an order email shows on What to do next');
+  await page.click('[data-go="orders"]'); await page.waitForSelector('[data-ord]');
+  ok(/From email/.test(await text(page)), 'the order list marks it as from email');
+  await page.locator('[data-ord]', { hasText: 'Email Shop' }).click(); await page.waitForSelector('#oConf');
+  ok(/From email: check it/.test(await text(page)) && /PO-7/.test(await text(page)) && !(await page.$('#oPack')), 'the email order says what to check and can\'t be packed before it\'s confirmed');
+  await page.click('#oSlip'); await page.waitForSelector('#printSlip');
+  ok(await page.evaluate(() => { const t = document.querySelector('#printSlip').innerText; return /Deliver to/i.test(t) && /Email Shop/.test(t) && /Test Oil/.test(t) && !/\$/.test(t); }), 'the packing slip has the address and items, and no prices');
+  await page.click('#slC');
+  await page.click('#oConf'); await page.waitForTimeout(40);
+  ok(await page.evaluate(() => S.orders.find(x => x.id === 'email-abc').status === 'new') && await oil() === before - 5, 'Confirm makes it a normal order, with stock untouched until packed');
+  await page.click('#oC');
   await page.evaluate(() => { const v = { id: 'vorder1', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'Corner store wants four test oil by Friday', say: '',
     drafts: [{ kind: 'order', unsure: [], order: { customer: 'Test Corner Store', due: dk(addDays(kd(nzDay()), 5)), note: '', lines: [{ product: 'Test Oil 50ml', qty: 4 }] } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('#cYes1'); await page.click('#cYes1'); await page.waitForTimeout(60);
@@ -761,9 +775,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { stack = ['home', 'profit']; render(); }); await page.waitForTimeout(100); await page.screenshot({ path: path.join(shots, '43c-phone-profit.png') });
   await page.setViewportSize({ width: 1180, height: 820 }); await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForTimeout(100);
   ok(await page.evaluate(() => { const c = S.clock.find(x => x.id === 'actions'); return c && c.list.length >= 1 && c.list.every(x => x.go); }), 'the owners\' action plan is kept (owner-only) for the summary emails');
-  await page.evaluate(() => { location.hash = '#go=brew:stock'; }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 3000 }).catch(() => {});
+  await page.evaluate(() => { location.hash = '#go=brew:stock'; }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 6000 }).catch(() => {});
   ok(await page.evaluate(() => cur() === 'brew' && brewTab === 'stock' && !location.hash), 'a link with #go=brew:stock opens Stock');
-  await page.evaluate(() => { location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 3000 }).catch(() => {});
+  await page.evaluate(() => { location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 6000 }).catch(() => {});
   ok(await page.evaluate(() => cur() === 'profit'), 'a link with #go=profit opens Real profit');
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);

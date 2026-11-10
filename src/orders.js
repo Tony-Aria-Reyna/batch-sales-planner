@@ -7,11 +7,12 @@
    Prices: retail prices include GST, as on the till; a product's wholesale price is also kept GST-inclusive,
    and shown ex GST where that's what shops expect. */
 const ORDER_SOURCES={shopify:'🛍️ Shopify',wholesale:'🚚 Wholesale',custom:'✍️ Custom'};
-const ORDER_STATUS={new:'New',packed:'Packed',sent:'Sent',cancelled:'Cancelled'};
+const ORDER_STATUS={check:'📥 Check it',new:'New',packed:'Packed',sent:'Sent',cancelled:'Cancelled'};
 let orderTab=lsGet('rs.ordertab','open');
 const orderUnits=o=>(o.lines||[]).reduce((n,l)=>n+(+l.qty||0),0);
 const orderTotal=o=>(o.lines||[]).reduce((n,l)=>n+(+l.qty||0)*(+l.unit||0),0)-(o.discount||0)+(o.shipping||0);
-const openOrders=()=>S.orders.filter(o=>o.status==='new'||o.status==='packed');
+const openOrders=()=>S.orders.filter(o=>o.status==='check'||o.status==='new'||o.status==='packed');
+const emailOrders=()=>S.orders.filter(o=>o.status==='check');
 const dueLabel=o=>o.due?(o.due<nzDay()&&o.status!=='sent'?'⚠️ was due ':'due ')+nzDate(kd(o.due),{weekday:'short',day:'numeric',month:'short'}):'no date';
 
 SCREENS.orders={
@@ -23,10 +24,11 @@ SCREENS.orders={
     l=l.sort((a,b)=>orderTab==='open'?((a.due||'9')+a.at).localeCompare((b.due||'9')+b.at):(b.at||0)-(a.at||0)).slice(0,100);
     const sh=S.settings.shopifyShop, st=S.shopifyHelper;
     return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="oNew">＋ New order</button></div>
+        ${emailOrders().length?`<p class="note"><b>📥 ${emailOrders().length} order${emailOrders().length===1?'':'s'} from email to check.</b> Nothing is final until you press Confirm.</p>`:''}
         <p class="note">${sh?`🛍️ Shopify (${esc(sh)}): ${st&&st.lastRun?'checked '+agoText(st.lastRun)+(st.error?' · ⚠️ '+esc(st.error):''):'waiting for the business helper to be set up'}`:'Shopify isn\'t connected yet (Setup → Shopify).'}</p></div>
       <div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${orderTab===k?'on':''}" data-ot="${k}">${v}</button>`).join('')}</div>
       <div class="card">${l.length?l.map(o=>`<button class="orow" data-ord="${o.id}"><span class="grow"><b>${esc(o.customer&&o.customer.name||'Customer')}${o.shopify?' · '+esc(o.shopify.name||''):''}</b>
-          <small>${ORDER_SOURCES[o.source]||''} · ${orderUnits(o)} item${orderUnits(o)===1?'':'s'} · ${c2(orderTotal(o))}${o.paid?' · paid':' · not paid'} · ${esc(dueLabel(o))}</small></span>
+          <small>${o.fromEmail?'📥 From email · ':''}${ORDER_SOURCES[o.source]||''} · ${orderUnits(o)} item${orderUnits(o)===1?'':'s'} · ${c2(orderTotal(o))}${o.paid?' · paid':' · not paid'} · ${esc(dueLabel(o))}</small></span>
           <span class="ost ${o.status}">${ORDER_STATUS[o.status]||o.status}</span></button>`).join(''):'<p class="note">No orders here.</p>'}</div>`;
   },
   wire(){
@@ -45,20 +47,26 @@ function openOrder(o){
   modal((m,close)=>{ const draw=()=>{ const c=o.customer||{};
     m.innerHTML=`<h2>${ORDER_SOURCES[o.source]||''} ${esc(c.name||'Customer')}${o.shopify?' · '+esc(o.shopify.name||''):''}</h2>
       <p>${[c.email,c.phone,c.address].filter(Boolean).map(esc).join('<br>')}</p>
+      ${o.status==='check'&&o.fromEmail?`<div class="card nudge"><b>📥 From email: check it</b><small>${esc(o.fromEmail.from||'')}${o.fromEmail.subject?' · “'+esc(o.fromEmail.subject)+'”':''}${o.fromEmail.ref?' · their ref '+esc(o.fromEmail.ref):''}</small>
+        <small>The assistant read this from the email. Check the products and quantities against it, then Confirm.</small>${o.fromEmail.link?`<p><a class="linkb" href="${esc(o.fromEmail.link)}" target="_blank" rel="noopener">✉️ Open the email</a></p>`:''}</div>`:''}
       <p><b>${ORDER_STATUS[o.status]}</b> · ${esc(dueLabel(o))} · ${o.paid?'paid':'not paid'}</p>
       <div class="card packslip">${(o.lines||[]).map((l,i)=>`<div class="lrow"><b class="pqty">${l.qty} ×</b><div class="grow ltxt"><b>${esc(l.name)}</b><small>${c2(l.unit)} each${l.pid?'':' · not linked to a till product'}</small></div>${!l.pid&&o.status!=='sent'?`<button class="btn small alt" data-linkl="${i}">Link</button>`:''}</div>`).join('')}
         <p class="note">${o.discount?'Discount −'+c2(o.discount)+' · ':''}${o.shipping?'Shipping '+c2(o.shipping)+' · ':''}<b>Total ${c2(orderTotal(o))}</b> incl. GST ${c2(Math.round(orderTotal(o)*3/23))}</p></div>
       ${o.note?`<p class="note">📝 ${esc(o.note)}</p>`:''}
       ${unmatched.length&&o.status!=='sent'?'<p class="note">Link each line to a till product so stock comes off when it\'s packed.</p>':''}
-      <div class="mact">${o.source!=='shopify'?'<button class="btn alt" id="oEd">Change</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
+      ${o.status==='check'?`<button class="btn bigyes" id="oConf">✅ Confirm order</button>`:''}
+      <div class="mact">${o.source!=='shopify'?'<button class="btn alt" id="oEd">Change</button>':''}${o.status!=='cancelled'?'<button class="btn alt" id="oSlip">🖨️ Packing slip</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
         ${o.status==='new'?'<button class="btn" id="oPack">📦 Packed</button>':''}${o.status==='packed'?'<button class="btn" id="oSend">🚚 Sent</button>':''}
-        ${o.status!=='cancelled'&&o.status!=='sent'?'<button class="btn danger" id="oX">Cancel order</button>':''}<button class="btn alt" id="oC">Close</button></div>`;
+        ${o.status!=='cancelled'&&o.status!=='sent'?`<button class="btn danger" id="oX">${o.status==='check'?'Not an order':'Cancel order'}</button>`:''}<button class="btn alt" id="oC">Close</button></div>`;
     const set=ch=>{ Object.assign(o,ch,{changed:Date.now(),changedBy:SYNC.me()}); orderStock(o); save(); draw(); render(); };
     m.querySelector('#oC').onclick=close;
     m.querySelector('#oPaid').onclick=()=>set({paid:!o.paid,paidAt:o.paid?null:Date.now()});
     const pk=m.querySelector('#oPack'); if(pk) pk.onclick=()=>set({status:'packed',packedAt:Date.now(),packedBy:SYNC.me()});
     const sd=m.querySelector('#oSend'); if(sd) sd.onclick=()=>set({status:'sent',sentAt:Date.now(),sentBy:SYNC.me()});
-    const x=m.querySelector('#oX'); if(x) x.onclick=()=>confirmBox('Cancel this order?',o.source==='shopify'?'This only changes it here. Cancel or refund it in Shopify too.':'It stays in the list as cancelled.','Cancel order',()=>{ set({status:'cancelled',cancelledAt:Date.now()}); },true);
+    const cf=m.querySelector('#oConf'); if(cf) cf.onclick=()=>{ if(!(o.lines||[]).length){ toast('Add what they ordered first (Change)'); return; } set({status:'new',confirmedAt:Date.now(),confirmedBy:SYNC.me()}); toast('Order confirmed'); };
+    const sl=m.querySelector('#oSlip'); if(sl) sl.onclick=()=>packingSlip(o);
+    const x=m.querySelector('#oX'); if(x&&o.status==='check') x.onclick=()=>confirmBox('Not an order?','It\'s taken off the list. The email stays in Gmail.','Not an order',()=>{ set({status:'cancelled',cancelledAt:Date.now(),notOrder:true}); },true);
+    else if(x) x.onclick=()=>confirmBox('Cancel this order?',o.source==='shopify'?'This only changes it here. Cancel or refund it in Shopify too.':'It stays in the list as cancelled.','Cancel order',()=>{ set({status:'cancelled',cancelledAt:Date.now()}); },true);
     const ed=m.querySelector('#oEd'); if(ed) ed.onclick=()=>{ close(); editOrder(o); };
     m.querySelectorAll('[data-linkl]').forEach(b=>b.onclick=()=>linkLine(o,+b.dataset.linkl,draw));
   }; draw(); },{big:true});
@@ -105,7 +113,7 @@ function editOrder(src){
       <p><b>Total ${c2(orderTotal(o))}</b> incl. GST${ws?' · '+c2(Math.round(orderTotal(o)/1.15))+' ex GST':''}</p>
       <div class="row"><div class="grow">Paid already</div><div class="seg"><button data-pd="1" class="${o.paid?'on':''}">Yes</button><button data-pd="0" class="${!o.paid?'on':''}">No</button></div></div>
       <label class="note" for="oNo">Notes (optional)</label><textarea class="txt" id="oNo" rows="2">${esc(o.note||'')}</textarea>
-      <div class="mact"><button class="btn alt" id="oCx">Cancel</button><button class="btn" id="oOk">Save</button></div>`;
+      <div class="mact"><button class="btn alt" id="oCx">Cancel</button><button class="btn" id="oOk">${o.status==='check'?'✅ Save and confirm':'Save'}</button></div>`;
     const grab=()=>{ const s=m.querySelector('#oS'); if(s) o.place=s.value; o.customer.name=m.querySelector('#oN').value.trim(); o.customer.email=m.querySelector('#oE').value.trim(); o.customer.phone=m.querySelector('#oPh').value.trim(); o.customer.address=m.querySelector('#oA').value.trim().slice(0,200);
       o.due=m.querySelector('#oD').value; o.note=m.querySelector('#oNo').value.trim(); m.querySelectorAll('[data-oq]').forEach(i=>o.lines[+i.dataset.oq].qty=Math.max(0,Math.floor(+i.value||0))); };
     m.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{ grab(); o.source=b.dataset.src; o.lines.forEach(l=>{ const p=S.products.find(x=>x.id===l.pid); if(p) l.unit=o.source==='wholesale'&&p.wholesale?p.wholesale:p.price; }); draw(); });
@@ -118,9 +126,33 @@ function editOrder(src){
     m.querySelector('#oCx').onclick=close;
     m.querySelector('#oOk').onclick=()=>{ grab(); o.lines=o.lines.filter(l=>l.qty>0);
       if(!o.customer.name){ toast('Type who it\'s for'); return; } if(!o.lines.length){ toast('Add what they ordered'); return; }
-      o.total=orderTotal(o); o.gst=Math.round(o.total*3/23); o.changed=Date.now();
+      o.total=orderTotal(o); o.gst=Math.round(o.total*3/23); o.changed=Date.now(); if(o.status==='check') Object.assign(o,{status:'new',confirmedAt:Date.now(),confirmedBy:SYNC.me()});
       if(isNew){ Object.assign(o,{id:SYNC.newId('orders'),at:Date.now(),date:nzDay(),by:SYNC.me()}); S.orders.push(o); }
       else { const x=S.orders.find(y=>y.id===o.id); if(x) Object.assign(x,o); }
       save(); close(); render(); toast('Order saved'); }; };
     draw(); },{big:true});
+}
+
+/* ---------- packing slip: what goes in the box and where it goes. No prices (it travels with the parcel). ---------- */
+function packingSlip(o){
+  const c=o.customer||{}, old=document.getElementById('printSlip'); if(old) old.remove();
+  const d=document.createElement('div'); d.id='printSlip';
+  d.innerHTML=`<div class="slip"><h1>${esc(S.name||'Rata & Smudge')}</h1><p class="sm">Packing slip · ${nzDate(new Date(),{day:'numeric',month:'long',year:'numeric'})}${o.shopify?' · '+esc(o.shopify.name||''):''}${o.fromEmail&&o.fromEmail.ref?' · your ref '+esc(o.fromEmail.ref):''}</p>
+    <h2>Deliver to</h2><p class="to"><b>${esc(c.name||'')}</b>${c.address?'<br>'+esc(c.address).replace(/, /g,'<br>'):''}${c.phone?'<br>'+esc(c.phone):''}</p>
+    <table><thead><tr><th>Qty</th><th>Product</th><th>✓</th></tr></thead><tbody>${(o.lines||[]).filter(l=>+l.qty>0).map(l=>`<tr><td class="q">${+l.qty}</td><td>${esc(l.name)}</td><td class="tick">☐</td></tr>`).join('')}</tbody></table>
+    <p class="sm">${orderUnits(o)} item${orderUnits(o)===1?'':'s'}${o.note?' · '+esc(o.note):''}</p><p class="thanks">Thank you 🌿</p></div>
+    <div class="noprint mact"><button class="btn" id="slP">🖨️ Print</button><button class="btn alt" id="slC">Close</button></div>`;
+  document.body.appendChild(d); document.body.classList.add('printing');
+  const done=()=>{ d.remove(); document.body.classList.remove('printing'); };
+  d.querySelector('#slC').onclick=done; d.querySelector('#slP').onclick=()=>window.print();
+}
+// for What to do next: emails to check, then orders to pack (soonest first)
+function orderIdeas(){
+  if(!canManage()||missingCols.has('orders')) return [];
+  const l=[], e=emailOrders(), t=nzDay(), todo=S.orders.filter(o=>o.status==='new');
+  if(e.length) l.push({score:93,t:'📥 '+e.length+' order email'+(e.length===1?'':'s')+' to check',d:e.map(o=>(o.customer&&o.customer.name)||'Customer').slice(0,3).join(', ')+'. Check and confirm so it can be packed.',lbl:'Check',go:'orders',act:()=>openOrder(e[0])});
+  const late=todo.filter(o=>o.due&&o.due<=t), rest=todo.filter(o=>!(o.due&&o.due<=t));
+  if(late.length) l.push({score:90,t:'📦 '+late.length+' order'+(late.length===1?'':'s')+' to pack '+(late.some(o=>o.due<t)?'(late)':'today'),d:late.map(o=>(o.customer&&o.customer.name)||'Customer').slice(0,3).join(', '),lbl:'Pack',go:'orders',act:()=>openOrder(late[0])});
+  if(rest.length) l.push({score:55,t:'📦 '+rest.length+' order'+(rest.length===1?'':'s')+' not packed yet',d:rest.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).slice(0,3).map(o=>((o.customer&&o.customer.name)||'Customer')+' · '+dueLabel(o)).join(', '),lbl:'Open',go:'orders',act:()=>go('orders')});
+  return l;
 }

@@ -47,6 +47,7 @@ function tick() {
   for (const b of myBusinesses()) {
     try { voiceTick(b); } catch (e) { Logger.log('Voice notes: ' + e); }
     try { shopifyTick(b); } catch (e) { Logger.log('Shopify: ' + e); }
+    try { emailOrdersTick(b); } catch (e) { Logger.log('Order emails: ' + e); }
     try { notifyTick(b); } catch (e) { Logger.log('Notifications: ' + e); }
     try { learnTick(b); } catch (e) { Logger.log('Lessons: ' + e); }
     try { routeTick(b); } catch (e) { Logger.log('Routes: ' + e); }
@@ -460,6 +461,64 @@ function shopifyTick(b, force) {
 }
 // run by hand from the script editor to check the Shopify connection straight away
 function checkShopifyNow() { myBusinesses().forEach(b => shopifyTick(b, true)); Logger.log('Checked Shopify. See the Orders screen in the app.'); }
+
+/* ================= Orders by email =================
+   Shops and customers email orders to the orders address (Setup → Orders by email). Every 15 minutes the helper
+   reads new emails sent to it in this Gmail account (an address like rata.smudge+orders@gmail.com needs no new
+   account; a separate Gmail account works too if it forwards here). Gemini drafts each one as an order marked
+   "check it": nothing is final until an owner or manager presses Confirm in the app. Each email it has dealt with
+   gets the Gmail label "Done in the app", so it is never read twice. */
+const ORDER_LABEL = 'Done in the app';
+function emailOrdersTick(b, force) {
+  const addr = String((b.settings || {}).orderEmail || '').toLowerCase().trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) return;
+  const props = PropertiesService.getScriptProperties(), lastKey = 'ORDER_MAIL_LAST_' + b._id, last = Number(props.getProperty(lastKey) || 0);
+  if (!force && Date.now() - last < SHOPIFY_EVERY_MIN * 60000 - 30000) return;
+  props.setProperty(lastKey, String(Date.now()));
+  let err = '', added = 0;
+  try {
+    if (!prop('GEMINI_API_KEY', '')) throw new Error('No Gemini key in the helper yet');
+    const label = GmailApp.getUserLabelByName(ORDER_LABEL) || GmailApp.createLabel(ORDER_LABEL);
+    const threads = GmailApp.search('to:' + addr + ' -label:"' + ORDER_LABEL + '" newer_than:14d', 0, 10);
+    const prods = listDocs('businesses/' + b._id + '/products').filter(p => p.active !== false);
+    const places = listDocs('businesses/' + b._id + '/places').filter(p => !p.gone);
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const t of threads) {
+      for (const msg of t.getMessages()) {
+        const id = 'email-' + msg.getId(), path = 'businesses/' + b._id + '/orders/' + id;
+        if (getDoc(path)) continue;
+        if ((msg.getTo() + ' ' + msg.getCc()).toLowerCase().indexOf(addr) < 0 && t.getMessages().length > 1) continue;   // a reply in the thread that wasn't to the orders address
+        const body = String(msg.getPlainBody() || '').replace(/\n>.*$/gm, '').slice(0, 6000);
+        const prompt = 'You read emails sent to a small New Zealand natural-products business\'s orders address and draft the order. ' +
+          'Return JSON only: {"is_order":true|false,"customer":"shop or person name","email":"","phone":"","address":"delivery address","ref":"their order number or PO","due":"YYYY-MM-DD or empty","lines":[{"product":"name exactly as in our product list if it matches, else as written","qty":1}],"note":"anything else they asked for, short"}. ' +
+          'Today is ' + today() + ' (Pacific/Auckland). Leave a field empty if the email doesn\'t say; never guess prices. ' +
+          'Our products: ' + JSON.stringify(prods.map(p => p.name + (p.size ? ' ' + p.size : ''))) + '. Our shops: ' + JSON.stringify(places.filter(p => p.channel === 'wholesale').map(p => p.name)) + '.\n\n' +
+          'From: ' + msg.getFrom() + '\nSubject: ' + msg.getSubject() + '\nDate: ' + msg.getDate() + '\n\n' + body;
+        let d = {};
+        try { d = JSON.parse(gemini([{ text: prompt }], true).text || '{}'); } catch (e) { if (e.gemini) throw e; d = { is_order: true, note: 'Couldn\'t read this one: open the email.' }; }
+        if (d.is_order === false) continue;   // not an order (a question, a newsletter): skipped, and labelled with the rest of the thread
+        const from = msg.getFrom(), fromMail = (from.match(/<([^>]+)>/) || [, from])[1].trim();
+        const shop = places.filter(p => p.channel === 'wholesale').find(p => norm(p.name) && (norm(p.name) === norm(d.customer) || (p.email && String(p.email).toLowerCase() === fromMail.toLowerCase())));
+        const source = shop || /shop|store|ltd|limited|pharmacy|cafe/i.test(d.customer || '') ? 'wholesale' : 'custom';
+        const lines = (d.lines || []).slice(0, 40).map(l => {
+          const p = prods.find(p => norm(p.name + (p.size || '')) === norm(l.product) || norm(p.name + ' ' + (p.size || '')) === norm(l.product)) || prods.find(p => norm(p.name) === norm(l.product));
+          return { pid: p ? p._id : '', name: String(p ? p.name + (p.size ? ' ' + p.size : '') : l.product || 'Item').slice(0, 120), qty: Math.max(1, Math.round(Number(l.qty) || 1)), unit: p ? (source === 'wholesale' && p.wholesale ? p.wholesale : p.price || 0) : 0 };
+        });
+        const o = { source: source, status: 'check', paid: false, at: msg.getDate().getTime(), date: Utilities.formatDate(msg.getDate(), 'Pacific/Auckland', 'yyyy-MM-dd'), by: 'email',
+          customer: { name: String(d.customer || (shop && shop.name) || from.replace(/<.*>/, '').trim() || 'Customer').slice(0, 80), email: String(d.email || fromMail).slice(0, 120), phone: String(d.phone || '').slice(0, 40), address: String(d.address || '').slice(0, 200) },
+          place: shop ? shop._id : '', lines: lines, discount: 0, shipping: 0, due: /^\d{4}-\d{2}-\d{2}$/.test(d.due || '') ? d.due : '', note: String(d.note || '').slice(0, 500),
+          fromEmail: { from: String(from).slice(0, 160), subject: String(msg.getSubject() || '').slice(0, 160), ref: String(d.ref || '').slice(0, 60), at: msg.getDate().getTime(), link: 'https://mail.google.com/mail/u/0/#all/' + msg.getId() } };
+        patch(path, o); added++;
+        try { pushTo(b, bosses(b), 'orders', '📥 Order email to check', o.customer.name + ' · ' + lines.reduce((n, l) => n + l.qty, 0) + ' items', 'order-' + id); } catch (e) { Logger.log(e); }
+      }
+      t.addLabel(label);
+    }
+  } catch (e) { err = String(e && e.message || e).slice(0, 200); }
+  const prev = b.emailHelper || {};
+  patch('businesses/' + b._id, { emailHelper: { lastRun: Date.now(), error: err, added: (prev.added || 0) + added, version: HELPER_VERSION } });
+}
+// run by hand from the script editor to check the orders inbox straight away (and give Gmail permission the first time)
+function checkOrderEmailsNow() { myBusinesses().forEach(b => emailOrdersTick(b, true)); Logger.log('Checked the orders inbox. See Orders in the app.'); }
 
 /* ================= Notifications and the market report ================= */
 // The business Gmail account needs the "Firebase Cloud Messaging API Admin" role on the Firebase project.
