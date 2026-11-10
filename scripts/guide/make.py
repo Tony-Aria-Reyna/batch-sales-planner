@@ -25,7 +25,7 @@ L = lambda id_, t: f'<a href="#{id_}">{t}</a>'
 
 # ---------- cover ----------
 pages.append(f'''<section class="page cover"><div class="panel">
-  <img class="logo" src="../../src/icon-512.png">
+  <img class="logo" src="../../src/icon-rs-512.png">
   <div class="title">App<br>Quick Guide</div><div class="rule"></div>
   <div class="sub"><b>The Rata &amp; Smudge app</b><br>Selling, markets, brewing, orders and profit</div>
   <div class="for">For the Rata &amp; Smudge team<br>Keep it by the iPad, or open it on any device</div></div>

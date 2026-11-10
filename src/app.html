@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Rata & Smudge">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-rs-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon-rs.png">
 <title>Rata &amp; Smudge</title>
 <style>
 :root{
@@ -911,7 +911,7 @@ function offerInstall(){
   if(Date.now()<lsGet('rs.installSnooze',0)) return;
   if(!INSTALL_EVT&&!isIOS()) return;                 // nothing to offer (already installed, or a browser that can't)
   const d=document.createElement('div'); d.id='inst'; d.className='inst';
-  d.innerHTML=`<img src="icon-192.png" alt=""><div class="t"><b>Put Rata &amp; Smudge on your home screen</b>
+  d.innerHTML=`<img src="icon-rs-192.png" alt=""><div class="t"><b>Put Rata &amp; Smudge on your home screen</b>
     <span>It opens like an app and keeps working with no signal.</span>
     ${isIOS()?`<span class="how">Tap ${SHARE_SVG} <b>Share</b> at the top of Safari, then <b>Add to Home Screen</b>.</span>`:''}</div>
     ${INSTALL_EVT?'<button class="btn small" id="iGo">Install</button>':''}<button class="btn alt small" id="iNo">${isIOS()?'Got it':'Not now'}</button>`;
@@ -940,7 +940,7 @@ function gate(kind,extra){
   const g=$('#gate');
   if(!kind){ g.hidden=true; g.innerHTML=''; setTimeout(offerInstall,2500); return; }
   g.hidden=false;
-  const logo='<img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.outerHTML=\'<img class=&quot;logo&quot; src=&quot;icon-192.png&quot; alt=&quot;&quot;>\'">';
+  const logo='<img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge, Herbal Hugs" onerror="this.outerHTML=\'<img class=&quot;logo&quot; src=&quot;icon-rs-192.png&quot; alt=&quot;&quot;>\'">';
   let c='';
   if(kind==='loading') c=`${logo}<h1>Rata &amp; Smudge</h1><div class="gdots"><i></i><i></i><i></i></div><p class="gsmall">Getting everything ready…</p>`;
   if(kind==='noconfig') c=`${logo}<h1>Not connected yet</h1><p>This copy of the app has no Firebase project set up, so it cannot sign in.</p><p class="gsmall">For Tony: add <b>firebase-config.json</b> and rebuild.</p>`;
@@ -1017,7 +1017,7 @@ addEventListener('popstate',()=>{
 // Only a second back (or "Close the app") leaves.
 function showExit(){
   quitAsk=true; const e=$('#exitScr');
-  e.innerHTML=`<div class="exitcard"><img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge" onerror="this.src='icon-512.png';this.className='exiticon'">
+  e.innerHTML=`<div class="exitcard"><img class="brandlogo" src="brand-logo.webp" alt="Rata &amp; Smudge" onerror="this.src='icon-rs-512.png';this.className='exiticon'">
     <h1>Rata &amp; Smudge</h1><p class="exitsub">Till · Brew · Orders</p>
     <button class="btn bigbtn" id="exStay">Stay in the app</button>
     <p class="note">Press <b>back</b> again to close the app.</p></div>`;

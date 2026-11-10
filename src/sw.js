@@ -1,6 +1,6 @@
 // Keeps the Rata & Smudge app itself working with no signal. Business data is cached by Firestore separately.
 const VERSION = '__VERSION__';
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'fonts/cinzel-600.woff2', 'brand-logo.webp'];
+const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-rs-192.png', 'icon-rs-512.png', 'apple-touch-icon-rs.png', 'fonts/cinzel-600.woff2', 'brand-logo.webp'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => null)))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== VERSION).map(x => caches.delete(x)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (x) { d = { data: { title: 'Rata & Smudge', body: e.data ? e.data.text() : '' } }; }
   const m = Object.assign({}, d.notification || {}, d.data || {});
-  e.waitUntil(self.registration.showNotification(m.title || 'Rata & Smudge', { body: m.body || '', tag: m.tag || undefined, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: m.url || './' }, renotify: !!m.tag }));
+  e.waitUntil(self.registration.showNotification(m.title || 'Rata & Smudge', { body: m.body || '', tag: m.tag || undefined, icon: 'icon-rs-192.png', badge: 'icon-rs-192.png', data: { url: m.url || './' }, renotify: !!m.tag }));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
