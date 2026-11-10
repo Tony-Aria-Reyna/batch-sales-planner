@@ -4,10 +4,11 @@
    "Order online". An unsent draft becomes a to-do that reopens it; a sent order shows as "on order" in
    Stock with when it's due, and "Arrived" checks each item and amount and puts them into stock. */
 const suppliedBy=x=>{ const i=x.input?S.inputs.find(y=>y.id===x.input):S.inputs.find(y=>(y.name||'').toLowerCase()===(x.item||'').toLowerCase());
-  return i&&i.supplier?{key:i.supplier.trim().toLowerCase(),name:i.supplier.trim(),email:i.supplierEmail||'',link:i.supplierLink||''}:null; };
+  if(i&&i.supplier&&!x.shop) return {key:i.supplier.trim().toLowerCase(),name:i.supplier.trim(),email:i.supplierEmail||'',link:i.supplierLink||''};
+  if(x.shop){ const s=supplierInfo(x.shop); return Object.assign({key:x.shop},s,{name:(S.settings.shopNames||{})[x.shop]||s.name}); } return null; };
 // a supplier's details from any ingredient that has them
 function supplierInfo(key){ const l=S.inputs.filter(i=>(i.supplier||'').trim().toLowerCase()===key);
-  return {name:(l[0]||{}).supplier||key,email:(l.find(i=>i.supplierEmail)||{}).supplierEmail||'',link:(l.find(i=>i.supplierLink)||{}).supplierLink||''}; }
+  return {name:(l[0]||{}).supplier||(S.settings.shopNames||{})[key]||key,email:(l.find(i=>i.supplierEmail)||{}).supplierEmail||'',link:(l.find(i=>i.supplierLink)||{}).supplierLink||''}; }
 const orderItems=oid=>S.shopping.filter(x=>x.ordered&&x.ordered.id===oid);
 const lineTxt=x=>[x.qty&&x.qty!=1?x.qty+' ×':'',x.item,x.size||''].filter(Boolean).join(' ');
 
