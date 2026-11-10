@@ -518,6 +518,21 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => othersOwed().find(y => y.who === 'Christine').owe === 0), '"Paid them" starts the count again');
   await page.screenshot({ path: path.join(shots, '35-shops.png') });
   await page.evaluate(() => { const i = S.products.findIndex(x => x.id === 'friendSoap'); S.products.splice(i, 1); const j = S.sales.findIndex(x => x.id === 'sfriend'); S.sales.splice(j, 1); orderTab = 'open'; save(); render(); });
+  // infusions: start one (ready date on the calendar), strain it into stock; the season ahead
+  await page.evaluate(() => { S.inputs.push({ id: 'calOil', name: 'Calendula oil', cat: 'ingredient', price: 0, free: true, pack: 1000, unit: 'ml', infuse: { weeks: 4 } }); save(); brewTab = 'infuse'; stack = ['home', 'brew']; render(); });
+  await page.waitForSelector('#inStart'); await page.click('#inStart'); await page.waitForSelector('#jQ');
+  await page.selectOption('#jI', 'calOil'); await page.fill('#jQ', '2000'); await page.fill('#jWh', 'office, bottom shelf'); await page.fill('#jC', '120'); await page.click('#jOk'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const b = S.batches.find(x => x.kind === 'infusion' && x.input === 'calOil'); const ev = b && S.events.find(e => e.id === b.eventId); return b && b.ready === dk(addDays(kd(nzDay()), 28)) && ev && ev.date === b.ready && /Ready to strain/.test(ev.title); }) && /office, bottom shelf/.test(await text(page)), 'start an infusion: 4 weeks, where it is, and the ready date on the calendar');
+  await page.evaluate(() => { const b = S.batches.find(x => x.kind === 'infusion' && x.input === 'calOil'); b.ready = nzDay(); render(); });
+  ok(await page.evaluate(() => infuseIdeas().some(i => /Strain Calendula oil/.test(i.t))), 'a jar that\'s ready goes on What to do next');
+  await page.click('[data-strain]'); await page.fill('#sQ', '1800'); await page.click('#sOk'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => inputStock('calOil') === 1800 && S.inputs.find(x => x.id === 'calOil').price === Math.round(12000 / 1800 * 1000) && !jars().length), 'strained: 1,800 ml into ingredient stock, costed from what went in');
+  await page.click('[data-bt="season"]'); await page.waitForSelector('[data-sm]');
+  ok(/next 12 months/.test(await text(page)) && await page.$$eval('[data-sm]', l => l.length === 12), 'Season ahead: 12 months');
+  await page.locator('[data-sm]').nth(1).click(); await page.click('[data-bv="50"]'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => Object.values(S.settings.seasonBoost).includes(50)) && /\+50%/.test(await text(page)), 'a month can be marked busier');
+  await page.screenshot({ path: path.join(shots, '36-season.png') });
+  await page.evaluate(() => { S.settings.seasonBoost = {}; brewTab = 'next'; save(); stack = ['home', 'orders']; render(); });
   // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
   await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });
   await page.waitForSelector('[data-pay="afterpay"]');

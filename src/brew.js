@@ -60,18 +60,18 @@ function makeNext(){
 
 /* ---------- the Brew screen ---------- */
 let brewTab=lsGet('rs.brewtab','next'), brewPlan=null;
-const BREW_TABS=()=>canManage()?[['next','🔮 What to make'],['plan','🫙 Plan a brew'],['stock','📦 Stock'],['batches','📒 Batches'],['recipes',role()==='owner'?'🧪 Recipes & ingredients 🔒':'🧴 Ingredients']]:[['plan','🫙 Brew plan'],['stock','📦 Stock']];
+const BREW_TABS=()=>canManage()?[['next','🔮 What to make'],['plan','🫙 Plan a brew'],['infuse','🌼 Infusing'],['season','📅 Season ahead'],['stock','📦 Stock'],['batches','📒 Batches'],['recipes',role()==='owner'?'🧪 Recipes & ingredients 🔒':'🧴 Ingredients']]:[['plan','🫙 Brew plan'],['stock','📦 Stock']];
 SCREENS.brew={
   title:()=>({h:'Brew and stock',s:canManage()?'What to make, batches and stock':'What\'s being made, and stock'}),
   html(){
     const tabs=BREW_TABS(); if(!tabs.some(t=>t[0]===brewTab)||brewTab==='recipes') brewTab=tabs[0][0];
-    const body=brewTab==='next'?nextHtml():brewTab==='plan'?(canManage()?planHtml():plansHtml()):brewTab==='batches'?batchesHtml():stockHtml();
+    const body=brewTab==='infuse'?infuseHtml():brewTab==='season'?seasonHtml():brewTab==='next'?nextHtml():brewTab==='plan'?(canManage()?planHtml():plansHtml()):brewTab==='batches'?batchesHtml():stockHtml();
     return rulesNotice()+`<div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${brewTab===k?'on':''}" data-bt="${k}">${v}</button>`).join('')}</div>`+body;
   },
   wire(){
     document.querySelectorAll('[data-bt]').forEach(b=>b.onclick=()=>{ if(b.dataset.bt==='recipes'){ recTab=role()==='owner'?'recipes':'inputs'; go('recipes'); return; } brewTab=b.dataset.bt; lsSet('rs.brewtab',brewTab); render(); });
     const pu=$('#recUnlock'); if(pu) pu.onclick=()=>recipeGate(()=>render());
-    if(brewTab==='next') wireNext(); else if(brewTab==='plan') (canManage()?wirePlan:wirePlans)(); else if(brewTab==='batches') wireBatches(); else wireStock();
+    if(brewTab==='infuse') wireInfuse(); else if(brewTab==='season') wireSeason(); else if(brewTab==='next') wireNext(); else if(brewTab==='plan') (canManage()?wirePlan:wirePlans)(); else if(brewTab==='batches') wireBatches(); else wireStock();
   }
 };
 function needSetupHtml(){
@@ -304,6 +304,8 @@ function editInput(src,done){
         <div><label class="note" for="iK">Pack size (in the unit below)</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
       <label class="tickrow freebox ${i.free?'green':'red'}" id="iFreeBox" style="${i.price>0?'display:none':''}"><input type="checkbox" id="iFree" ${i.free?'checked':''}><span><b>Yes, this is free</b> <small>(e.g. grown at home), so $0 is right</small></span></label>
       <label class="note" for="iU">Measured</label><select class="txt" id="iU">${UNITS.map(u=>`<option value="${u}" ${i.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select>
+      <label class="tickrow"><input type="checkbox" id="iInf" ${i.infuse?'checked':''}><span>🌼 Infused here (e.g. calendula in olive oil)</span></label>
+      <div id="iInfW" style="${i.infuse?'':'display:none'}"><label class="note" for="iWk">Usual infusing time (weeks)</label><input class="txt" id="iWk" type="number" min="1" max="52" value="${i.infuse?infuseWeeks(i):6}"></div>
       <label class="note" for="iS">Supplier (optional)</label><input class="txt" id="iS" value="${esc(i.supplier||'')}" list="iSl"><datalist id="iSl">${[...new Set(S.inputs.map(x=>x.supplier).filter(Boolean))].map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
       <div class="formrow"><div><label class="note" for="iSe">Their email (to order)</label><input class="txt" id="iSe" type="email" autocapitalize="none" value="${esc(i.supplierEmail||'')}" placeholder="orders@…"></div>
         <div><label class="note" for="iSw">or their website</label><input class="txt" id="iSw" type="url" autocapitalize="none" value="${esc(i.supplierLink||'')}" placeholder="https://…"></div></div>
@@ -317,6 +319,7 @@ function editInput(src,done){
       if(o){ const e=m.querySelector('#iSe'), w=m.querySelector('#iSw'); if(!e.value) e.value=o.supplierEmail||''; if(!w.value) w.value=o.supplierLink||''; } };
     let cat=i.cat; m.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{ cat=b.dataset.cat; m.querySelectorAll('[data-cat]').forEach(x=>x.classList.toggle('on',x===b)); });
     m.querySelector('#iC').onclick=close;
+    m.querySelector('#iInf').onchange=e=>{ m.querySelector('#iInfW').style.display=e.target.checked?'':'none'; };
     const d=m.querySelector('#iD'); if(d) d.onclick=()=>{ if(S.recipes.some(r=>(r.lines||[]).some(l=>l.input===i.id))||S.products.some(p=>(p.pack||[]).some(l=>l.input===i.id))){ toast('It\'s used in a recipe or product: take it out there first'); return; }
       const k=S.inputs.findIndex(x=>x.id===i.id); if(k>=0) S.inputs.splice(k,1); save(); close(); render(); };
     m.querySelector('#iOk').onclick=()=>{ const name=m.querySelector('#iN').value.trim(), price=toCents(m.querySelector('#iP').value||'0'), pack=+m.querySelector('#iK').value, unit=m.querySelector('#iU').value;
@@ -325,6 +328,7 @@ function editInput(src,done){
       const se=m.querySelector('#iSe').value.trim(), sw=m.querySelector('#iSw').value.trim();
       if(se&&!isEmail(se)){ toast('Check the supplier\'s email'); return; } if(sw&&!/^https?:\/\/\S+\.\S+/.test(sw)){ toast('The website should start with https://'); return; }
       const changed=!isNew&&(price!==i.price||pack!==i.pack);
+      if(m.querySelector('#iInf').checked) i.infuse={weeks:Math.max(1,Math.min(52,+m.querySelector('#iWk').value||6))}; else delete i.infuse;
       Object.assign(i,{name:name.slice(0,80),cat,price:price>0?price:0,free:free&&!(price>0),pack,unit,supplier:m.querySelector('#iS').value.trim().slice(0,80),supplierEmail:se.slice(0,120),supplierLink:sw.slice(0,300),updated:Date.now()});
       if(isNew){ i.id=SYNC.newId('inputs'); S.inputs.push(i); } else Object.assign(S.inputs.find(x=>x.id===i.id),i);
       if(isNew||changed) S.prices.push({id:SYNC.newId('prices'),input:i.id,item:i.name,cents:price,pack,unit,date:nzDay(),at:Date.now(),by:SYNC.me(),from:'setup'});

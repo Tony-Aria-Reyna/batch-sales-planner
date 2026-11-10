@@ -119,9 +119,9 @@ SCREENS.profit={
    each with a link that opens the app at the right place (#go=…). */
 function homeIdeas(){
   if(tillLock()||!canManage()) return [];
-  if(role()!=='owner') return dedupeIdeas(orderIdeas().concat(stockIdeas()));
+  if(role()!=='owner') return dedupeIdeas(orderIdeas().concat(infuseIdeas(),stockIdeas()));
   const to=nzDay(), from=dk(addDays(kd(to),-60)), R=crunch(from,to,'all'), H=ownerHours(from,to), l=profitIdeas(from,to,R,H);
-  l.push(...orderIdeas());
+  l.push(...orderIdeas(),...infuseIdeas());
   const g=profitGaps(from,to,R)[0]; if(g) l.push({score:40,t:g.t,d:g.d,lbl:g.fix,go:'profit',act:g.act});
   const n=typeof issueCount==='function'?issueCount():0; if(n){ const hi=healthIssues()[0]; l.push({score:88,t:n+' thing'+(n===1?' needs':'s need')+' attention',d:hi?hi.name+': '+hi.issues[0].t:'Missing information that makes a number wrong.',lbl:'Fix',go:'attention',act:()=>go('attention')}); }
   return dedupeIdeas(l);
