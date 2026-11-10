@@ -493,6 +493,19 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#oConf'); await page.waitForTimeout(40);
   ok(await page.evaluate(() => S.orders.find(x => x.id === 'email-abc').status === 'new') && await oil() === before - 5, 'Confirm makes it a normal order, with stock untouched until packed');
   await page.click('#oC');
+  // a helper asks to open a market: the owner's window pops up (never during a sale), approve with a PIN, or decline with a reason
+  await page.evaluate(() => { S.asks.push({ id: 'askT1', by: 'helper@example.com', byName: 'Sam', at: Date.now(), date: nzDay(), status: 'waiting', placeName: 'Pop-up Fair', eventId: '', placeId: '' }); });
+  await page.waitForSelector('#akOk', { timeout: 5000 });
+  ok(/Sam asks to open the till/.test(await text(page)) && /Pop-up Fair/.test(await text(page)) && await page.evaluate(() => { const a = S.asks.find(x => x.id === 'askT1'); return a.seenAt && a.lookingBy === SYNC.me(); }), 'a helper\'s request pops up for the owner, and shows the helper it was seen and is being looked at');
+  await page.click('#akOk'); await page.waitForSelector('[data-k="2"]'); await pin(page, '2580'); await page.waitForTimeout(150);
+  ok(await page.evaluate(() => { const a = S.asks.find(x => x.id === 'askT1'); return a.status === 'approved' && a.decidedBy === SYNC.me(); }) && !(await page.$('#akOk')), 'Approve with a PIN approves it');
+  await page.evaluate(() => { cart = [{ pid: S.products[0].id, qty: 1 }]; S.asks.push({ id: 'askT2', by: 'helper@example.com', byName: 'Sam', at: Date.now(), date: nzDay(), status: 'waiting', placeName: 'Night Market', eventId: '', placeId: '' }); });
+  await page.waitForTimeout(2000);
+  ok(!(await page.$('#akOk')) && await page.evaluate(() => !!S.asks.find(x => x.id === 'askT2').seenAt), 'during a sale it waits (but the helper sees it reached the device)');
+  await page.evaluate(() => { cart = []; }); await page.waitForSelector('#akOk', { timeout: 5000 });
+  await page.click('#akNo'); await page.waitForSelector('[data-akr]'); await page.locator('[data-akr]').first().click(); await page.click('#akD'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => { const a = S.asks.find(x => x.id === 'askT2'); return a.status === 'declined' && /not doing that market/.test(a.reason); }), 'after the sale it appears; Decline gives the reason');
+  await page.evaluate(() => { S.settings.phones = { 'admin@example.com': { n: 'Fiona', p: '021 555 1234' } }; save(); render(); });
   await page.evaluate(() => { const v = { id: 'vorder1', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'Corner store wants four test oil by Friday', say: '',
     drafts: [{ kind: 'order', unsure: [], order: { customer: 'Test Corner Store', due: dk(addDays(kd(nzDay()), 5)), note: '', lines: [{ product: 'Test Oil 50ml', qty: 4 }] } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('#cYes1'); await page.click('#cYes1'); await page.waitForTimeout(60);
@@ -876,6 +889,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.click('#bk'); await hp.waitForSelector('.tiles');
   await hp.click('[data-go="sell"]'); await hp.waitForSelector('#sGo');
   ok(/not ticked on any market/.test(await text(hp)) && await hp.$eval('#sGo', b => b.disabled), 'a helper not ticked on today\'s market can\'t open the till');
+  await hp.fill('#askN', 'Pop-up Fair'); await hp.click('#askGo'); await hp.waitForSelector('.asksteps');
+  ok(await hp.evaluate(() => S.asks.some(a => a.by === SYNC.me() && a.status === 'waiting' && a.placeName === 'Pop-up Fair')) && /Sent/.test(await text(hp)) && await hp.$('.asksteps .cur'), 'helper asks to open another market and sees the steps, the current one blinking');
+  await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); a.at = Date.now() - 95e3; S.settings.phones = { [SYNC.getMainOwner()]: { n: 'Fiona', p: '021 555 1234' } }; });
+  await hp.waitForSelector('a[href^="tel:"]', { timeout: 3000 }).catch(() => {});
+  ok(await hp.evaluate(() => { const l = document.querySelector('a[href^="tel:"]'); return l && l.getAttribute('href') === 'tel:0215551234' && /Call Fiona/.test(l.textContent); }), 'after 90 seconds unseen: "Call Fiona" rings the main owner');
+  await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); Object.assign(a, { seenAt: Date.now(), seenBy: SYNC.getMainOwner(), status: 'approved', decidedBy: SYNC.getMainOwner() }); });
+  await hp.waitForSelector('.ptile', { timeout: 4000 }).catch(() => {});
+  ok(await hp.evaluate(() => { const d = openDay(); return d && d.name === 'Pop-up Fair' && d.askId && d.openedBy === SYNC.me(); }), 'approved: the helper\'s till opens by itself');
+  await hp.evaluate(() => { const d = S.sessions.find(x => x.askId); Object.assign(d, { status: 'closed', closedAt: Date.now() }); save(); stack = ['home', 'sell']; render(); }); await hp.waitForSelector('#sGo');
   await hp.evaluate(() => { const e = S.events.find(x => x.title === 'Village Market'); e.attendees = [...e.attendees, SYNC.me()]; render(); }); await hp.waitForSelector('[data-ev0]');
   ok(/Your markets today/.test(await text(hp)) && /Village Market/.test(await text(hp)), 'ticked on it, the helper is offered only today\'s market from the calendar');
   await hp.click('[data-ev0]'); await hp.click('[data-who="Sam"]'); await hp.click('#sGo'); await hp.waitForSelector('.ptile');

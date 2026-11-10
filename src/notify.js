@@ -8,7 +8,7 @@ const NOTE_KINDS=()=>[
   ['reminders','📅 Calendar reminders',canManage()?'Markets and other entries, at the times set on each one':'Markets you\'re rostered on'],
   ['todos','✅ Morning list','At 7:30 am: today\'s markets and your to-dos'],
   ['tills','💵 Till still open','When a till is left open well after the market finished']]
-  .concat(canManage()?[['orders','📦 New orders','When a Shopify order comes in'],['lowstock','🧺 Low stock before a market','The evening before, anything that has run out']]:[])
+  .concat(canManage()?[['asks','🙋 A helper asks to open a till','Straight away, so they\'re not left waiting'],['orders','📦 New orders','When a Shopify order or an order email comes in'],['lowstock','🧺 Low stock before a market','The evening before, anything that has run out']]:[])
   .concat(role()==='owner'?[['report','📧 Market report email','When the last till at a market closes, a one-page summary by email']]:[]);
 let myDevices=null;
 const deviceLabel=()=>{ const u=navigator.userAgent; return /iPad/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1)?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android phone':'This computer'; };

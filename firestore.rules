@@ -126,6 +126,20 @@ service cloud.firestore {
         allow update: if isMember(bid) && resource.data.by == email() && request.resource.data.by == email();
         allow delete: if canManage(bid) || (isMember(bid) && resource.data.get('by', '') == email());
       }
+      // A helper asking an owner or manager to open a market. You ask in your own name and see only your own;
+      // owners and managers see all and answer them. The person who asked can only cancel or mark it opened:
+      // never approve it themselves.
+      match /asks/{id} {
+        allow read: if canManage(bid) || (isMember(bid) && resource.data.get('by', '') == email());
+        allow create: if isMember(bid) && request.resource.data.by == email() && request.resource.data.status == 'waiting'
+                      && request.resource.data.at is number && request.resource.data.get('decidedBy', '') == '';
+        allow update: if canManage(bid)
+                      || (isMember(bid) && resource.data.by == email() && request.resource.data.by == email()
+                          && request.resource.data.get('decidedBy', '') == resource.data.get('decidedBy', '')
+                          && (request.resource.data.status == resource.data.status
+                              || (resource.data.status == 'waiting' && request.resource.data.status == 'cancelled')));
+        allow delete: if canManage(bid);
+      }
       // This device's push-notification address, one per person; the business helper sends the alerts.
       match /devices/{who} {
         allow read, write: if isMember(bid) && who == email();

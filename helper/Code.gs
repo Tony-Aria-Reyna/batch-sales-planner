@@ -51,6 +51,7 @@ function tick() {
     try { notifyTick(b); } catch (e) { Logger.log('Notifications: ' + e); }
     try { learnTick(b); } catch (e) { Logger.log('Lessons: ' + e); }
     try { routeTick(b); } catch (e) { Logger.log('Routes: ' + e); }
+    try { askTick(b); } catch (e) { Logger.log('Requests: ' + e); }
     let err = '', sentNow = 0;
     try {
       const queued = queryQueued(b._id);
@@ -182,6 +183,7 @@ function doPost(e) {
     const b = getDoc('businesses/' + q.bid);
     if (!b || String((b.settings || {}).receiptEmail || '').toLowerCase() !== me()) return ContentService.createTextOutput('not this helper');
     b._id = q.bid;
+    if (/^ask-/.test(q.id)) { askTick(b, q.id.slice(4)); return ContentService.createTextOutput('ok'); }
     if (/^ping-/.test(q.id)) { patch('businesses/' + q.bid, { helperSeen: { at: Date.now(), version: HELPER_VERSION } }); return ContentService.createTextOutput('ok'); }
     processNote(b, q.id);
   } catch (err) { out = 'error'; Logger.log(err); }
@@ -553,6 +555,17 @@ function pushTo(b, emails, kind, title, body, tag) {
     }
   }
   return n;
+}
+// A helper asks to open a market: tell the owners and managers straight away. The app calls the helper's
+// web address the moment it's asked (near-instant); the 5-minute check catches any that didn't get through.
+function askTick(b, id) {
+  const l = id ? [Object.assign(getDoc('businesses/' + b._id + '/asks/' + id) || {}, { _id: id })] : runQuery(b._id, 'status', 'waiting', 20, 'asks');
+  for (const a of l) {
+    if (a.status !== 'waiting' || a.pushedAt || a.date !== today()) continue;
+    const who = String(a.byName || String(a.by || '').split('@')[0]);
+    pushTo(b, bosses(b), 'asks', '🙋 ' + who + ' asks to open the till', (a.placeName || 'a market') + ' today. Tap to approve or decline.', 'ask-' + a._id);
+    patch('businesses/' + b._id + '/asks/' + a._id, { pushedAt: Date.now() });
+  }
 }
 function notifyTick(b) {
   DEV_CACHE = null;

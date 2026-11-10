@@ -55,9 +55,9 @@ const todaysMarkets=()=>(typeof eventsOn==='function'?eventsOn(nzDay()):[]).filt
 function startHtml(){
   const tm=myMarketsToday();
   if(!canManage()) return `<div class="card"><h3>📅 Your markets today</h3>${tm.length?`<div class="pastnames">${tm.map(e=>`<button class="chip big ${startEvent===e.id?'on':''}" data-ev0="${e.id}">🧺 ${esc(e.title)}${e.time?' · '+esc(t12(e.time)):''}</button>`).join('')}</div>`:'<p>You\'re not ticked on any market on today\'s calendar.</p><p class="note">Ask an owner or manager to open the till for you, or to tick you on today\'s market in the calendar.</p>'}
-      <input type="hidden" id="sName" value=""><label class="note" for="sFloat">Cash float in the tin (optional)</label><input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):''}"></div>
+      <input type="hidden" id="sName" value="${esc((S.events.find(e=>e.id===startEvent)||{}).title||'')}"><label class="note" for="sFloat">Cash float in the tin (optional)</label><input class="txt" id="sFloat" inputmode="decimal" placeholder="e.g. 200" value="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):''}"></div>
     <div class="card"><h3>Who is serving?</h3><div class="pastnames">${(S.settings.staff||[]).map(n=>`<button class="chip big ${servedBy()===n?'on':''}" data-who="${esc(n)}">${esc(n)}</button>`).join('')}<button class="chip big" id="sWhoAdd">＋ Someone new</button></div></div>
-    <button class="btn bigbtn" id="sGo" ${tm.length&&activeProducts().length?'':'disabled'}>Start selling</button>`;
+    <button class="btn bigbtn" id="sGo" ${tm.length&&activeProducts().length?'':'disabled'}>Start selling</button>${askCardHtml()}`;
   const saved=S.places.filter(p=>!p.gone&&p.group===START_GROUP[startType]).sort((a,b)=>a.name.localeCompare(b.name));
   const staff=S.settings.staff||[];
   return (tm.length?`<div class="card"><h3>📅 On the calendar today</h3><div class="pastnames">${tm.map(e=>`<button class="chip big ${startEvent===e.id?'on':''}" data-ev0="${e.id}">🧺 ${esc(e.title)}${e.time?' · '+esc(t12(e.time)):''}</button>`).join('')}</div></div>`:'')+`<div class="card"><h3>Where are you selling today?</h3>
@@ -74,6 +74,7 @@ function startHtml(){
     <button class="btn bigbtn" id="sGo" ${activeProducts().length?'':'disabled'}>Start selling</button>`;
 }
 function wireStart(){
+  if(!canManage()) wireAskCard();
   document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ startType=b.dataset.t; lsSet('rs.lastType',startType); render(); });
   document.querySelectorAll('[data-pl]').forEach(b=>b.onclick=()=>{ const p=S.places.find(x=>x.id===b.dataset.pl); if(!p) return; startPlace=p.id; startEvent=null;
     $('#sName').value=p.name; if(p.float) $('#sFloat').value=(p.float/100).toFixed(2); document.querySelectorAll('[data-pl]').forEach(x=>x.classList.toggle('on',x===b)); });
@@ -86,9 +87,9 @@ function wireStart(){
   $('#sGo').onclick=()=>{
     if(!servedBy()){ toast('Tap who is serving first'); return; }
     const fl=$('#sFloat').value.trim(), fc=fl?toCents(fl):0; if(fl&&!(fc>=0)){ toast('The float should be a number, e.g. 100'); return; }
-    const name=$('#sName').value.trim(); if(!canManage()&&!startEvent){ toast('Tap your market first'); return; }
-    if(startType==='market'&&!name){ toast('Tap or type which market'); return; }
     const ev=startEvent&&S.events.find(x=>x.id===startEvent);
+    const name=$('#sName').value.trim()||(ev&&ev.title)||''; if(!canManage()&&!startEvent){ toast('Tap your market first'); return; }
+    if(startType==='market'&&!name){ toast('Tap or type which market'); return; }
     let pl=startPlace&&S.places.find(p=>p.id===startPlace)||(name&&S.places.find(p=>!p.gone&&p.name.toLowerCase()===name.toLowerCase()));
     // a new market or place: its details first, so nothing is half set up
     if(!pl&&name&&canManage()&&START_GROUP[startType]&&startType!=='tour'){ const g=placeGroups().find(x=>x.id===START_GROUP[startType]);

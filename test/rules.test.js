@@ -75,6 +75,16 @@ const ADMIN = 'admin@example.com', OWNER = 'owner@example.com', OWNER2 = 'owner2
   await t('owner can use the time clock', assertSucceeds(setDoc(doc(as(OWNER), 'businesses/b1/clock/c1'), { code: 'brewing', mins: 60 })));
   await t('manager cannot see the time clock', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/clock/c1'))));
   await t('helper cannot see the time clock', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/clock/c1'))));
+  // a helper asks to open a market; only an owner or manager can approve it
+  const ask = { by: HELPER, at: 1, date: '2026-11-10', status: 'waiting', placeName: 'Cromwell' };
+  await t('helper can ask to open a market', assertSucceeds(setDoc(doc(as(HELPER), 'businesses/b1/asks/a1'), ask)));
+  await t('helper cannot ask in someone else\'s name', assertFails(setDoc(doc(as(HELPER), 'businesses/b1/asks/a2'), Object.assign({}, ask, { by: MANAGER }))));
+  await t('helper cannot approve their own request', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1/asks/a1'), { status: 'approved', decidedBy: HELPER })));
+  await t('helper can cancel their request', assertSucceeds(updateDoc(doc(as(HELPER), 'businesses/b1/asks/a1'), { status: 'cancelled' })));
+  await t('helper cannot reopen it afterwards', assertFails(updateDoc(doc(as(HELPER), 'businesses/b1/asks/a1'), { status: 'waiting' })));
+  await setDoc(doc(as(HELPER), 'businesses/b1/asks/a3'), ask);
+  await t('manager can approve a request', assertSucceeds(updateDoc(doc(as(MANAGER), 'businesses/b1/asks/a3'), { status: 'approved', decidedBy: MANAGER })));
+  await t('helper can mark the approved request opened', assertSucceeds(updateDoc(doc(as(HELPER), 'businesses/b1/asks/a3'), { opened: true })));
   await t('manager cannot see pay rates', assertFails(getDoc(doc(as(MANAGER), 'businesses/b1/pay/' + HELPER))));
   await t('helper cannot see pay rates', assertFails(getDoc(doc(as(HELPER), 'businesses/b1/pay/' + HELPER))));
   await t('manager adds a market place', assertSucceeds(setDoc(doc(as(MANAGER), 'businesses/b1/places/m1'), { name: 'Village market', channel: 'retail', group: 'markets' })));
