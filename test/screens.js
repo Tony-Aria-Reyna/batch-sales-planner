@@ -969,8 +969,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/not ticked on any market/.test(await text(hp)) && await hp.$eval('#sGo', b => b.disabled), 'a helper not ticked on today\'s market can\'t open the till');
   await hp.fill('#askN', 'Pop-up Fair'); await hp.click('#askGo'); await hp.waitForSelector('.asksteps');
   ok(await hp.evaluate(() => S.asks.some(a => a.by === SYNC.me() && a.status === 'waiting' && a.placeName === 'Pop-up Fair')) && /Sent/.test(await text(hp)) && await hp.$('.asksteps .cur'), 'helper asks to open another market and sees the steps, the current one blinking');
-  await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); a.at = Date.now() - 95e3; S.settings.phones = { [SYNC.getMainOwner()]: { n: 'Fiona', p: '021 555 1234' } }; });
+  await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); a.at = Date.now() - 95e3; S.settings.phones = { [SYNC.getMainOwner()]: { n: 'Fiona', p: '021 555 1234' } }; save(); });
   await hp.waitForSelector('a[href^="tel:"]', { timeout: 6000 }).catch(() => {});
+  await hp.waitForTimeout(300); await hp.screenshot({ path: path.join(shots, '37-android-ask-waiting.png') });
   ok(await hp.evaluate(() => { const l = document.querySelector('a[href^="tel:"]'); return l && l.getAttribute('href') === 'tel:0215551234' && /Call Fiona/.test(l.textContent); }), 'after 90 seconds unseen: "Call Fiona" rings the main owner');
   await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); Object.assign(a, { seenAt: Date.now(), seenBy: SYNC.getMainOwner(), status: 'approved', decidedBy: SYNC.getMainOwner() }); });
   await hp.waitForSelector('.ptile', { timeout: 4000 }).catch(() => {});

@@ -588,7 +588,7 @@ function openQueue(){
     const draw=()=>{ const l=eftQueue(); if(!document.body.contains(m)){ clearInterval(tmr); return; }
       m.innerHTML=`<h2>💳 EFTPOS queue</h2><p class="note">Oldest first. Put each total through the terminal, then tap Paid. It only counts as a sale once it's paid.</p>
         ${l.length?l.map((q,i)=>`<div class="card qrow"><div class="grow"><b class="qtot">${c2(q.total)}</b><small>${i===0?'Next · ':''}${q.pc.lines.map(x=>x.qty+' × '+esc(x.name)).join(', ')}${q.servedBy?' · served by '+esc(q.servedBy):''} · ${agoText(q.at)}</small></div>
-          <button class="btn bigyes" data-qp="${q.id}">✓ Paid</button><button class="btn alt small" data-qx="${q.id}">Declined</button></div>`).join(''):'<p class="chkline">All paid. 🌿</p>'}
+          <button class="btn qpaid" data-qp="${q.id}">✓ Paid</button><button class="btn alt small" data-qx="${q.id}">Declined</button></div>`).join(''):'<p class="chkline">All paid. 🌿</p>'}
         <div class="mact"><button class="btn alt" id="qC">Close</button></div>`;
       m.querySelector('#qC').onclick=()=>{ clearInterval(tmr); close(); render(); };
       m.querySelectorAll('[data-qp]').forEach(b=>b.onclick=()=>{ queuePaid(eftQueue().find(x=>x.id===b.dataset.qp)); toast('✓ Paid'); draw(); });

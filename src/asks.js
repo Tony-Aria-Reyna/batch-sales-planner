@@ -19,8 +19,8 @@ function askCardHtml(){
   const mine=myAsksToday(), wait=mine.filter(a=>a.status==='waiting'), ok=mine.filter(a=>a.status==='approved'&&!a.opened);
   const ticked=new Set(myMarketsToday().map(e=>e.id)), other=todaysMarkets().filter(e=>!ticked.has(e.id));
   const saved=S.places.filter(p=>!p.gone&&p.group==='markets'&&!other.some(e=>e.place===p.id)).sort((a,b)=>a.name.localeCompare(b.name));
-  return `${ok.map(a=>`<div class="card nudge"><b>✅ Approved: ${esc(a.placeName)}</b><small>${esc(phoneName(a.decidedBy))} said yes, for today.</small><button class="btn bigyes" data-askopen="${a.id}">Open the till</button></div>`).join('')}
-    ${wait.map(a=>`<div class="card nudge"><b class="blink">⏳ Waiting for approval: ${esc(a.placeName)}</b><button class="btn small" data-askshow="${a.id}">Show</button></div>`).join('')}
+  return `${ok.map(a=>`<div class="card nudge"><b>✅ Approved: ${esc(a.placeName)}</b><small style="display:block">${esc(phoneName(a.decidedBy))} said yes, for today.</small><button class="btn bigyes" data-askopen="${a.id}">Open the till</button></div>`).join('')}
+    ${wait.map(a=>`<div class="card nudge"><b class="blink">⏳ Waiting for approval: ${esc(a.placeName)}</b> <button class="btn small" data-askshow="${a.id}">Show</button></div>`).join('')}
     <div class="card"><h3>🙋 Ask to open another market</h3><p class="note">An owner or manager approves it from their phone or iPad, for today only.</p>
       <div class="pastnames">${other.map(e=>`<button class="chip big" data-askev="${e.id}">📅 ${esc(e.title)}</button>`).join('')}${saved.map(p=>`<button class="chip big" data-askpl="${p.id}">🧺 ${esc(p.name)}</button>`).join('')}</div>
       <label class="note" for="askN">Or type a new one</label><textarea class="txt grow" rows="1" id="askN" placeholder="Market name"></textarea>
