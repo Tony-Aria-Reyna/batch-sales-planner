@@ -29,9 +29,10 @@ function stockOf(pid){
 function stockCalc(pid){
   const moves=S.stockmoves.filter(m=>m.product===pid&&m.kind!=='packed'&&m.kind!=='returned').sort((a,b)=>a.at-b.at);
   if(!moves.length) return null;
-  let base=0, since=moves[0].at; const lastCount=[...moves].reverse().find(m=>m.kind==='count');
+  let base=0, since=moves[0].at; const lastCount=[...moves].reverse().find(m=>m.kind==='count'||m.kind==='carry');
   if(lastCount){ base=lastCount.qty; since=lastCount.at; }
-  for(const m of moves) if(m.at>=since&&m.kind!=='count') base+=m.qty;
+  if(typeof needOlder==='function') needOlder(nzDay(new Date(since)));   // sales before the 13 months each device loads
+  for(const m of moves) if(m.at>=since&&m.kind!=='count'&&m.kind!=='carry') base+=m.qty;
   const total=base-soldOf(pid,since);
   const today=nzDay(), pm=S.stockmoves.filter(m=>m.product===pid&&m.date===today&&(m.kind==='packed'||m.kind==='returned'));
   const packed=pm.reduce((n,m)=>n+(m.kind==='packed'?m.qty:-m.qty),0), packedAt=pm.length?Math.min(...pm.map(m=>m.at)):0;
@@ -39,6 +40,16 @@ function stockCalc(pid){
   const soldOut=packed>0?S.sales.filter(s=>!s.voided&&s.date===today&&s.at>=packedAt&&s.channel!=='farmgate').reduce((n,s)=>n+(s.lines||[]).filter(l=>l.pid===pid).reduce((a,l)=>a+l.qty,0),0):0;
   const out=Math.max(0,packed-soldOut);
   return {total,out,home:total-out};
+}
+// Once a month an owner's or manager's device notes each product's stock as it stands ("carry"), like a count.
+// Stock is then worked out from that note forward, so it never needs sales older than the months a device loads.
+function monthlyCarry(){
+  if(!canManage()||tillLock()||(typeof practice!=='undefined'&&practice)||missingCols.has('stockmoves')) return;
+  const month=nzDay().slice(0,7); if(monthlyCarry.done===month) return;
+  if(S.stockmoves.length&&!S.stockmoves.some(m=>m.at>Date.now()-400*864e5)&&!S.sales.length) return;   // not loaded yet
+  let n=0; S.products.forEach(p=>{ if(S.stockmoves.some(m=>m.product===p.id&&m.kind==='carry'&&m.month===month)) return; const st=stockOf(p.id); if(!st) return;
+    moveStock({kind:'carry',product:p.id,qty:st.total,month}); n++; });
+  monthlyCarry.done=month; if(n) save();
 }
 const inputStock=iid=>{ const ms=S.stockmoves.filter(m=>m.input===iid).sort((a,b)=>a.at-b.at); if(!ms.length) return null;
   const c=[...ms].reverse().find(m=>m.kind==='count'); let n=c?c.qty:0; ms.forEach(m=>{ if(m.kind!=='count'&&(!c||m.at>=c.at)) n+=m.qty; }); return n; };

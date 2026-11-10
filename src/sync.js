@@ -128,7 +128,7 @@ export const onPendingChange = cb => { onPending = cb; };
 
 export function start(businessId, state, changed) {
   stop(); bid = businessId; S = state; onChange = changed; pending = {};
-  synced = { biz: null, cols: Object.fromEntries(COLS.map(c => [c, new Map()])) };
+  synced = { biz: null, cols: Object.fromEntries(COLS.map(c => [c, new Map()])) }; older = {}; loadedFrom = windowStart();
   let first = true;
   unsub.push(onSnapshot(doc(db, 'businesses', bid), { includeMetadataChanges: true }, snap => {
     markPending('biz', snap.metadata.hasPendingWrites);
@@ -145,16 +145,41 @@ export function start(businessId, state, changed) {
   }, err => onChange('error', err)));
 }
 let waitingSaleIds = [];
+// Big, ever-growing collections are loaded from 13 months back on each device; older records stay in the
+// database for good (nothing is deleted) and are fetched when a report, refund or stock count needs them.
+const WINDOW = { sales: 'date', sessions: 'date' };
+const windowStart = () => { const d = new Date(); d.setMonth(d.getMonth() - 13); return d.toISOString().slice(0, 10); };
+let loadedFrom = windowStart(), older = {};
+export const loadedFromDate = () => loadedFrom;
+// fetch older records, once per range, and keep them alongside the live ones
+export async function loadOlder(from) {
+  if (!bid || !from || from >= loadedFrom) return false;
+  const to = loadedFrom, role = myRole(), allowed = readableCols(role, !!(S.settings && S.settings.mgrCosts));
+  for (const c of Object.keys(WINDOW)) {
+    if (!allowed.includes(c)) continue;
+    const r = await getDocs(query(collection(db, 'businesses', bid, c), where(WINDOW[c], '>=', from), where(WINDOW[c], '<', to)));
+    const got = r.docs.map(x => Object.assign({ id: x.id }, x.data()));
+    older[c] = (older[c] || []).filter(x => !got.some(g => g.id === x.id)).concat(got);
+    const m = synced.cols[c]; got.forEach(x => { if (!S[c].some(y => y.id === x.id)) S[c].push(x); m.set(x.id, JSON.stringify(clean(x))); });
+  }
+  loadedFrom = from; onChange('older'); return true;
+}
 // sales made on this device that haven't reached the database yet (no signal at the market)
 export const waitingSales = () => waitingSaleIds.length;
 function listenCols() {
   const role = myRole(), allowed = readableCols(role, !!(S.settings && S.settings.mgrCosts));
   for (const c of allowed) {
-    const ref = role === 'helper' && MINE_ONLY[c] ? query(collection(db, 'businesses', bid, c), where(MINE_ONLY[c], '==', me())) : collection(db, 'businesses', bid, c);
+    const ref = role === 'helper' && MINE_ONLY[c] ? query(collection(db, 'businesses', bid, c), where(MINE_ONLY[c], '==', me()))
+      : WINDOW[c] ? query(collection(db, 'businesses', bid, c), where(WINDOW[c], '>=', windowStart())) : collection(db, 'businesses', bid, c);
     unsub.push(onSnapshot(ref, { includeMetadataChanges: true }, snap => {
       markPending(c, snap.metadata.hasPendingWrites);
       if (c === 'sales') waitingSaleIds = snap.docs.filter(x => x.metadata && x.metadata.hasPendingWrites).map(x => x.id);
-      const list = snap.docs.map(x => Object.assign({ id: x.id }, x.data()));
+      const live = snap.docs.map(x => Object.assign({ id: x.id }, x.data())), ids = new Set(live.map(x => x.id));
+      if (WINDOW[c] && loadedFrom < windowStart()) {   // older months already fetched: keep any older record on screen, including one just added
+        const ws = windowStart(), keep = S[c].filter(x => (x[WINDOW[c]] || '') < ws && (x[WINDOW[c]] || '') >= loadedFrom && !ids.has(x.id));
+        older[c] = (older[c] || []).filter(x => !keep.some(k => k.id === x.id)).concat(keep);
+      }
+      const list = WINDOW[c] && older[c] ? older[c].filter(x => !ids.has(x.id)).concat(live) : live;   // older first, so the newest stay last
       mergeArray(S[c], list);
       const m = synced.cols[c]; m.clear(); S[c].forEach(x => m.set(x.id, JSON.stringify(clean(x))));
       onChange(c);

@@ -50,7 +50,12 @@ function vehicleCost(){
   return {l100,perL,ruc,perKm,fills:f.length};
 }
 /* ---------- crunch one period ---------- */
+// older months aren't loaded on a device until asked for: fetch them, then draw again
+let olderAsked='';
+function needOlder(from){ if(!SYNC.loadedFromDate||!from||from>=SYNC.loadedFromDate()||(olderAsked&&from>=olderAsked)) return; olderAsked=from;
+  if(typeof toast==='function') toast('Fetching older months…'); SYNC.loadOlder(from).then(()=>{ if(typeof render==='function') render(); }).catch(()=>{ olderAsked=''; }); }
 function crunch(from,to,chan){
+  needOlder(from);
   const inRange=d=>d>=from&&d<=to, keep=w=>chan==='all'||(chan.startsWith('c:')?groupChannel(w.group)===chan.slice(2):chan.startsWith('g:')?w.group===chan.slice(2):w.place===chan.slice(2));
   const R={count:0,revenue:0,gst:0,cogs:0,unknownCost:0,cash:0,eftpos:0,afterpay:0,other:0,fees:0,mileage:0,staff:0,otherCosts:0,byDay:{},byGroup:{},byPlace:{},byProduct:{},byHour:Array(24).fill(0),byWeekday:Array(7).fill(0),days:new Set(),sales:[]};
   const add=(w,total,gst,date)=>{ const ex=total-gst; R.revenue+=total; R.gst+=gst; R.byDay[date]=(R.byDay[date]||0)+total;

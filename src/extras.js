@@ -78,7 +78,7 @@ function importPrices(){
 /* ---------- weather and takings (Real profit) ----------
    From the market check-ins: what each kind of weather did to the takings, over the last two years. */
 function weatherTrends(){
-  const from=dk(addDays(kd(nzDay()),-730)), by={}; let all=0, n=0;
+  const from=dk(addDays(kd(nzDay()),-730)), by={}; let all=0, n=0; needOlder(from);
   S.sessions.forEach(ses=>{ if(ses.type!=='market'||ses.date<from||!ses.checkin) return; const tk=S.sales.filter(s=>!s.voided&&s.sessionId===ses.id).reduce((t,s)=>t+s.total,0); all+=tk; n++;
     (ses.checkin.weather||[]).forEach(w=>{ const x=by[w]||(by[w]={days:0,tk:0,busy:0}); x.days++; x.tk+=tk; if(/busy|flat/.test(ses.checkin.busy||'')) x.busy++; }); });
   const avg=n?all/n:0;

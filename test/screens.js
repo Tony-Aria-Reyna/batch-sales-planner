@@ -563,6 +563,15 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   // GST return helper: sales, purchases (bills, supplier invoices, fuel, stall fees), GST to pay
   ok(await page.evaluate(() => { const [f, t] = periodRange('month'), R = crunch(f, t, 'all'); S.costs.push({ id: 'billT', kind: 'purchase', note: 'Jars', cents: 11500, gst: true, date: nzDay() }); const g = gstReturn(f, t, R);
     S.costs.splice(S.costs.findIndex(c => c.id === 'billT'), 1); return g.b5 === R.revenue && g.b8 === Math.round(R.revenue * 3 / 23) && g.parts.bills >= 11500 && g.b12 === Math.round(g.b11 * 3 / 23) && g.b15 === g.b8 - g.b12; }), 'GST return helper: sales, purchases incl a bill, GST on each, and GST to pay (IRD boxes 5, 8, 11, 12, 15)');
+  // AU-01: each device loads 13 months of sales; older ones stay in the database and are fetched when asked for
+  await page.evaluate(() => { const d = dk(addDays(kd(nzDay()), -460)); S.sales.push({ id: 'oldSale1', sessionId: 'x', channel: 'market', where: 'Old Market', date: d, at: Date.now() - 460 * 864e5, lines: [], total: 4200, gst: 548, method: 'cash', by: SYNC.me(), voided: false }); save(); });
+  await page.waitForTimeout(400);
+  ok(await page.evaluate(() => SYNC.loadedFromDate() <= dk(addDays(kd(nzDay()), -390)) && Object.keys(JSON.parse(localStorage.mockdb)).some(k => /sales\/oldSale1$/.test(k))), 'devices load 13 months; older sales stay in the database (nothing is deleted)');
+  await page.evaluate(() => { const f = dk(addDays(kd(nzDay()), -500)); crunch(f, nzDay(), 'all'); }); await page.waitForTimeout(500);
+  ok(await page.evaluate(() => S.sales.some(x => x.id === 'oldSale1') && SYNC.loadedFromDate() <= dk(addDays(kd(nzDay()), -500))), 'a report reaching further back fetches the older months');
+  const stBefore = await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); return stockOf(p.id).total; });
+  await page.evaluate(() => { monthlyCarry.done = ''; monthlyCarry(); });
+  ok(await page.evaluate(st => { const p = S.products.find(x => x.name === 'Test Oil'); return S.stockmoves.some(m => m.kind === 'carry' && m.product === p.id && m.month === nzDay().slice(0, 7)) && stockOf(p.id).total === st; }, stBefore), 'once a month each product\'s stock is carried forward, so stock never needs sales older than 13 months');
   // getting started, the app health log, the assistant's monthly limit
   ok(await page.evaluate(() => { const l = readySteps(); return l.length === 6 && l.find(x => x.k === 'products').ok && l.find(x => x.k === 'sale').ok; }), 'getting started: six steps, ticked off from what is already set up');
   await page.evaluate(() => { logError('Test fault for the log', 'test'); });
@@ -961,6 +970,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await phone.addInitScript(d => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('mockdb', d); sessionStorage.setItem('seeded', '1'); } }, db);
   const hp = await phone.newPage(); hp.on('pageerror', e => errs.push(e.message));
   await hp.goto(url); await hp.waitForSelector('#gIn'); await signIn(hp, 'helper@example.com'); await hp.waitForSelector('.tiles'); await hp.waitForTimeout(200);
+  ok(await hp.evaluate(() => S.sales.length > 0 && !S.sales.some(x => x.id === 'oldSale1')), 'a fresh device loads only the last 13 months of sales');
   ok((await hp.$$('.tile')).length === 4 && !(await hp.$('#cog')), 'helper sees only Sell, Calendar, Brew and Lists, and no Setup');
   await hp.screenshot({ path: path.join(shots, '06-android-helper.png') });
   await hp.click('[data-go="calendar"]'); await hp.waitForSelector('#rcal .pc-grid'); await hp.waitForTimeout(100);

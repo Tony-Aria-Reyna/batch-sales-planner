@@ -631,7 +631,7 @@ SCREENS.home={
       ${typeof readyCardHtml==='function'?readyCardHtml():''}${homeIdeasHtml()}
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
-  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); if(typeof wireReady==="function") wireReady(); wireHomeIdeas(); syncProductCosts();
+  wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); if(typeof wireReady==="function") wireReady(); wireHomeIdeas(); syncProductCosts(); if(typeof monthlyCarry==='function') setTimeout(monthlyCarry,4000);
     const ha=$('#hAttn'); if(ha) ha.onclick=()=>go('attention'); const hf=$('#hFind'); if(hf) hf.onclick=openSearch;
     const ht=$('#hTalk'); if(ht) ht.onclick=()=>{ const r=pendingNotes().find(n=>n.status==='ready'); if(r) reviewNote(r); else startVoice(); };
     const hd=$('#hDrive'); if(hd) hd.onclick=()=>go('drive'); const hty=$('#hType'); if(hty) hty.onclick=()=>typedNote(); const hph=$('#hPhoto'); if(hph) hph.onclick=()=>takePhoto();
