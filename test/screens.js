@@ -303,13 +303,18 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
              { kind: 'todo', unsure: [], todo: { text: 'Label jars', due: tm, time: '', who: 'admin@example.com' } },
              { kind: 'shopping', unsure: ['size'], shopping: { item: 'Beeswax', qty: 1, size: '' } },
              { kind: 'idea', unsure: [], idea: { text: 'Rose balm', kind: 'product' } }] }); save(); }, [nextWeek, tomorrow]);
-  await page.waitForSelector('#rYes');
+  await page.waitForSelector('#cYes1');
+  ok(/Check it · 1 of 4/.test(await text(page)) && /Put on the calendar: Village Market/.test(await page.textContent('.chkline')), 'check screen: one thing at a time, in a plain sentence ("1 of 4")');
   ok(/You already have Village Market/.test(await text(page)), 'review warns about a calendar clash (the weekly Village Market)');
-  ok(await page.evaluate(() => document.querySelector('[data-dk="size"]').classList.contains('unsure') && document.querySelector('[data-dk="end"]').classList.contains('unsure')), 'guessed fields are highlighted to check');
-  await page.fill('[data-dk="size"]', '1 kg');
   await page.screenshot({ path: path.join(shots, '28-voice-review.png') });
-  await page.click('[data-drop="0"]'); await page.waitForTimeout(40);
-  await page.click('#rYes'); await page.waitForTimeout(80);
+  await page.click('#cNo1'); await page.waitForTimeout(60);
+  ok(/Add a to-do: Label jars/.test(await page.textContent('.chkline')), '✗ No leaves it out and moves to the next');
+  await page.click('#cYes1'); await page.waitForTimeout(60);
+  ok(/Add to the shopping list: Beeswax/.test(await page.textContent('.chkline')) && /a guess/.test(await text(page)), 'guesses are flagged');
+  await page.click('#cEdit'); await page.waitForSelector('[data-dk="size"]');
+  ok(await page.evaluate(() => document.querySelector('[data-dk="size"]').classList.contains('unsure')), 'Edit details shows the guessed field highlighted');
+  await page.fill('[data-dk="size"]', '1 kg'); await page.click('#cYes1'); await page.waitForTimeout(60);
+  await page.click('#cYes1'); await page.waitForTimeout(120);
   ok(await page.evaluate(() => S.events.filter(e => e.title !== 'Test Market').length === 1 && S.todos.some(t => t.text === 'Label jars' && t.from === 'voice') && S.shopping.some(x => x.item === 'Beeswax' && x.size === '1 kg' && !x.done) && S.ideas.some(i => i.text === 'Rose balm' && i.kind === 'product') && S.voicenotes.find(x => x.kind === 'note').status === 'done'), 'Save: the checked drafts are saved (with the hand-fixed size), the left-out one is not');
   await page.click('#hDrive'); await page.waitForSelector('#dToday'); await page.click('#dToday'); await page.waitForTimeout(80);
   ok(/Village Market/.test(await text(page)) && !!(await page.$('#dNext')), 'Drive mode: "What\'s on today" goes through today one at a time');
@@ -469,7 +474,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '32-orders.png') });
   await page.evaluate(() => { const v = { id: 'vorder1', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'Corner store wants four test oil by Friday', say: '',
     drafts: [{ kind: 'order', unsure: [], order: { customer: 'Test Corner Store', due: dk(addDays(kd(nzDay()), 5)), note: '', lines: [{ product: 'Test Oil 50ml', qty: 4 }] } }] }; S.voicenotes.push(v); reviewNote(v); });
-  await page.waitForSelector('#rYes'); await page.click('#rYes'); await page.waitForTimeout(60);
+  await page.waitForSelector('#cYes1'); await page.click('#cYes1'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => { const o = S.orders.find(x => x.from === 'voice'); return o && o.lines[0].pid && o.lines[0].qty === 4 && o.lines[0].unit === 2300 && o.status === 'new'; }), 'a voice note can make an order, matched to the till product at the wholesale price');
 
   console.log('Assistant v2: steps, questions, new kinds, replies and lessons');
@@ -493,9 +498,11 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
              { kind: 'made', unsure: [], made: { product: 'Test Oil 50ml', qty: 10 } },
              { kind: 'cost', unsure: ['cents'], cost: { what: 'Stall fee', cents: 4500, date: nzDay(), place: 'Village Market' } },
              { kind: 'fuel', unsure: [], fuel: { litres: 42.1, cents: 11840, odometer: 84210, date: nzDay() } }] }; S.voicenotes.push(v); reviewNote(v); });
-  await page.waitForSelector('#rTx');
-  ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)) && !!(await page.$('[data-save1="1"]')) && !(await page.$('[data-save1="0"]')), 'a question in a note is answered in place; the other drafts wait to be saved');
-  await page.fill('[data-di="1"][data-dk="qty"]', '12'); await page.dispatchEvent('[data-di="1"][data-dk="qty"]', 'input');
+  await page.waitForSelector('#cYes1');
+  ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)) && /1 of 3/.test(await text(page)) && /Record a batch made/.test(await page.textContent('.chkline')), 'a question in a note is answered in place; the other drafts wait to be checked, one at a time');
+  await page.click('#cEdit'); await page.waitForSelector('[data-di="1"][data-dk="qty"]');
+  await page.fill('[data-di="1"][data-dk="qty"]', '12'); await page.dispatchEvent('[data-di="1"][data-dk="qty"]', 'input'); await page.click('#cYes1'); await page.waitForTimeout(60);
+  await page.click('#cEdit'); await page.waitForSelector('[data-di="2"][data-dk="cents"]');
   await page.fill('[data-di="2"][data-dk="cents"]', '50'); await page.dispatchEvent('[data-di="2"][data-dk="cents"]', 'input');
   await page.screenshot({ path: path.join(shots, '28d-voice-kinds.png') });
   await page.fill('#rTx', 'yes'); await page.click('#rTxGo'); await page.waitForTimeout(150);
@@ -514,13 +521,19 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '33b-fuel-photo.png') });
   await page.click('#fC');
   await page.evaluate(() => { const v = { id: 'vfollow', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'buy beeswax', say: '', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 1, size: '' } }] }; S.voicenotes.push(v); reviewNote(v); });
-  await page.waitForSelector('#rTx'); await page.fill('#rTx', 'make it 3'); await page.click('#rTxGo'); await page.waitForSelector('#vS');
+  await page.waitForSelector('#cEdit'); await page.click('#cEdit'); await page.waitForSelector('#rTx'); await page.fill('#rTx', 'make it 3'); await page.click('#rTxGo'); await page.waitForSelector('#vS');
   ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); return n && n.text === 'make it 3' && n.prev.length === 1 && n.prev[0].shopping.item === 'Beeswax'; }), 'a typed change goes back to the assistant with the drafts on screen');
   await page.evaluate(() => { const n = S.voicenotes.find(x => x.parent === 'vfollow'); Object.assign(n, { status: 'ready', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Beeswax', qty: 3, size: '' } }] }); save(); });
   await page.waitForFunction(() => S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced', null, { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(150);
-  ok(await page.evaluate(() => document.querySelector('[data-dk="qty"]').value === '3' && S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced'), 'the changed drafts replace the old ones');
-  await page.fill('#rTx', 'cancel'); await page.click('#rTxGo'); await page.waitForTimeout(100);
-  ok(await page.evaluate(() => !document.querySelector('#rTx') && !S.shopping.some(x => x.item === 'Beeswax' && x.qty === 3)), '"cancel" throws it away');
+  ok(await page.evaluate(() => /3 × Beeswax/.test(document.querySelector('.chkline').textContent) && S.voicenotes.find(x => x.id === 'vfollow').status === 'replaced'), 'the changed drafts replace the old ones');
+  await page.click('#rNo'); await page.waitForTimeout(100);
+  ok(await page.evaluate(() => !document.querySelector('#cYes1') && !S.shopping.some(x => x.item === 'Beeswax' && x.qty === 3)), '"cancel" throws it away');
+  // Drive mode: it reads the check back, then listens; saying "yes" saves it with no tapping
+  await page.evaluate(() => { window.say = (t, d) => { window.lastSaid = t; d && d(); };
+    window.SpeechRecognition = window.webkitSpeechRecognition = class { start() { setTimeout(() => this.onresult && this.onresult({ results: [[{ transcript: 'yes' }]] }), 60); setTimeout(() => this.onend && this.onend(), 90); } stop() {} abort() {} };
+    const v = { id: 'vdrive', kind: 'note', by: 'admin@example.com', at: Date.now(), status: 'ready', heard: 'buy jar labels', say: '', drafts: [{ kind: 'shopping', unsure: [], shopping: { item: 'Jar labels', qty: 1, size: '' } }] }; S.voicenotes.push(v); reviewNote(v, { drive: true }); });
+  await page.waitForTimeout(400);
+  ok(await page.evaluate(() => /Add to the shopping list: Jar labels\. Is that right\?/.test(window.lastSaid || '') || /Saved/.test(window.lastSaid || '')) && await page.evaluate(() => S.shopping.some(x => x.item === 'Jar labels')), 'Drive mode: reads it back, listens, and "yes" saves it hands-free');
   await page.click('#bk'); await page.click('[data-go="calendar"]'); await page.waitForSelector('#pcSheet');
   ok(await page.evaluate(() => calItems(dk(addDays(kd(nzDay()), 5))).some(i => /Send: Test Corner Store/.test(i.title))), 'an order\'s send-by date shows on the calendar');
   // ---- reports: takings, GST and real profit
@@ -651,7 +664,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => cur() === 'brew' && brewTab === 'stock'), 'a stock answer has a link to Stock');
   await page.evaluate(() => { stack = ['home']; render(); const v = { id: 'vhelp', kind: 'note', by: SYNC.me(), at: Date.now(), status: 'ready', heard: 'whereabouts do I set up those three for fifty deals', say: '', drafts: [{ kind: 'help', unsure: [], help: { topic: 'deal' } }] }; S.voicenotes.push(v); reviewNote(v); });
   await page.waitForSelector('[data-helpgo="deal"]');
-  ok(/Set up a deal/.test(await text(page)) && !(await page.$('#rYes')), 'said differently, the assistant points to the right help (deals), with nothing to save');
+  ok(/Set up a deal/.test(await text(page)) && !(await page.$('#cYes1')), 'said differently, the assistant points to the right help (deals), with nothing to save');
   await page.click('[data-helpgo="deal"]'); await page.waitForTimeout(150); if (await page.$('.pinpad')) await pin(page, '2580'); await page.waitForTimeout(150);
   ok(await page.evaluate(() => cur() === 'deals'), 'and its Take me there opens Deals');
   await page.evaluate(() => { stack = ['home']; setupOpen = false; render(); });
@@ -825,9 +838,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.click('#bC'); await hp.screenshot({ path: path.join(shots, '27-android-lists-helper.png') });
   await hp.evaluate(() => { S.voicenotes.push({ id: 'vhelper1', kind: 'note', by: 'helper@example.com', at: Date.now(), status: 'ready', heard: 'x', say: '',
     drafts: [{ kind: 'event', unsure: [], event: { type: 'market', title: 'Pop-up', date: nzDay(), time: '', end: '', days: 1, place: '', attendees: [], note: '' } }, { kind: 'shopping', unsure: [], shopping: { item: 'Labels', qty: 2, size: '' } }] }); reviewNote(S.voicenotes.find(n => n.id === 'vhelper1')); });
-  await hp.waitForSelector('#rYes');
+  await hp.waitForSelector('#cYes1');
   ok(/Only owners and managers can add this/.test(await text(hp)), 'helper: a calendar draft is shown but cannot be saved');
-  await hp.click('#rYes'); await hp.waitForTimeout(80);
+  await hp.click('#cYes1'); await hp.waitForTimeout(80);
   ok(await hp.evaluate(() => S.shopping.some(x => x.item === 'Labels' && x.by === 'helper@example.com') && !S.events.some(e => e.title === 'Pop-up')), 'helper: saves the shopping, not the market');
   await hp.click('#bk'); await hp.waitForSelector('.tiles'); await hp.click('[data-go="brew"]'); await hp.waitForSelector('[data-bt]'); await hp.waitForTimeout(100);
   ok(/12 × Test Oil/.test(await text(hp)) && !(await hp.$('[data-bt="next"]')) && await hp.evaluate(() => S.recipes.length === 0 && S.batches.length === 0), 'helper sees the brew plan, but no recipes, batches or costs');

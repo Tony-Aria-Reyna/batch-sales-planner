@@ -199,6 +199,16 @@ ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-r
 .pb.gift{background:#806092;color:#fff}
 .oline{display:grid;grid-template-columns:minmax(0,1fr) 84px 52px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.oline .ltxt b{display:block;line-height:1.25}.oline .ltxt small{display:block}
 textarea.txt.grow{resize:none;overflow:hidden;line-height:1.35;min-height:56px;display:block;white-space:pre-wrap;word-break:break-word}
+.chk1 .chktop{display:flex;flex-direction:column;gap:4px;margin:-4px 0 10px}.chk1 .chktop>span{font-weight:800;color:var(--muted);font-size:15px;letter-spacing:.02em}.chk1 .chktop small{color:var(--muted);font-size:14px}
+.chkline{font-size:26px;line-height:1.3;font-weight:700;margin:6px 0 14px;color:var(--ink)}
+.bigyes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0}
+.bigyes button{min-height:110px;border-radius:22px;font-size:24px;font-weight:800;border:0}
+.bigyes .yesbtn{grid-column:1/-1;background:#2f7d32;color:#fff;min-height:130px;font-size:30px}
+.bigyes .micbtn{background:#efe6f5;color:#5d3f70}.bigyes .nobtn{background:#fbe3e0;color:#8c1d18}
+.listening{text-align:center;font-weight:800;color:#2f7d32;font-size:18px;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+.chksmall{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;margin:6px 0 10px}.chksmall .linkb{font-size:16px}.chksmall .linkb.bad{color:#b3261e}
+.chkdone{font-size:22px;font-weight:800;color:#2f7d32;text-align:center;margin:16px 0}
 .clockgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.clockgrid .btn{min-height:72px;font-size:17px;display:flex;flex-direction:column;align-items:center;justify-content:center}.clockgrid small{font-size:12px;font-weight:600;opacity:.85}
 .clockbar{border:2px solid var(--green2)}.clockbar.long{border-color:var(--warn);background:#fff4d6}
 .formrow.four{grid-template-columns:repeat(4,1fr);gap:6px}.formrow.four .note{font-size:.8rem}@media(max-width:420px){.formrow.four{grid-template-columns:1fr 1fr}}

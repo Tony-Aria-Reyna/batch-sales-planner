@@ -240,6 +240,26 @@ const draftAllowed=d=>{
   if(role()==='owner') return true;
   if(canManage()) return d.kind!=='recipe';
   return d.kind==='shopping'||d.kind==='made'||d.kind==='count'||(d.kind==='todo'&&(!d.todo.who||d.todo.who===SYNC.me())); };
+// what saving a draft will do, in one plain sentence (the "Check it" screen and Drive mode read this out)
+function planSentence(d){
+  const x=d[d.kind]||{}, line=draftLine(d), rest=line.includes(': ')?line.slice(line.indexOf(': ')+2):line;
+  const whose=d.kind==='todo'&&x.who&&x.who!==SYNC.me()?' for '+personName(x.who):'';
+  const lead={event:'Put on the calendar',todo:'Add a to-do'+whose,shopping:'Add to the shopping list',order:'Add an order',idea:'Save an idea',made:'Record a batch made',count:'Set the stock',
+    cost:'Record a cost',fuel:'Record a fill-up',contact:'Save a contact',price:'Update a price',recipe:'Save a recipe'}[d.kind]||'Save';
+  return lead+': '+rest+(d.kind==='todo'&&!x.due?'. No date.':'.');
+}
+// listen for a few seconds after reading back (Drive mode): yes, no, later, or what to change
+function listenBrief(ms,onText,onNone){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition; if(!R){ onNone&&onNone(); return null; }
+  let r, got=false; const end=()=>{ if(!got){ got=true; onNone&&onNone(); } };
+  try{ r=new R(); r.lang='en-NZ'; r.interimResults=false; r.maxAlternatives=1; r.continuous=false;
+    const t=setTimeout(()=>{ try{ r.stop(); }catch(e){} },ms);
+    r.onresult=e=>{ if(got) return; got=true; clearTimeout(t); onText(String(e.results[0][0].transcript||'')); };
+    r.onerror=r.onend=()=>{ clearTimeout(t); end(); }; r.start(); }catch(e){ end(); }
+  return r;
+}
+const YES_RX=/^(yes|yeah|yep|yup|sure|ok(ay)?|save( it)?|correct|that's right|go ahead)\b/i, NO_RX=/^(no|nope|leave( it)? out|skip|don't)\b/i;
+
 function draftLine(d){
   const x=d[d.kind]||{};
   if(d.kind==='event'){ const e=x; return `${calType(e).t}: ${e.title||'?'}, ${e.date?nzDate(kd(e.date),{weekday:'short',day:'numeric',month:'short'}):'no date'}${e.time?' '+t12(e.time)+(e.end?'–'+t12(e.end):''):''}`; }
@@ -273,8 +293,12 @@ function reviewNote(n,opts={}){
         const a=JSON.stringify(o[o.kind]), b=JSON.stringify(d[d.kind]); if(a!==b) edits.push({kind:d.kind,before:o[o.kind],after:d[d.kind]}); });
       if(edits.length){ x.edits=JSON.parse(JSON.stringify(edits)).slice(0,10); x.learn='todo'; } }
     save(); };
-  const speakAll=()=>{ const clashes=drafts.filter(d=>d.kind==='event').map(d=>clashOf(d.event)).filter(Boolean), asks=answers.filter(Boolean), open=state.filter(s=>s==='open').length;
-    say([asks.join(' '),open?(n.say||drafts.filter(d=>d.kind!=='question').map(draftLine).join('. ')):(asks.length?'':'I didn\'t catch anything to add.'),...clashes,open?'Say yes to save, or tell me what to change.':''].filter(Boolean).join(' ')); };
+  let listenNow=()=>{}, spokeAnswers=false;
+  const speakCur=()=>{ const i=state.findIndex(s=>s==='open'), asks=spokeAnswers?[]:answers.filter(Boolean); spokeAnswers=true;
+    if(i<0){ say(asks.join(' ')||(drafts.length?'':'I didn\'t catch anything to add.')); return; }
+    const d=drafts[i], clash=d.kind==='event'?clashOf(d.event):'';
+    say([asks.join(' '),planSentence(d),clash,'Is that right?'].filter(Boolean).join(' '),()=>listenNow()); };
+  const speakAll=speakCur;
   modal((m,close)=>{
     const field=(d,i,k,label,type='text',extra='')=>`<label class="note" for="d${i}${k}">${label}</label>`+(type==='text'?`<textarea class="txt grow ${(d.unsure||[]).includes(k)?'unsure':''}" rows="1" id="d${i}${k}" data-di="${i}" data-dk="${k}" ${extra}></textarea>`:`<input class="txt ${(d.unsure||[]).includes(k)?'unsure':''}" id="d${i}${k}" data-di="${i}" data-dk="${k}" type="${type}" ${extra}>`);
     const lineRows=(d,i,key,label)=>d[d.kind].lines.map((l,k)=>{ const p=key==='product'?findProduct(l.product):findInput(l.item); return `<div class="lrow"><input class="txt qty" type="number" min="0" step="any" data-ol="${i}:${k}" value="${l.qty}"><div class="grow ltxt"><b>${esc(p?(key==='product'?prodName(p):p.name):l[key])}</b><small>${p?'':label}</small></div></div>`; }).join('');
@@ -300,14 +324,35 @@ function reviewNote(n,opts={}){
       if(d.kind==='recipe') body=field(d,i,'name','Recipe name')+`<div class="formrow"><div>${field(d,i,'yield','One batch makes','number','step="any" min="0"')}</div><div><p class="note">${esc(UNIT_WORDS[d.recipe.unit]||d.recipe.unit)}</p></div></div>`+lineRows(d,i,'item','Not one of your ingredients: it will be added with no price (shown in Needs attention)');
       return `<div class="card draft ${done?'settled':''}" id="dc${i}"><h3>${DRAFT_ICON[d.kind]||'•'} ${esc(draftLine(d))}</h3>
         ${blocked?'<p class="note">Only owners and managers can add this. Ask them, or add it to your own to-dos.</p>':state[i]==='saved'?'<p class="note">✓ Saved</p>':state[i]==='dropped'?'<p class="note">Left out</p>':body+`<div class="mact"><button class="btn alt" data-drop="${i}">Leave out</button><button class="btn" data-save1="${i}">✓ Save</button></div>`}</div>`; };
-    const draw=()=>{ const open=state.filter(s=>s==='open').length, photo=/^image\//.test(n.mime||'');
-      m.innerHTML=`<h2>${photo?'📷 Here\'s what I read':'🎙 Here\'s what I heard'}</h2>${n.heard||n.text?`<p class="heard">“${esc(n.heard||n.text)}”</p>`:''}
-        ${drafts.length?'':'<p>Nothing to add from that. You can add things by hand as usual.</p>'}
-        ${open?'<p class="note">Check and fix anything by hand. Fields in yellow were a guess. Nothing is saved until you tap Save (or say "yes").</p>':''}
-        ${drafts.map(card).join('')}
-        ${open&&voiceReady()?`<div class="card vreply"><b>Change something</b><small class="note">Say or type it, e.g. "make it Sunday", "3 not 13". Or say "yes", "cancel" or "later".</small>
-          <div class="vrow"><textarea class="txt grow" rows="1" id="rTx" placeholder="Type a change…" enterkeyhint="send"></textarea><button class="btn" id="rTxGo">Send</button><button class="btn alt" id="rMic" aria-label="Say a change">🎙</button></div></div>`:''}
-        <div class="mact"><button class="btn alt" id="rAgain">🔊 Read it again</button>${open?`<button class="btn alt" id="rLater">Later</button><button class="btn danger" id="rNo">✕ Throw away</button><button class="btn" id="rYes">✓ Save ${open>1?'all '+open:'it'}</button>`:'<button class="btn" id="rDone">Done</button>'}</div>`;
+    let editing=false, listener=null;
+    const curI=()=>state.findIndex(s=>s==='open');
+    const draw=()=>{ const open=state.filter(s=>s==='open').length, photo=/^image\//.test(n.mime||''), ci=curI(), total=state.filter((s,i)=>s!=='answered'&&s!=='blocked').length, nth=total-open+1;
+      const answersHtml=drafts.map((d,i)=>state[i]==='answered'||state[i]==='blocked'?card(d,i):'').join('');
+      if(ci<0){ const saved=state.filter(s=>s==='saved').length, left=state.filter(s=>s==='dropped').length;
+        m.innerHTML=`<h2>${photo?'📷 Here\'s what I read':'🎙 Here\'s what I heard'}</h2>${n.heard||n.text?`<p class="heard">“${esc(n.heard||n.text)}”</p>`:''}${answersHtml}
+          ${drafts.length?(saved||left?`<p class="chkdone">${saved?'✓ Saved '+saved:''}${saved&&left?' · ':''}${left?'Left out '+left:''}</p>`:''):'<p>Nothing to add from that. You can add things by hand as usual.</p>'}
+          <div class="mact"><button class="btn alt" id="rAgain">🔊 Read it again</button><button class="btn" id="rDone">Done</button></div>`; }
+      else { const d=drafts[ci], unsure=(d.unsure||[]).length;
+        m.innerHTML=`<div class="chk1"><div class="chktop"><span>✋ Check it${total>1?` · <b>${nth} of ${total}</b>`:''}</span>${n.heard||n.text?`<small>You said: “${esc((n.heard||n.text).slice(0,140))}${(n.heard||n.text).length>140?'…':''}”</small>`:''}</div>
+          ${answersHtml}
+          <p class="chkline">${DRAFT_ICON[d.kind]||'•'} ${esc(planSentence(d))}</p>${d.kind==='event'&&clashOf(d.event)?`<p class="change bad">⚠️ ${esc(clashOf(d.event))}</p>`:''}${unsure?'<p class="note">Some of it was a guess: check it, or tap Change it.</p>':''}
+          ${state[ci]==='blocked'?'':''}
+          <div class="bigyes"><button class="yesbtn" id="cYes1">✓ Yes, save it</button><button class="micbtn" id="cChange">🎤 Change it</button><button class="nobtn" id="cNo1">✗ No</button></div>
+          <p class="listening" id="cListen" hidden>👂 Listening… say “yes”, “no” or what to change</p>
+          <div class="chksmall"><button class="linkb" id="cEdit">${editing?'Hide details':'✏️ Edit details'}</button><button class="linkb" id="rAgain">🔊 Read it again</button><button class="linkb" id="rLater">Later</button>${open>1?'<button class="linkb" id="rYes">Save all '+open+'</button>':''}<button class="linkb bad" id="rNo">Throw it all away</button></div>
+          ${editing?card(d,ci):''}
+          ${editing&&voiceReady()?`<div class="vrow"><textarea class="txt grow" rows="1" id="rTx" placeholder="Or type a change, e.g. make it Sunday" enterkeyhint="send"></textarea><button class="btn" id="rTxGo">Send</button></div>`:''}</div>`; }
+      const stopListen=()=>{ if(listener){ try{ listener.abort(); }catch(e){} listener=null; } const l=m.querySelector('#cListen'); if(l) l.hidden=true; };
+      const next=()=>{ stopListen(); editing=false; if(curI()<0){ save(); settle(state.includes('saved')?'done':'discarded'); if(opts.drive) say(state.includes('saved')?'Saved.':'Nothing saved.'); toast(state.includes('saved')?'Saved':'Nothing saved');
+          if(['calendar','lists','brew','orders','recipes','vehicle','places'].includes(cur())) render(); hush(); close(); return; } draw(); speakCur(); };
+      const y1=m.querySelector('#cYes1'); if(y1) y1.onclick=()=>{ const i=curI(), why=saveDraft(drafts[i]); if(why){ toast(why); editing=true; draw(); return; } state[i]='saved'; save(); next(); };
+      const n1=m.querySelector('#cNo1'); if(n1) n1.onclick=()=>{ state[curI()]='dropped'; next(); };
+      const ch=m.querySelector('#cChange'); if(ch) ch.onclick=()=>{ stopListen(); hush(); if(voiceReady()) startVoice({parentApi:api,prev:openDrafts(),parent:n.id,drive:opts.drive}); else { editing=true; draw(); } };
+      const ed=m.querySelector('#cEdit'); if(ed) ed.onclick=()=>{ stopListen(); editing=!editing; draw(); };
+      listenNow=()=>{ const l=m.querySelector('#cListen'); if(!opts.drive||curI()<0||!l) return; l.hidden=false;
+        listener=listenBrief(8000,t=>{ l.hidden=true; listener=null; const w=t.trim().toLowerCase();
+          if(YES_RX.test(w)) y1&&y1.click(); else if(NO_RX.test(w)) n1&&n1.click(); else if(/^(later|not now)\b/.test(w)) api.later(); else if(/^(cancel|throw( it)? (all )?away)\b/.test(w)) api.cancel();
+          else if(/^(read|say) it again|repeat/.test(w)) speakCur(); else typedText(t,{parentApi:api,prev:openDrafts(),parent:n.id,drive:opts.drive}); },()=>{ l.hidden=true; listener=null; }); };
       // fill the fields (values set here, so nothing typed is ever treated as HTML)
       m.querySelectorAll('[data-dk]').forEach(el=>{ const d=drafts[+el.dataset.di], o=d[d.kind], k=el.dataset.dk, money=!!el.dataset.money;
         if(el.tagName!=='SELECT') el.value=o[k]==null?'':money?(o[k]?(o[k]/100).toFixed(2):''):o[k];
@@ -316,8 +361,8 @@ function reviewNote(n,opts={}){
       m.querySelectorAll('[data-ol]').forEach(el=>el.onchange=()=>{ const [i,k]=el.dataset.ol.split(':'), d=drafts[+i]; d[d.kind].lines[+k].qty=Math.max(0,+el.value||0); });
       m.querySelectorAll('[data-ety]').forEach(b=>b.onclick=()=>{ const [i,k]=b.dataset.ety.split(':'); drafts[+i].event.type=k; draw(); });
       m.querySelectorAll('[data-ik2]').forEach(b=>b.onclick=()=>{ const [i,k]=b.dataset.ik2.split(':'); drafts[+i].idea.kind=k; draw(); });
-      m.querySelectorAll('[data-drop]').forEach(b=>b.onclick=()=>{ state[+b.dataset.drop]='dropped'; draw(); });
-      m.querySelectorAll('[data-save1]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.save1, why=saveDraft(drafts[i]); if(why){ toast(why); return; } state[i]='saved'; save(); draw(); });
+      m.querySelectorAll('[data-drop]').forEach(b=>b.onclick=()=>{ state[+b.dataset.drop]='dropped'; next(); });
+      m.querySelectorAll('[data-save1]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.save1, why=saveDraft(drafts[i]); if(why){ toast(why); return; } state[i]='saved'; save(); next(); });
       m.querySelector('#rAgain').onclick=speakAll;
       wireHelp(m,()=>{ settle(state.includes('saved')?'done':'discarded'); hush(); close(); });
       m.querySelectorAll('[data-alink]').forEach(b=>b.onclick=()=>{ const lk=answerLink(drafts[+b.dataset.alink].question); settle(state.includes('saved')?'done':'discarded'); hush(); close(); lk.go(); });
@@ -326,7 +371,7 @@ function reviewNote(n,opts={}){
       const lt=m.querySelector('#rLater'); if(lt) lt.onclick=api.later;
       const dn=m.querySelector('#rDone'); if(dn) dn.onclick=()=>{ settle(state.includes('saved')?'done':'discarded'); hush(); close(); if(['calendar','lists'].includes(cur())) rerenderAfterList(); };
       const tx=m.querySelector('#rTx'), send=()=>{ const t=tx.value.trim(); if(!t) return; tx.value=''; typedText(t,{parentApi:api,prev:openDrafts(),parent:n.id,drive:opts.drive}); };
-      if(tx){ m.querySelector('#rTxGo').onclick=send; tx.onkeydown=e=>{ if(e.key==='Enter') send(); }; m.querySelector('#rMic').onclick=()=>{ hush(); startVoice({parentApi:api,prev:openDrafts(),parent:n.id,drive:opts.drive}); }; }
+      if(tx){ m.querySelector('#rTxGo').onclick=send; tx.onkeydown=e=>{ if(e.key==='Enter') send(); }; }
     };
     const openDrafts=()=>drafts.filter((d,i)=>state[i]==='open');
     const api={
