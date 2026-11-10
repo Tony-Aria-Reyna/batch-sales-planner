@@ -139,7 +139,7 @@ function editOrder(src){
 function packingSlip(o){
   const c=o.customer||{}, old=document.getElementById('printSlip'); if(old) old.remove();
   const d=document.createElement('div'); d.id='printSlip';
-  d.innerHTML=`<div class="slip"><h1>${esc(S.name||'Rata & Smudge')}</h1><p class="sm">Packing slip · ${nzDate(new Date(),{day:'numeric',month:'long',year:'numeric'})}${o.shopify?' · '+esc(o.shopify.name||''):''}${o.fromEmail&&o.fromEmail.ref?' · your ref '+esc(o.fromEmail.ref):''}</p>
+  d.innerHTML=`<div class="slip"><img class="sliplogo" src="${esc(typeof brandLogo==='function'?brandLogo():'brand-logo.webp')}" alt="${esc(S.name||'Rata & Smudge')}" onerror="this.outerHTML='<h1>${esc(S.name||'Rata &amp; Smudge')}</h1>'"><p class="sm">Packing slip · ${nzDate(new Date(),{day:'numeric',month:'long',year:'numeric'})}${o.shopify?' · '+esc(o.shopify.name||''):''}${o.fromEmail&&o.fromEmail.ref?' · your ref '+esc(o.fromEmail.ref):''}</p>
     <h2>Deliver to</h2><p class="to"><b>${esc(c.name||'')}</b>${c.address?'<br>'+esc(c.address).replace(/, /g,'<br>'):''}${c.phone?'<br>'+esc(c.phone):''}</p>
     <table><thead><tr><th>Qty</th><th>Product</th><th>✓</th></tr></thead><tbody>${(o.lines||[]).filter(l=>+l.qty>0).map(l=>`<tr><td class="q">${+l.qty}</td><td>${esc(l.name)}</td><td class="tick">☐</td></tr>`).join('')}</tbody></table>
     <p class="sm">${orderUnits(o)} item${orderUnits(o)===1?'':'s'}${o.note?' · '+esc(o.note):''}</p><p class="thanks">Thank you 🌿</p></div>

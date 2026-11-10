@@ -549,8 +549,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
     S.sessions.push({ id, type: 'market', name: 'Wx Market', date, openedAt: Date.now() - (i + 1) * 7 * 864e5, openedBy: SYNC.me(), status: 'closed', float: 0, checkin: { busy: w === 'sun' ? 'busy' : 'quiet', weather: [w] } });
     S.sales.push({ id: 'wxsale' + i, sessionId: id, channel: 'market', where: 'Wx Market', date, at: Date.now() - (i + 1) * 7 * 864e5, lines: [], total: tk, gst: Math.round(tk * 3 / 23), method: 'cash', by: SYNC.me(), voided: false }); }); });
   ok(await page.evaluate(() => { const w = weatherTrends(), sun = w.rows.find(r => r.k === 'sun'), rain = w.rows.find(r => r.k === 'rain'); return w.n >= 4 && sun.avg > w.avg && rain.diff < 0 && /Sunny/.test(weatherCard()); }), 'Real profit: weather and takings from the market check-ins');
-  await page.evaluate(() => { S.settings.brand = { theme: 'ocean', font: 'sans' }; save(); render(); });
-  ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#1f3b4d' && /Ocean/.test(brandCardHtml()) && /theme on" data-theme="ocean"/.test(brandCardHtml())), 'branding: a business can have its own colours and font');
+  await page.evaluate(() => { S.settings.brand = { kit: 'coastal' }; save(); render(); });
+  ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#2f3b1f' && /Locked/.test(brandCardHtml()) && brandLogo() === 'brand-logo.webp'), 'branding: Rata & Smudge is the default and locked (a kit chosen while locked is ignored)');
+  await page.evaluate(() => { S.settings.brand = { unlocked: true, kit: 'coastal' }; save(); render(); });
+  ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#1f3b4d' && /theme on" data-kit="coastal"/.test(brandCardHtml())), 'unlocked by an admin: a business can pick a brand kit');
+  await page.evaluate(() => { S.settings.brand = { unlocked: true, kit: 'own', own: ['#123456', '#654321', '#aa5500', '#fafafa'] }; save(); render(); });
+  ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#123456'), 'or type its own colours from its brand guidelines');
   await page.evaluate(() => { S.settings.brand = {}; save(); render(); });
   // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
   await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });

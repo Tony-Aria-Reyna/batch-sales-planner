@@ -90,34 +90,60 @@ function weatherCard(){
     :`<p class="note">An average market day takes ${c2(Math.round(w.avg))} (${w.n} markets with a check-in, last two years).</p>${w.rows.map(r=>`<div class="lrow"><div class="grow ltxt"><b>${r.t}</b><small>${r.days} market${r.days===1?'':'s'} · ${r.busy} busy or flat out</small></div><b>${c2(Math.round(r.avg))}</b><span class="pill ${r.diff>=0.05?'ok':r.diff<=-0.05?'bad':''}">${r.diff>=0?'+':''}${Math.round(r.diff*100)}%</span></div>`).join('')}`}</div>`;
 }
 
-/* ---------- branding: logo, colours and font for each business (Setup, owners) ---------- */
-const THEMES={olive:{n:'Olive and sage',c:['#2f3b1f','#6b703e','#806092','#f7f5ee']},ocean:{n:'Ocean',c:['#1f3b4d','#3e6a7a','#5a7fa0','#f3f6f7']},berry:{n:'Berry',c:['#4a1f35','#8a4d6a','#b0678f','#f8f2f4']},
-  clay:{n:'Terracotta',c:['#4d2a1f','#a0583e','#c98a3b','#f8f3ee']},slate:{n:'Charcoal',c:['#2b2b2b','#5f6b6d','#7a8a8c','#f5f5f3']},forest:{n:'Forest',c:['#173d2a','#3f7a55','#7a6aa0','#f2f6f0']}};
+/* ---------- branding: logo, colours and font for each business ----------
+   Rata & Smudge's own branding (her logo from rataandsmudge.co.nz, olive and sage, lavender, Cinzel) is the
+   default, and it is LOCKED: owners see it but can't change it. Only an app admin can unlock branding for a
+   business. Once unlocked, a business picks a ready-made brand kit (colours and font that go together),
+   or types its own colours from its brand guidelines, and adds its logo. */
+const KITS={
+  rs:{n:'Rata & Smudge',d:'Olive, sage and lavender · classic capitals',c:['#2f3b1f','#6b703e','#806092','#f7f5ee'],f:'brand'},
+  botanical:{n:'Botanical',d:'Forest green and blush · book type',c:['#173d2a','#3f7a55','#b8707a','#f4f6f0'],f:'serif'},
+  coastal:{n:'Coastal',d:'Deep sea and sand · clean type',c:['#1f3b4d','#3e6a7a','#c08a4a','#f4f3ee'],f:'sans'},
+  earth:{n:'Earth and clay',d:'Terracotta and ochre · friendly type',c:['#4d2a1f','#a0583e','#c98a3b','#f8f3ee'],f:'round'},
+  orchard:{n:'Berry orchard',d:'Plum and rose · book type',c:['#4a1f35','#8a4d6a','#6a8a3a','#f8f2f4'],f:'serif'},
+  modern:{n:'Modern minimal',d:'Charcoal and stone · clean type',c:['#2b2b2b','#5f6b6d','#a07a4a','#f5f5f3'],f:'sans'},
+  bold:{n:'Bold maker',d:'Ink blue and mustard · classic capitals',c:['#1d2a5c','#3d4f8f','#d29a1e','#f6f4ee'],f:'brand'}};
 const FONTS={brand:{n:'Classic capitals',f:'"Cinzel",Georgia,serif'},serif:{n:'Book',f:'Georgia,"Times New Roman",serif'},sans:{n:'Clean',f:'-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif'},round:{n:'Friendly',f:'"Trebuchet MS","Gill Sans",sans-serif'}};
+const HEX=/^#[0-9a-f]{6}$/i;
+const brandOf=()=>{ const b=(S.settings&&S.settings.brand)||{}; if(!b.unlocked) return {kit:'rs',locked:true};
+  return b; };
+function brandColours(b){ const k=KITS[b.kit]||KITS.rs; if(b.kit==='own'&&b.own&&HEX.test(b.own[0])) return [b.own[0],HEX.test(b.own[1])?b.own[1]:b.own[0],HEX.test(b.own[2])?b.own[2]:k.c[2],HEX.test(b.own[3])?b.own[3]:'#f7f5ee']; return k.c; }
 let brandApplied='';
 function applyBrand(){
-  const b=(S.settings&&S.settings.brand)||{}, key=JSON.stringify([b.theme,b.font]); if(key===brandApplied) return; brandApplied=key;
-  const t=THEMES[b.theme]||THEMES.olive, f=FONTS[b.font]||FONTS.brand, r=document.documentElement.style;
-  r.setProperty('--green',t.c[0]); r.setProperty('--green2',t.c[1]); r.setProperty('--lav',t.c[2]); r.setProperty('--cream',t.c[3]); r.setProperty('--brand-font',f.f);
-  const mt=document.querySelector('meta[name="theme-color"]'); if(mt) mt.setAttribute('content',t.c[0]);
+  const b=brandOf(), c=brandColours(b), f=FONTS[b.font||(KITS[b.kit]||KITS.rs).f]||FONTS.brand, key=JSON.stringify([c,f.f]); if(key===brandApplied) return; brandApplied=key;
+  const r=document.documentElement.style;
+  r.setProperty('--green',c[0]); r.setProperty('--green2',c[1]); r.setProperty('--lav',c[2]); r.setProperty('--cream',c[3]); r.setProperty('--brand-font',f.f);
+  const mt=document.querySelector('meta[name="theme-color"]'); if(mt) mt.setAttribute('content',c[0]);
 }
-const brandLogo=()=>((S.settings&&S.settings.brand)||{}).logo||'brand-logo.webp';
+const brandLogo=()=>{ const b=brandOf(); return !b.locked&&b.logo?b.logo:'brand-logo.webp'; };
 function brandCardHtml(){
-  if(role()!=='owner') return ''; const b=S.settings.brand||{};
-  return `<div class="card"><h3>🎨 Look and branding</h3><p class="note">For this business only: its logo on the home screen, its colours and its heading font.</p>
-    <div class="row"><div class="grow"><b>Logo</b><small>${b.logo?'Your own logo':'The Rata &amp; Smudge logo'}</small></div><img src="${esc(brandLogo())}" alt="" style="max-height:56px;max-width:140px;object-fit:contain"><label class="btn alt small">Change<input type="file" id="brLogo" accept="image/*" hidden></label>${b.logo?'<button class="btn alt small" id="brLogoX">Remove</button>':''}</div>
-    <p class="note" style="margin-bottom:4px"><b>Colours</b></p><div class="themes">${Object.entries(THEMES).map(([k,t])=>`<button class="theme ${(b.theme||'olive')===k?'on':''}" data-theme="${k}"><span>${t.c.map(c=>`<i style="background:${c}"></i>`).join('')}</span>${t.n}</button>`).join('')}</div>
-    <p class="note" style="margin-bottom:4px"><b>Heading font</b></p><div class="pastnames">${Object.entries(FONTS).map(([k,f])=>`<button class="chip big ${(b.font||'brand')===k?'on':''}" data-font="${k}" style="font-family:${f.f.replace(/"/g,'&quot;')}">${f.n}</button>`).join('')}</div>
+  if(role()!=='owner'&&!IS_ADMIN) return ''; const b=brandOf();
+  if(b.locked) return `<div class="card"><h3>🎨 Look and branding <span class="pill ok">🔒 Locked</span></h3>
+    <div class="row"><div class="grow"><b>Rata &amp; Smudge branding</b><small>Logo from rataandsmudge.co.nz, olive and sage with lavender, classic capitals. Locked so it always matches the shop and the website.</small></div><img src="brand-logo.webp" alt="" style="max-height:56px;max-width:150px;object-fit:contain"></div>
+    ${IS_ADMIN?'<div class="mact" style="justify-content:flex-start"><button class="btn alt small" id="brUnlock">Unlock (admin)</button></div>':''}</div>`;
+  const own=b.own||[];
+  return `<div class="card"><h3>🎨 Look and branding</h3><p class="note">Pick a ready-made kit, or type the colours from your own brand guidelines. Add your logo.</p>
+    <div class="row"><div class="grow"><b>Logo</b><small>${b.logo?'Your own logo':'None yet'}</small></div>${b.logo?`<img src="${esc(b.logo)}" alt="" style="max-height:56px;max-width:140px;object-fit:contain">`:''}<label class="btn alt small">${b.logo?'Change':'Add'}<input type="file" id="brLogo" accept="image/*" hidden></label>${b.logo?'<button class="btn alt small" id="brLogoX">Remove</button>':''}</div>
+    <p class="note" style="margin-bottom:4px"><b>Brand kit</b></p><div class="themes">${Object.entries(KITS).filter(([k])=>k!=='rs'||IS_ADMIN).map(([k,t])=>`<button class="theme ${b.kit===k?'on':''}" data-kit="${k}"><span>${t.c.map(c=>`<i style="background:${c}"></i>`).join('')}</span><b style="font-family:${FONTS[t.f].f.replace(/"/g,'&quot;')}">${t.n}</b><small>${t.d}</small></button>`).join('')}
+      <button class="theme ${b.kit==='own'?'on':''}" data-kit="own"><span>${[0,1,2,3].map(i=>`<i style="background:${HEX.test(own[i]||'')?own[i]:'#ddd'}"></i>`).join('')}</span><b>My own colours</b><small>From your brand guidelines</small></button></div>
+    ${b.kit==='own'?`<div class="formrow">${['Main','Second','Accent','Background'].map((t,i)=>`<div><label class="note" for="brC${i}">${t} (e.g. #2f3b1f)</label><input class="txt" id="brC${i}" data-brc="${i}" value="${esc(own[i]||'')}" placeholder="#…" autocapitalize="none"></div>`).join('')}</div>
+      <p class="note" style="margin-bottom:4px"><b>Heading font</b></p><div class="pastnames">${Object.entries(FONTS).map(([k,f])=>`<button class="chip big ${(b.font||'brand')===k?'on':''}" data-font="${k}" style="font-family:${f.f.replace(/"/g,'&quot;')}">${f.n}</button>`).join('')}</div>`:''}
+    ${IS_ADMIN?'<div class="mact" style="justify-content:flex-start"><button class="btn alt small" id="brLock">🔒 Lock to Rata &amp; Smudge (admin)</button></div>':''}
     <p class="note">The icon on the home screen stays the app's own.</p></div>`;
 }
-document.addEventListener('click',e=>{ const t=e.target.closest&&e.target.closest('[data-theme],[data-font],#brLogoX'); if(!t||role()!=='owner') return;
-  const b=Object.assign({},S.settings.brand);
-  if(t.dataset.theme) b.theme=t.dataset.theme; else if(t.dataset.font) b.font=t.dataset.font; else delete b.logo;
-  S.settings.brand=b; save(); render(); });
-document.addEventListener('change',e=>{ if(!e.target||e.target.id!=='brLogo'||role()!=='owner') return; const f=e.target.files[0]; if(!f) return;
+const setBrand=ch=>{ S.settings.brand=Object.assign({},S.settings.brand,ch); save(); render(); };
+document.addEventListener('click',e=>{ const t=e.target.closest&&e.target.closest('[data-kit],[data-font],#brLogoX,#brUnlock,#brLock'); if(!t) return;
+  if(t.id==='brUnlock'&&IS_ADMIN){ confirmBox('Unlock the branding?','The owners of this business can then change its logo, colours and font.','Unlock',()=>setBrand({unlocked:true,kit:'rs'})); return; }
+  if(t.id==='brLock'&&IS_ADMIN){ setBrand({unlocked:false}); return; }
+  if(brandOf().locked||role()!=='owner') return;
+  if(t.dataset.kit){ const k=t.dataset.kit; setBrand(k==='own'?{kit:'own'}:{kit:k,font:KITS[k].f}); }
+  else if(t.dataset.font) setBrand({font:t.dataset.font}); else setBrand({logo:''}); });
+document.addEventListener('change',e=>{ const el=e.target; if(!el||brandOf().locked||role()!=='owner') return;
+  if(el.dataset&&el.dataset.brc!=null){ const v=el.value.trim(), x=v&&!v.startsWith('#')?'#'+v:v; if(x&&!HEX.test(x)){ toast('Type a colour code like #2f3b1f'); return; } const own=((S.settings.brand||{}).own||[]).slice(); own[+el.dataset.brc]=x; setBrand({own}); return; }
+  if(el.id!=='brLogo') return; const f=el.files[0]; if(!f) return;
   const img=new Image(), url=URL.createObjectURL(f);
   img.onload=()=>{ const s=Math.min(1,400/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*s); c.height=Math.round(img.height*s);
     c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); let d=c.toDataURL('image/webp',0.85); if(!/^data:image\/webp/.test(d)) d=c.toDataURL('image/png');
     if(d.length>150e3){ toast('That logo is too detailed. Try a smaller image.'); return; }
-    S.settings.brand=Object.assign({},S.settings.brand,{logo:d}); save(); render(); toast('Logo saved'); };
+    setBrand({logo:d}); toast('Logo saved'); };
   img.onerror=()=>toast('Couldn\'t open that picture'); img.src=url; });

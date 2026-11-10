@@ -79,6 +79,13 @@ function tick() {
 function gstOf(c) { return Math.round((c || 0) * 3 / 23); }
 function money(c) { const n = Math.round(c || 0); return (n < 0 ? '-$' : '$') + (Math.abs(n) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+// the business's logo at the top of emails: Rata & Smudge's locked logo, hosted with the app. A business with
+// its own (unlocked) branding gets its name in text instead, as emails can't show a logo kept inside the app.
+function logoHtml(b, small) {
+  const br = (b.settings || {}).brand || {}, name = b.name || 'Rata & Smudge';
+  if (br.unlocked) return '<h2 style="font-family:Georgia,serif;color:#2f3b1f;margin:0 0 8px">' + esc(name) + '</h2>';
+  return '<img src="' + APP_URL + 'brand-logo.png" alt="' + esc(name) + '" width="' + (small ? 220 : 300) + '" style="display:block;max-width:100%;height:auto;margin:0 0 14px">';
+}
 function receiptNo(s) { return 'RS-' + String(s.date || '').replace(/-/g, '') + '-' + String(s.id || s._id || '').slice(-5).toUpperCase(); }
 function buildReceipt(b, sale, req) {
   const st = b.settings || {}, name = b.name || 'Rata & Smudge', no = receiptNo(sale);
@@ -95,8 +102,7 @@ function buildReceipt(b, sale, req) {
     st.receiptNote || 'Thank you.'].filter(x => x !== '').join('\n');
   const tr = (a, b, bold) => '<tr><td style="padding:6px 0;' + (bold ? 'font-weight:700;' : '') + '">' + esc(a) + '</td><td style="padding:6px 0;text-align:right;' + (bold ? 'font-weight:700;' : '') + '">' + esc(b) + '</td></tr>';
   const html = '<div style="font-family:Georgia,serif;max-width:520px;margin:0 auto;color:#2b2c22">' +
-    '<h1 style="color:#2f3b1f;font-weight:600;letter-spacing:.04em;margin:0 0 2px">' + esc(name.toUpperCase()) + '</h1>' +
-    '<div style="color:#6b703e;letter-spacing:.08em;font-size:13px;margin-bottom:18px">HERBAL HUGS</div>' +
+    (((b.settings || {}).brand || {}).unlocked ? '<h1 style="color:#2f3b1f;font-weight:600;letter-spacing:.04em;margin:0 0 18px">' + esc(name.toUpperCase()) + '</h1>' : logoHtml(b)) +
     '<div style="font-family:Arial,sans-serif;font-size:15px">' +
     '<p style="margin:0 0 14px"><b>GST receipt ' + esc(no) + '</b><br>GST number: ' + esc(st.gstNumber || '') + '<br>' + esc(when) + (req.buyerName ? '<br>Customer: ' + esc(req.buyerName) : '') + '</p>' +
     '<table style="width:100%;border-collapse:collapse;border-top:2px solid #e5e1d2;border-bottom:2px solid #e5e1d2">' + rows.map(r => tr(r[0], r[1])).join('') + '</table>' +
@@ -651,7 +657,7 @@ function marketReports(b, devs, once) {
         .concat(fee && fee.cents ? [['Stall fee', money(Math.round(fee.cents / Math.max(1, fee.days || 1))) + (fee.days > 1 ? ' (share of ' + money(fee.cents) + ' for ' + fee.days + ' days)' : '')]] : [])
         .concat(checkinRows(g))
         .concat(expected ? [['Cash counted against expected', money(counted) + ' / ' + money(expected) + (counted === expected ? ' ✓' : ' (' + (counted > expected ? 'over ' : 'short ') + money(Math.abs(counted - expected)) + ')')]] : []);
-      const html = '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f">' + esc(name) + '</h2><p>' + esc(when) + '</p>' +
+      const html = '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22">' + logoHtml(b, true) + '<h2 style="font-family:Georgia,serif;color:#2f3b1f">' + esc(name) + '</h2><p>' + esc(when) + '</p>' +
         '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' +
         (top.length ? '<h3>Top sellers</h3><p>' + top.map(t => esc(items[t] + ' × ' + t)).join('<br>') + '</p>' : '') + '<p style="color:#686a5a">Full figures: Reports in the app.</p></div>';
       MailApp.sendEmail({ to: owners.join(','), subject: name + ' · ' + when + ' · ' + money(total), htmlBody: html, body: rows.map(r => r[0] + ': ' + r[1]).join('\n'), name: b.name || 'Rata & Smudge' });
@@ -685,7 +691,7 @@ function mailOwners(b, m) {
   const to = (b.owners || []).filter(e => { const d = devs.find(x => x._id === e); return !d || (d.prefs || {}).summaries !== false; });
   if (to.length) MailApp.sendEmail({ to: to.join(','), subject: m.subject, body: m.text, htmlBody: m.html, name: b.name || 'Rata & Smudge' });
 }
-const H = { wrap: (title, sub, inner) => '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22"><h2 style="font-family:Georgia,serif;color:#2f3b1f;margin-bottom:4px">' + esc(title) + '</h2><p style="color:#686a5a;margin-top:0">' + esc(sub) + '</p>' + inner + '<p style="color:#686a5a">Open the app for more: ' + APP_URL + '</p></div>',
+const H = { wrap: (b, title, sub, inner) => '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22">' + logoHtml(b, true) + '<h2 style="font-family:Georgia,serif;color:#2f3b1f;margin-bottom:4px">' + esc(title) + '</h2><p style="color:#686a5a;margin-top:0">' + esc(sub) + '</p>' + inner + '<p style="color:#686a5a">Open the app for more: ' + APP_URL + '</p></div>',
   h3: t => '<h3 style="margin:18px 0 6px">' + esc(t) + '</h3>', list: l => '<ul style="margin:0;padding-left:20px">' + l.map(x => '<li style="margin:3px 0">' + esc(x) + '</li>').join('') + '</ul>',
   table: rows => '<table style="width:100%;border-collapse:collapse">' + rows.map(r => '<tr><td style="padding:6px 0;border-bottom:1px solid #e5e1d2">' + esc(r[0]) + '</td><td style="padding:6px 0;text-align:right;border-bottom:1px solid #e5e1d2"><b>' + esc(r[1]) + '</b></td></tr>').join('') + '</table>' };
 // "What to do next": the owners' action plan, saved by the app (owner-only), each with a link into the app
@@ -713,7 +719,7 @@ function dailyBriefing(b, day) {
     + (ys.length ? H.h3('Yesterday') + '<p>' + esc(money(yt) + ' from ' + ys.length + ' sale' + (ys.length === 1 ? '' : 's')) + '</p>' : '');
   const text = [when, evs.length ? 'On today:\n' + evs.join('\n') : '', tds.length ? 'To do:\n' + tds.join('\n') : '', out.length ? 'Out of stock: ' + out.join(', ') : '',
     orders.length ? 'Orders due soon: ' + orders.map(o => ((o.customer || {}).name || 'Order') + ' ' + o.due).join(', ') : '', ys.length ? 'Yesterday: ' + money(yt) + ' from ' + ys.length + ' sales' : '', ap.text].filter(Boolean).join('\n\n');
-  return { subject: '☀️ Today: ' + (evs[0] || tds[0] || '').replace(/^\S+ /, '').slice(0, 60) + (evs.length + tds.length > 1 ? ' and ' + (evs.length + tds.length - 1) + ' more' : ''), html: H.wrap('Today, ' + when, b.name || 'Rata & Smudge', html), text: text };
+  return { subject: '☀️ Today: ' + (evs[0] || tds[0] || '').replace(/^\S+ /, '').slice(0, 60) + (evs.length + tds.length > 1 ? ' and ' + (evs.length + tds.length - 1) + ' more' : ''), html: H.wrap(b, 'Today, ' + when, b.name || 'Rata & Smudge', html), text: text };
 }
 // a week, month or year: sales, products and markets, against the one before
 function periodSummary(b, kind, from, to, pfrom, pto) {
@@ -744,5 +750,5 @@ function periodSummary(b, kind, from, to, pfrom, pto) {
     text += '\n\nDone this ' + kind.toLowerCase() + ':\n' + doneT.slice(0, 25).map(t => '- ' + t.text).join('\n') + (bought.length ? '\nBought: ' + bought.map(x => x.item).join(', ') : '');
   }
   const ap = actionPlan(b); html += ap.html; text += ap.text ? '\n\n' + ap.text : '';
-  return { subject: (kind === 'Week' ? '📊 Last week: ' : kind === 'Month' ? '📊 Last month: ' : '📊 Last year: ') + money(R.total) + (vs(R.total, P.total) ? ' (' + vs(R.total, P.total).split(' on ')[0] + ')' : ''), html: H.wrap(kind === 'Year' ? 'Your year' : 'Your ' + kind.toLowerCase(), range, html), text: text };
+  return { subject: (kind === 'Week' ? '📊 Last week: ' : kind === 'Month' ? '📊 Last month: ' : '📊 Last year: ') + money(R.total) + (vs(R.total, P.total) ? ' (' + vs(R.total, P.total).split(' on ')[0] + ')' : ''), html: H.wrap(b, kind === 'Year' ? 'Your year' : 'Your ' + kind.toLowerCase(), range, html), text: text };
 }
