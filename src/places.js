@@ -16,7 +16,7 @@ SCREENS.places={
   html(){
     const live=S.places.filter(p=>!p.gone);
     return rulesNotice()+`<div class="card"><h3>🏠 Home base</h3><p class="note">Used to work out the drive to each market. Only owners and managers see it.</p>
-        <label class="note" for="homeAddr">Home address</label><input class="txt" id="homeAddr" value="${esc(S.settings.homeAddress||'')}" autocomplete="street-address" placeholder="Street, suburb, town">
+        <label class="note" for="homeAddr">Home address</label><textarea class="txt grow" rows="1" id="homeAddr" autocomplete="street-address" placeholder="Street, suburb, town">${esc(S.settings.homeAddress||'')}</textarea>
         <p class="note">With this and each place's address in, the assistant works out the km and drive time by road (usually within 5 minutes).</p>
         <div class="formrow"><div><label class="note" for="setMin">Usual setting up (min)</label><input class="txt" id="setMin" inputmode="numeric" value="${+S.settings.setupMins||45}"></div>
           <div><label class="note" for="packMin">Usual packing down (min)</label><input class="txt" id="packMin" inputmode="numeric" value="${+S.settings.packMins||45}"></div></div>
@@ -52,7 +52,7 @@ function editPlace(src,done){
     m.innerHTML=`<h2>${isNew?'Add a place':esc(p.name)}</h2>
       <label class="note" for="pN">Name</label><input class="txt" id="pN" value="${esc(p.name)}" autocapitalize="words" placeholder="e.g. Village Market">
       <label class="note" for="pG">Group</label><select class="txt" id="pG">${Object.entries(CHANNELS).map(([ch,cn])=>`<optgroup label="${cn}">${placeGroups().filter(g=>g.channel===ch).map(g=>`<option value="${g.id}" ${p.group===g.id?'selected':''}>${esc(g.name)}</option>`).join('')}</optgroup>`).join('')}</select>
-      <label class="note" for="pA">Address (optional)</label><input class="txt" id="pA" value="${esc(p.address)}" autocomplete="off" placeholder="Street, suburb, town">
+      <label class="note" for="pA">Address (optional)</label><textarea class="txt grow" rows="1" id="pA" autocomplete="off" placeholder="Street, suburb, town">${esc(p.address)}</textarea>
       ${(()=>{ const r=p.route||{}; if(!p.address) return ''; if(!S.settings.homeAddress) return '<p class="note">Add the home address (Markets and places → Home base) and the assistant works out the drive.</p>';
         if(r.err) return '<p class="note warn">⚠️ The assistant couldn\'t find this address on the map. Check the spelling, or add the town.</p>';
         if(r.km) return `<p class="note">🚗 By road from home: <b>${r.km} km each way, about ${hmTxt(r.mins)}</b>. Worked out by the assistant.</p>`;

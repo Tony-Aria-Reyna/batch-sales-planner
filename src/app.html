@@ -198,6 +198,7 @@ ol.ideas li::before{content:counter(i);flex:none;width:28px;height:28px;border-r
 .ordst{color:var(--lav);font-weight:700}.lowcard{border:2px solid #f0d58a}.stockrow b.low{color:#9a6a00}.arrow{border-bottom:1px solid var(--line);padding:8px 0}
 .pb.gift{background:#806092;color:#fff}
 .oline{display:grid;grid-template-columns:minmax(0,1fr) 84px 52px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.oline .ltxt b{display:block;line-height:1.25}.oline .ltxt small{display:block}
+textarea.txt.grow{resize:none;overflow:hidden;line-height:1.35;min-height:56px;display:block;white-space:pre-wrap;word-break:break-word}
 .clockgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.clockgrid .btn{min-height:72px;font-size:17px;display:flex;flex-direction:column;align-items:center;justify-content:center}.clockgrid small{font-size:12px;font-weight:600;opacity:.85}
 .clockbar{border:2px solid var(--green2)}.clockbar.long{border-color:var(--warn);background:#fff4d6}
 .formrow.four{grid-template-columns:repeat(4,1fr);gap:6px}.formrow.four .note{font-size:.8rem}@media(max-width:420px){.formrow.four{grid-template-columns:1fr 1fr}}
@@ -538,6 +539,13 @@ function render(){
   sc.wire&&sc.wire();
 }
 
+/* ---------- text boxes that grow as you type (one line of words; Enter doesn't add a new line) ---------- */
+const fitBox=t=>{ t.style.height='auto'; t.style.height=(t.scrollHeight+2)+'px'; };
+document.addEventListener('input',e=>{ const t=e.target; if(t&&t.matches&&t.matches('textarea.grow')){ if(/\n/.test(t.value)){ const p=t.selectionStart; t.value=t.value.replace(/\s*\n\s*/g,' '); try{ t.setSelectionRange(p,p); }catch(x){} } fitBox(t); } },true);
+document.addEventListener('keydown',e=>{ const t=e.target; if(e.key==='Enter'&&!e.shiftKey&&t&&t.matches&&t.matches('textarea.grow')) e.preventDefault(); },true);
+new MutationObserver(()=>document.querySelectorAll('textarea.grow').forEach(t=>{ if(t.offsetParent&&t.dataset.fitw!==String(t.clientWidth)+':'+t.value.length){ t.dataset.fitw=String(t.clientWidth)+':'+t.value.length; fitBox(t); } })).observe(document.documentElement,{childList:true,subtree:true});
+addEventListener('resize',()=>document.querySelectorAll('textarea.grow').forEach(fitBox));
+
 /* ---------- saved / will sync marker ---------- */
 let pendingWrites=false;
 function drawSync(){
@@ -637,7 +645,7 @@ SCREENS.setup={
       <p class="note">Customers can be emailed a GST receipt after paying. Receipts show the business name, GST number, date, receipt number, items, the amount excluding GST, the GST and the total, which covers IRD's requirements for sales up to $1,000. For sales over $1,000 the customer's name is asked for too.</p>
       <label class="note" for="gstNo">GST number</label><input class="txt" id="gstNo" inputmode="numeric" value="${esc(st.gstNumber||'')}" placeholder="123-456-789">
       <label class="note" for="rcEmail">Business Gmail that sends the receipts</label><input class="txt" id="rcEmail" type="email" inputmode="email" autocapitalize="none" value="${esc(st.receiptEmail||'')}" placeholder="rataandsmudge@gmail.com">
-      <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><input class="txt" id="rcNote" value="${esc(st.receiptNote||'')}" placeholder="Thank you! rataandsmudge.co.nz">
+      <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><textarea class="txt grow" rows="1" id="rcNote" placeholder="Thank you! rataandsmudge.co.nz">${esc(st.receiptNote||'')}</textarea>
       <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
 
     ${role()==='owner'?`<div class="card"><h3>🎙 Voice assistant</h3>
@@ -869,7 +877,7 @@ function pinPad(title,check,onOk,canForget){
 // so a PIN always identifies exactly one person in the approvals log.
 function setPinFlow(after){
   if(!canManage()){ toast('Only owners and managers have PINs'); return; }
-  modal((m,close)=>{ m.innerHTML=`<h2>Your PIN</h2><p class="note">Your name as it should appear in the approvals log:</p><input class="txt" id="pnN" autocapitalize="words" value="${esc(myPin()&&myPin().name||'')}" placeholder="e.g. Fiona">
+  modal((m,close)=>{ m.innerHTML=`<h2>Your PIN</h2><p class="note">Your name as it should appear in the approvals log:</p><textarea class="txt grow" rows="1" id="pnN" autocapitalize="words" placeholder="e.g. Fiona">${esc(myPin()&&myPin().name||'')}</textarea>
     <div class="mact"><button class="btn alt" id="pnC">Cancel</button><button class="btn" id="pnOk">Next</button></div>`;
     m.querySelector('#pnC').onclick=close;
     m.querySelector('#pnOk').onclick=()=>{ const name=m.querySelector('#pnN').value.trim(); if(!name){ toast('Type your name'); return; } close();

@@ -718,6 +718,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { const d = profCache; return d.H.market > 0 && d.H.clock >= 60 && d.H.brew === 150; }), 'Profit: hours from markets, the time clock and brew days (no double counting)');
   await page.screenshot({ path: path.join(shots, '42-profit.png'), fullPage: true });
   const gapBtn = await page.$('[data-gap]'); if (gapBtn) { await gapBtn.click(); await page.waitForTimeout(150); ok(await page.evaluate(() => cur() !== 'profit' || !!document.querySelector('.modal')), 'a Fix button takes you to the fix'); await page.evaluate(() => { while (modalStack.length) closeModal(); }); }
+  // text boxes grow as you type, and Enter doesn't add a new line
+  await page.evaluate(() => { listTab = 'todo'; stack = ['home', 'lists']; render(); }); await page.waitForTimeout(100);
+  { const box = (await page.$$('textarea.grow'))[0]; const h1 = await box.evaluate(t => t.offsetHeight);
+    await box.click(); await page.keyboard.type('A long job to check the box grows: ring the bottle supplier about the amber jars and the new caps for the balms, then ask about the price list they offered to send, and book a delivery for next week before the market');
+    const h2 = await box.evaluate(t => t.offsetHeight); ok(h2 > h1 + 10, 'text boxes grow as you type (' + h1 + ' → ' + h2 + 'px)');
+    await page.keyboard.press('Enter'); await page.waitForTimeout(80); ok(await page.evaluate(() => S.todos.some(t => /ring the bottle supplier/.test(t.text) && !/\n/.test(t.text))), 'Enter still adds it, with no new line'); }
   // regression: the home screen must not keep saving and redrawing itself (it flashed and swallowed taps)
   ok(await page.evaluate(() => new Promise(res => { stack = ['home']; render(); const r0 = render; let n = 0; window.render = function () { n++; return r0.apply(this, arguments); };
     setTimeout(() => { window.render = r0; res(n); }, 3000); })) <= 2, 'the home screen settles: no endless saving and redrawing');

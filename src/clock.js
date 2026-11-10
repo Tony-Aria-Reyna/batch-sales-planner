@@ -72,7 +72,7 @@ function editClock(src,done){
       ${helper?`<p class="note">${esc(c.label||'')}</p>`:`<label class="note" for="ceC">Job</label><select class="txt" id="ceC">${Object.entries(CLOCK_CODES).map(([k,t])=>`<option value="${k}" ${c.code===k?'selected':''}>${t}</option>`).join('')}</select>
       <label class="note" for="ceD">Day</label><input class="txt" id="ceD" type="date" value="${esc(c.date||nzDay())}">`}
       ${running?'<p class="note">This one is still running. Stop it from the banner, or change the job here.</p>':`<div class="formrow"><div><label class="note" for="ceH">Hours</label><input class="txt" id="ceH" inputmode="numeric" value="${Math.floor(mins/60)}"></div><div><label class="note" for="ceM">Minutes</label><input class="txt" id="ceM" inputmode="numeric" value="${mins%60}"></div></div>`}
-      <label class="note" for="ceN">Note (optional)</label><input class="txt" id="ceN" value="${esc(c.note||'')}" placeholder="${helper?'e.g. helped pack down too':'e.g. labels for the Kowhai order'}">
+      <label class="note" for="ceN">Note (optional)</label><textarea class="txt grow" rows="1" id="ceN" placeholder="${helper?'e.g. helped pack down too':'e.g. labels for the Kowhai order'}">${esc(c.note||'')}</textarea>
       <div class="mact">${isNew?'':'<button class="btn danger" id="ceDel">Delete</button>'}<button class="btn alt" id="ceX">Cancel</button><button class="btn" id="ceOk">Save</button></div>`;
     m.querySelector('#ceX').onclick=close;
     const del=m.querySelector('#ceDel'); if(del) del.onclick=()=>{ const i=clockList().findIndex(x=>x.id===c.id); if(i>=0) clockList().splice(i,1); save(); close(); render(); done&&done(); };

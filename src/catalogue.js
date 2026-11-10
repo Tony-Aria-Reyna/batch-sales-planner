@@ -219,7 +219,7 @@ function editDeal(d){
   modal((m,close)=>{ const prods=activeProducts();
     const draw=()=>{ const n=m.querySelector('#kN'); const keep=n?{n:n.value,q:m.querySelector('#kQ').value,p:m.querySelector('#kP').value}:{n:d.name,q:d.qty,p:d.price?(d.price/100).toFixed(2):''};
       m.innerHTML=`<h2>${isNew?'Add a deal':'Edit deal'}</h2>
-        <label class="note">Name shown on the receipt line</label><input class="txt" id="kN" value="${esc(keep.n)}" placeholder="3 balms for $50">
+        <label class="note">Name shown on the receipt line</label><textarea class="txt grow" rows="1" id="kN" placeholder="3 balms for $50">${esc(keep.n)}</textarea>
         <div style="display:flex;gap:12px"><div style="flex:1"><label class="note">How many items</label><input class="txt" id="kQ" inputmode="numeric" value="${esc(keep.q)}"></div>
         <div style="flex:1"><label class="note">For (incl GST)</label><input class="txt" id="kP" inputmode="decimal" value="${esc(keep.p)}" placeholder="50"></div></div>
         <p class="note">Which products count towards it? (${pick.size} ticked) <button class="btn alt small" id="kAllB">Tick all balms</button></p>

@@ -95,10 +95,10 @@ function editOrder(src){
     m.innerHTML=`<h2>${isNew?'New order':'Change the order'}</h2>
       <div class="bigseg"><button data-src="wholesale" class="${ws?'on':''}">🚚 Wholesale</button><button data-src="custom" class="${!ws?'on':''}">✍️ Custom</button></div>
       ${ws&&shops.length?`<label class="note" for="oS">Shop</label><select class="txt" id="oS"><option value="">Someone else (type below)</option>${shops.map(p=>`<option value="${p.id}" ${o.place===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`:''}
-      <label class="note" for="oN">Customer name</label><input class="txt" id="oN" value="${esc(o.customer.name)}" autocapitalize="words">
+      <label class="note" for="oN">Customer name</label><textarea class="txt grow" rows="1" id="oN" autocapitalize="words">${esc(o.customer.name)}</textarea>
       <div class="formrow"><div><label class="note" for="oE">Email (optional)</label><input class="txt" id="oE" type="email" autocapitalize="none" value="${esc(o.customer.email||'')}"></div>
         <div><label class="note" for="oPh">Phone (optional)</label><input class="txt" id="oPh" inputmode="tel" value="${esc(o.customer.phone||'')}"></div></div>
-      <label class="note" for="oA">Delivery address</label><input class="txt" id="oA" autocomplete="street-address" value="${esc(o.customer.address||'')}" placeholder="Street, suburb, town (printed on the packing slip)">
+      <label class="note" for="oA">Delivery address</label><textarea class="txt grow" rows="1" id="oA" autocomplete="street-address" placeholder="Street, suburb, town (printed on the packing slip)">${esc(o.customer.address||'')}</textarea>
       <label class="note" for="oD">Send by</label><input class="txt" id="oD" type="date" value="${o.due}">
       <h3>What</h3>${o.lines.map((l,i)=>`<div class="oline"><div class="ltxt"><b>${esc(l.name)}</b><small>${c2(l.unit)} each${ws?' ('+c2(Math.round(l.unit/1.15))+' ex GST)':''}</small></div><input class="txt qty" type="number" min="0" data-oq="${i}" value="${l.qty}"><button class="qb rm" data-ox="${i}">✕</button></div>`).join('')}
       <input class="txt" id="oAdd" list="oAddL" autocomplete="off" placeholder="＋ Add a product: type to search…"><datalist id="oAddL">${S.products.filter(p=>p.active!==false).map(p=>`<option value="${esc(prodName(p))}">${c2(ws&&p.wholesale?p.wholesale:p.price)}</option>`).join('')}</datalist>

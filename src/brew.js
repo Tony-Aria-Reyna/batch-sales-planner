@@ -298,7 +298,7 @@ function inputsHtml(){
 function editInput(src,done){
   const isNew=!src.id, i=Object.assign({name:'',cat:'ingredient',price:0,pack:1,unit:'g',supplier:''},src);
   modal((m,close)=>{ m.innerHTML=`<h2>${isNew?'Add an ingredient or packaging':esc(i.name)}</h2>
-      <label class="note" for="iN">Name</label><input class="txt" id="iN" value="${esc(i.name)}" autocapitalize="sentences">
+      <label class="note" for="iN">Name</label><textarea class="txt grow" rows="1" id="iN" autocapitalize="sentences">${esc(i.name)}</textarea>
       <div class="bigseg"><button data-cat="ingredient" class="${i.cat!=='packaging'?'on':''}">🌿 Ingredient</button><button data-cat="packaging" class="${i.cat==='packaging'?'on':''}">🫙 Packaging</button></div>
       <div class="formrow"><div><label class="note" for="iP">Price you pay for a pack, ex GST ($)</label><input class="txt" id="iP" inputmode="decimal" value="${i.price?(i.price/100).toFixed(2):''}"></div>
         <div><label class="note" for="iK">Pack size (in the unit below)</label><input class="txt" id="iK" type="number" min="0" step="any" value="${i.pack||''}"></div></div>
@@ -341,7 +341,7 @@ function editRecipe(src,done){
   const isNew=!src.id, r=JSON.parse(JSON.stringify(Object.assign({name:'',yield:1000,unit:'ml',lines:[]},src)));
   const ins=S.inputs.filter(i=>i.cat!=='packaging').sort((a,b)=>a.name.localeCompare(b.name));
   modal((m,close)=>{ const draw=()=>{ m.innerHTML=`<h2>${isNew?'Add a recipe':esc(r.name)}</h2>
-      <label class="note" for="rN">Name</label><input class="txt" id="rN" value="${esc(r.name)}">
+      <label class="note" for="rN">Name</label><textarea class="txt grow" rows="1" id="rN">${esc(r.name)}</textarea>
       <div class="formrow"><div><label class="note" for="rY">One batch makes</label><input class="txt" id="rY" type="number" min="0" step="any" value="${r.yield}"></div>
         <div><label class="note" for="rU">Measured</label><select class="txt" id="rU">${UNITS.map(u=>`<option value="${u}" ${r.unit===u?'selected':''}>${UNIT_WORDS[u]}</option>`).join('')}</select></div></div>
       ${recipeIssues(r).filter(x=>!/batch size|ingredients/.test(x.t)).map(x=>`<p class="note clash">⚠️ ${esc(x.t)}</p>`).join('')}

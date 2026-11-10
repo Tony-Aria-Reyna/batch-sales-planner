@@ -213,7 +213,7 @@ function giveDiscount(){
         <div class="seg"><button data-kind="pct" class="${kind==='pct'?'on':''}">% off</button><button data-kind="amt" class="${kind==='amt'?'on':''}">$ off</button></div>
         <div class="pastnames">${(kind==='pct'?[5,10,15,20,25,50,100]:[200,500,1000,2000]).map(v=>`<button class="chip big ${value===v?'on':''}" data-v="${v}">${kind==='pct'?(v===100?'Free':v+'%'):c2(v).replace('.00','')}</button>`).join('')}</div>
         <label class="note">Or type the ${kind==='pct'?'percentage':'amount'}</label><input class="txt" id="dV" inputmode="decimal" value="${kind==='pct'?value:(value/100).toFixed(2)}">
-        <label class="note">Reason (shown in the approvals log)</label><input class="txt" id="dR" placeholder="e.g. regular customer, damaged label, freebie">
+        <label class="note">Reason (shown in the approvals log)</label><textarea class="txt grow" rows="1" id="dR" placeholder="e.g. regular customer, damaged label, freebie"></textarea>
         <p class="change ok">Takes off <b>${c2(amt)}</b>${pid?' from '+esc(all.lines.find(l=>l.pid===pid).name):''} · sale total <b>${c2(all.total-amt)}</b></p>
         <div class="mact"><button class="btn alt" id="dC">Cancel</button><button class="btn" id="dOk">Approve with PIN</button></div>`;
       const keep=()=>m.querySelector('#dR').value, put=r=>{ m.querySelector('#dR').value=r; };
@@ -285,7 +285,7 @@ function addExtraItem(){
   modal((m,close)=>{ let col='other', keep='once';
     const draw=()=>{ const v=k=>{ const e=m.querySelector('#'+k); return e?e.value:''; }, n=v('xN'), z=v('xZ'), pr=v('xP');
       m.innerHTML=`<h2>＋ Item not on the till</h2><p class="note">For something without a button, e.g. a new batch or a market special. An owner or manager approves the price with their PIN.</p>
-        <label class="note">What is it?</label><input class="txt" id="xN" autocapitalize="words" value="${esc(n)}">
+        <label class="note">What is it?</label><textarea class="txt grow" rows="1" id="xN" autocapitalize="words">${esc(n)}</textarea>
         <label class="note">Size (optional)</label><input class="txt" id="xZ" value="${esc(z)}">
         <label class="note">Price, including GST</label><input class="txt" id="xP" inputmode="decimal" value="${esc(pr)}" placeholder="e.g. 18">
         <p class="note">Category</p><div class="colours">${Object.entries(COLOURS).map(([k,c])=>`<button data-c="${k}" class="${col===k?'on':''}" style="background:${c[0]};color:${c[1]}">${c[2]}</button>`).join('')}</div>
@@ -541,7 +541,7 @@ function editFloat(){
       ${(d.floatAdds||[]).map(a=>`<div class="row"><div class="grow">Float added at ${nzTime(a.at)}<small>${esc(a.note||'')} · approved by ${esc(personName(a.approvedBy))}</small></div><b>${c2(a.amount)}</b></div>`).join('')}
       <div class="row"><div class="grow"><b>Float in total</b></div><b style="font-size:22px">${c2((d.float||0)+floatAdded(d))}</b></div>
       <div class="card" style="margin:12px 0 0"><h3 style="font-size:18px">Add more float</h3><p class="note">Extra notes or coins put in the tin during the day.</p>
-        <input class="txt" id="fA" inputmode="decimal" placeholder="e.g. 50"><input class="txt" id="fN" placeholder="Note (optional), e.g. more coins" style="margin-top:8px">
+        <input class="txt" id="fA" inputmode="decimal" placeholder="e.g. 50"><textarea class="txt grow" rows="1" id="fN" placeholder="Note (optional), e.g. more coins" style="margin-top:8px"></textarea>
         <div class="mact"><button class="btn" id="fAdd">Add with PIN</button></div></div>
       <div class="card" style="margin:12px 0 0"><h3 style="font-size:18px">Correct the opening float</h3>
         <input class="txt" id="fO" inputmode="decimal" placeholder="${S.settings.defaultFloat?(S.settings.defaultFloat/100).toFixed(2):'200.00'}" value="${d.float?(d.float/100).toFixed(2):''}">

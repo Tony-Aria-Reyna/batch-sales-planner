@@ -157,7 +157,7 @@ function costsRep(R){
       <div><label class="note" for="rGm">GST return every</label><select class="txt" id="rGm">${[[1,'month'],[2,'2 months'],[6,'6 months']].map(([n,t])=>`<option value="${n}" ${+(S.settings.gstMonths||2)===n?'selected':''}>${t}</option>`).join('')}</select></div></div></div>`;
 }
 function addCost(){
-  modal((m,close)=>{ m.innerHTML=`<h2>Add a cost</h2><label class="note" for="kN">What</label><input class="txt" id="kN" autocapitalize="sentences" placeholder="e.g. New gazebo">
+  modal((m,close)=>{ m.innerHTML=`<h2>Add a cost</h2><label class="note" for="kN">What</label><textarea class="txt grow" rows="1" id="kN" autocapitalize="sentences" placeholder="e.g. New gazebo"></textarea>
       <div class="formrow"><div><label class="note" for="kA">Amount incl GST ($)</label><input class="txt" id="kA" inputmode="decimal"></div><div><label class="note" for="kD">Date</label><input class="txt" id="kD" type="date" value="${nzDay()}"></div></div>
       <label class="note" for="kP">For a place (optional)</label><select class="txt" id="kP"><option value="">The whole business</option>${S.places.filter(p=>!p.gone).map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
       <div class="mact"><button class="btn alt" id="kC">Cancel</button><button class="btn" id="kOk">Save</button></div>`;
@@ -188,7 +188,7 @@ SCREENS.vehicle={
   title:()=>({h:'Vehicle and fuel',s:'Her real cost a kilometre'}),
   html(){ const v=S.settings.vehicle||{}, vc=vehicleCost(), f=S.fuel.slice().sort((a,b)=>b.at-a.at).slice(0,20);
     return `<div class="card"><h3>🚙 ${esc(v.name||'The vehicle')}</h3>
-        <label class="note" for="vN">Vehicle</label><input class="txt" id="vN" value="${esc(v.name||'')}" placeholder="e.g. Jeep (diesel)">
+        <label class="note" for="vN">Vehicle</label><textarea class="txt grow" rows="1" id="vN" placeholder="e.g. Jeep (diesel)">${esc(v.name||'')}</textarea>
         <div class="formrow"><div><label class="note" for="vR">Road user charges, $ per 1,000 km</label><input class="txt" id="vR" inputmode="decimal" value="${v.ruc?(v.ruc/100).toFixed(2):''}"></div>
           <div><label class="note" for="vL">Usual L/100 km (until there are fill-ups)</label><input class="txt" id="vL" inputmode="decimal" value="${v.l100||''}"></div></div>
         <p><b>${vc.perKm?c2(Math.round(vc.perKm*100)/100)+' a km ex GST':'Add the numbers above or a fill-up'}</b>${vc.l100?' · '+Math.round(vc.l100*10)/10+' L/100 km'+(vc.fills>=2?' (from fill-ups)':''):''}${vc.perL?' · fuel '+c2(Math.round(vc.perL))+'/L':''}</p></div>

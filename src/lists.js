@@ -21,7 +21,7 @@ SCREENS.lists={
     if(listTab==='shop') wireShop(); else if(listTab==='ideas') wireIdeas(); else if(listTab==='voice') wireVoiceList(); else wireTodo();
   }
 };
-const addBar=(id,ph)=>`<div class="addbar"><input class="txt" id="${id}" placeholder="${ph}" autocapitalize="sentences" enterkeyhint="done"><button class="btn" id="${id}Go" aria-label="Add">＋ Add</button></div>`;
+const addBar=(id,ph)=>`<div class="addbar"><textarea class="txt grow" rows="1" id="${id}" placeholder="${ph}" autocapitalize="sentences" enterkeyhint="done"></textarea><button class="btn" id="${id}Go" aria-label="Add">＋ Add</button></div>`;
 function wireAdd(id,fn){ const i=$('#'+id), go=()=>{ const v=i.value.trim(); if(!v) return; fn(v.slice(0,200)); i.value=''; }; $('#'+id+'Go').onclick=go; i.onkeydown=e=>{ if(e.key==='Enter') go(); }; }
 
 /* ---------- to do ---------- */

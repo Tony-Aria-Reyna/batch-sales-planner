@@ -312,7 +312,7 @@ function editEvent(src,occ){
       m.innerHTML=`<h2>${isNew?'Add to the calendar':ty.ic+' '+esc(e.title||ty.t)}</h2>
         <div class="bigseg">${Object.entries(CAL_TYPES).map(([k,v])=>`<button data-ty="${k}" class="${e.type===k?'on':''}">${v.ic} ${v.t}</button>`).join('')}</div>
         ${e.type==='market'?`<label class="note" for="eP">Which market?</label><select class="txt" id="eP"><option value="">Choose…</option>${markets().map(p=>`<option value="${p.id}" ${e.place===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}<option value="+">＋ Add a new market…</option></select>`:''}
-        <label class="note" for="eT">${e.type==='market'?'Name on the calendar':'What'}</label><input class="txt" id="eT" value="${esc(e.title)}" autocapitalize="sentences" placeholder="${e.type==='brew'?'e.g. Lavender lip balm':e.type==='order'?'e.g. Kowhai Store order':''}">
+        <label class="note" for="eT">${e.type==='market'?'Name on the calendar':'What'}</label><textarea class="txt grow" rows="1" id="eT" autocapitalize="sentences" placeholder="${e.type==='brew'?'e.g. Lavender lip balm':e.type==='order'?'e.g. Kowhai Store order':''}">${esc(e.title)}</textarea>
         <div class="formrow"><div><label class="note" for="eD">Date</label><input class="txt" id="eD" type="date" value="${e.date}"></div>
           <div><label class="note" for="eN">Days</label><select class="txt" id="eN">${[1,2,3,4,5,6,7].map(n=>`<option ${+e.days===n?'selected':''}>${n}</option>`).join('')}</select></div></div>
         <div class="formrow"><div><label class="note" for="eS">Starts (optional)</label><input class="txt" id="eS" type="time" value="${e.time}"></div>

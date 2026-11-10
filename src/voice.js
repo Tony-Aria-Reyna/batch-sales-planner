@@ -88,7 +88,7 @@ function pickPhoto(opts){
       if(opts.hint){ sendNote({image:data,mime:'image/jpeg',text:opts.hint},opts); return; }
       modal((m,close)=>{ m.innerHTML=`<h2>📷 What's this photo?</h2><img src="data:image/jpeg;base64,${data}" alt="" style="max-width:100%;max-height:260px;border-radius:14px;display:block;margin:0 auto 10px">
           <div class="pastnames">${['Fuel receipt','Supplier invoice','Stall fee receipt','Recipe card','Shopping list','To-do list','Market sign-up sheet'].map(x=>`<button class="chip big" data-ph="${x}">${x}</button>`).join('')}</div>
-          <label class="note" for="phT">Anything to add (optional)</label><input class="txt" id="phT" placeholder="e.g. this was for the Matakana market">
+          <label class="note" for="phT">Anything to add (optional)</label><textarea class="txt grow" rows="1" id="phT" placeholder="e.g. this was for the Matakana market"></textarea>
           <div class="mact"><button class="btn alt" id="phC">Cancel</button><button class="btn" id="phOk">Work it out</button></div>`;
         let hint=''; m.querySelectorAll('[data-ph]').forEach(b=>b.onclick=()=>{ hint=b.dataset.ph; m.querySelectorAll('[data-ph]').forEach(x=>x.classList.toggle('on',x===b)); });
         m.querySelector('#phC').onclick=close;
@@ -276,7 +276,7 @@ function reviewNote(n,opts={}){
   const speakAll=()=>{ const clashes=drafts.filter(d=>d.kind==='event').map(d=>clashOf(d.event)).filter(Boolean), asks=answers.filter(Boolean), open=state.filter(s=>s==='open').length;
     say([asks.join(' '),open?(n.say||drafts.filter(d=>d.kind!=='question').map(draftLine).join('. ')):(asks.length?'':'I didn\'t catch anything to add.'),...clashes,open?'Say yes to save, or tell me what to change.':''].filter(Boolean).join(' ')); };
   modal((m,close)=>{
-    const field=(d,i,k,label,type='text',extra='')=>`<label class="note" for="d${i}${k}">${label}</label><input class="txt ${(d.unsure||[]).includes(k)?'unsure':''}" id="d${i}${k}" data-di="${i}" data-dk="${k}" type="${type}" ${extra}>`;
+    const field=(d,i,k,label,type='text',extra='')=>`<label class="note" for="d${i}${k}">${label}</label>`+(type==='text'?`<textarea class="txt grow ${(d.unsure||[]).includes(k)?'unsure':''}" rows="1" id="d${i}${k}" data-di="${i}" data-dk="${k}" ${extra}></textarea>`:`<input class="txt ${(d.unsure||[]).includes(k)?'unsure':''}" id="d${i}${k}" data-di="${i}" data-dk="${k}" type="${type}" ${extra}>`);
     const lineRows=(d,i,key,label)=>d[d.kind].lines.map((l,k)=>{ const p=key==='product'?findProduct(l.product):findInput(l.item); return `<div class="lrow"><input class="txt qty" type="number" min="0" step="any" data-ol="${i}:${k}" value="${l.qty}"><div class="grow ltxt"><b>${esc(p?(key==='product'?prodName(p):p.name):l[key])}</b><small>${p?'':label}</small></div></div>`; }).join('');
     const placeSel=(d,i,k,label,filter)=>`<label class="note" for="d${i}${k}">${label}</label><select class="txt ${(d.unsure||[]).includes(k)?'unsure':''}" id="d${i}${k}" data-di="${i}" data-dk="${k}"><option value="">${k==='place'&&d.kind==='cost'?'The whole business':'Not one of the saved places'}</option>${S.places.filter(p=>!p.gone&&(!filter||filter(p))).map(p=>`<option ${p.name===d[d.kind][k]?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`;
     const card=(d,i)=>{ const blocked=state[i]==='blocked', done=state[i]!=='open';
@@ -306,7 +306,7 @@ function reviewNote(n,opts={}){
         ${open?'<p class="note">Check and fix anything by hand. Fields in yellow were a guess. Nothing is saved until you tap Save (or say "yes").</p>':''}
         ${drafts.map(card).join('')}
         ${open&&voiceReady()?`<div class="card vreply"><b>Change something</b><small class="note">Say or type it, e.g. "make it Sunday", "3 not 13". Or say "yes", "cancel" or "later".</small>
-          <div class="vrow"><input class="txt" id="rTx" placeholder="Type a change…" enterkeyhint="send"><button class="btn" id="rTxGo">Send</button><button class="btn alt" id="rMic" aria-label="Say a change">🎙</button></div></div>`:''}
+          <div class="vrow"><textarea class="txt grow" rows="1" id="rTx" placeholder="Type a change…" enterkeyhint="send"></textarea><button class="btn" id="rTxGo">Send</button><button class="btn alt" id="rMic" aria-label="Say a change">🎙</button></div></div>`:''}
         <div class="mact"><button class="btn alt" id="rAgain">🔊 Read it again</button>${open?`<button class="btn alt" id="rLater">Later</button><button class="btn danger" id="rNo">✕ Throw away</button><button class="btn" id="rYes">✓ Save ${open>1?'all '+open:'it'}</button>`:'<button class="btn" id="rDone">Done</button>'}</div>`;
       // fill the fields (values set here, so nothing typed is ever treated as HTML)
       m.querySelectorAll('[data-dk]').forEach(el=>{ const d=drafts[+el.dataset.di], o=d[d.kind], k=el.dataset.dk, money=!!el.dataset.money;
