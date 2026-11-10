@@ -17,7 +17,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 7;   // 7: drive km and time to each place, market check-ins · 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
+const HELPER_VERSION = 8;   // 8: what got done in the summaries, orders by email · 7: drive km and time to each place, market check-ins · 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -663,6 +663,14 @@ function periodSummary(b, kind, from, to, pfrom, pto) {
   let html = H.table(rows) + (Object.keys(R.ch).length ? H.h3('Where it sold') + H.list(Object.keys(R.ch).sort((x, y) => R.ch[y] - R.ch[x]).map(k => (chn[k] || k) + ': ' + money(R.ch[k]))) : '')
     + (top.length ? H.h3('Best sellers') + H.list(top.map(k => R.items[k].qty + ' × ' + k + ' (' + money(R.items[k].total) + ')')) : '') + '<p style="color:#686a5a">Profit and costs: Reports in the app.</p>';
   let text = range + '\n' + rows.map(r => r[0] + ': ' + r[1]).join('\n') + (top.length ? '\n\nBest sellers:\n' + top.map(k => R.items[k].qty + ' × ' + k).join('\n') : '');
+  // what got done (to-dos ticked off, ideas acted on, shopping bought), for the record
+  const inR = ms => { if (!ms) return false; const d = Utilities.formatDate(new Date(ms), 'Pacific/Auckland', 'yyyy-MM-dd'); return d >= from && d <= to; };
+  const doneT = listDocs('businesses/' + b._id + '/todos').filter(t => t.done && inR(t.doneAt)), doneI = listDocs('businesses/' + b._id + '/ideas').filter(i => i.done && inR(i.doneAt)), bought = listDocs('businesses/' + b._id + '/shopping').filter(x => x.done && inR(x.doneAt));
+  if (doneT.length || doneI.length || bought.length) {
+    html += H.h3('Done this ' + kind.toLowerCase()) + '<ul style="margin:0;padding-left:20px">' + doneT.slice(0, 25).map(t => '<li>✓ ' + esc(t.text) + '</li>').join('') + doneI.slice(0, 10).map(i => '<li>💡 ' + esc(i.text) + '</li>').join('') + '</ul>'
+      + (bought.length ? '<p>🛒 Bought: ' + esc(bought.slice(0, 20).map(x => x.item).join(', ')) + '</p>' : '');
+    text += '\n\nDone this ' + kind.toLowerCase() + ':\n' + doneT.slice(0, 25).map(t => '- ' + t.text).join('\n') + (bought.length ? '\nBought: ' + bought.map(x => x.item).join(', ') : '');
+  }
   const ap = actionPlan(b); html += ap.html; text += ap.text ? '\n\n' + ap.text : '';
   return { subject: (kind === 'Week' ? '📊 Last week: ' : kind === 'Month' ? '📊 Last month: ' : '📊 Last year: ') + money(R.total) + (vs(R.total, P.total) ? ' (' + vs(R.total, P.total).split(' on ')[0] + ')' : ''), html: H.wrap(kind === 'Year' ? 'Your year' : 'Your ' + kind.toLowerCase(), range, html), text: text };
 }

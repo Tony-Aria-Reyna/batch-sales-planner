@@ -75,9 +75,11 @@ function checkinsCard(){
   return `<div class="card"><h3>📝 Check-ins</h3><p class="note">A minute's questions, all prefilled, so the profit figures use your real hours and costs.</p>
     ${[['market','End of a market','After Close the day: how busy, the weather, the stall fee, your time packing up and driving home, anything sold out, notes'],
        ['brew','After a brew day','After ✓ Made it: how long it took (skipped when the time clock was running)']].map(([k,t,d])=>`<div class="row"><div class="grow"><b>${t}</b><small>${d}</small></div><button class="switch ${on[k]!==false?'on':''}" data-chk="${k}" role="switch" aria-checked="${on[k]!==false}" aria-label="${t}"><i></i></button></div>`).join('')}
+    ${role()==='owner'?`<div class="row"><div class="grow"><b>Time clock reminders</b><small>A red “⏱️ Off” top right when it's not running, and asked to start it when opening the app on a laptop</small></div><button class="switch ${S.settings.clockNag!==false?'on':''}" id="clkNag" role="switch" aria-checked="${S.settings.clockNag!==false}" aria-label="Time clock reminders"><i></i></button></div>`:''}
     <label class="note" for="unpackMin">Usual unpacking the car (min)</label><input class="txt" id="unpackMin" inputmode="numeric" value="${+S.settings.unpackMins||15}" style="max-width:160px"></div>`;
 }
 function wireCheckins(){
   document.querySelectorAll('[data-chk]').forEach(b=>b.onclick=()=>{ const k=b.dataset.chk; S.settings.checkins=Object.assign({},S.settings.checkins||{},{[k]:!checkinOn(k)}); save(); render(); });
+  const cn=$('#clkNag'); if(cn) cn.onclick=()=>{ S.settings.clockNag=S.settings.clockNag===false; save(); render(); };
   const u=$('#unpackMin'); if(u) u.onchange=()=>{ const v=Math.round(+u.value); if(!(v>=0&&v<600)){ toast('Type the minutes, e.g. 15'); return; } S.settings.unpackMins=v; save(); toast('Saved'); };
 }

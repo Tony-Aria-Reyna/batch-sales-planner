@@ -691,7 +691,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok((await page.$$('.tile')).length === 8 && /Time clock/.test(await page.textContent('.tile.clock')), 'owner home: 8 tiles, with the Time clock as a main button');
   await page.click('.tile.clock'); await page.waitForSelector('[data-cj="brewing"]'); await page.click('[data-cj="brewing"]'); await page.waitForTimeout(80);
   ok(await page.evaluate(() => clockRunning() && clockRunning().code === 'brewing') && /Brewing/.test(await page.textContent('.tile.clock')) && /🫙/.test(await page.textContent('.tile.clock')), 'time clock: Brewing started; the tile shows the jar and the time');
-  ok(!!(await page.$('#clkChip')), 'the clock shows top right on every screen while it runs');
+  ok(!!(await page.$('#clkChip.on')), 'the clock shows top right on every screen while it runs (pulsing)');
   await page.evaluate(() => { stack = ['home', 'calendar']; render(); }); await page.waitForSelector('#clkChip');
   await page.click('#clkChip'); await page.waitForSelector('[data-cj="admin"]'); await page.click('[data-cj="admin"]'); await page.waitForSelector('#cY');
   ok(/Switch to Admin\?/.test(await text(page)), 'changing job asks first');
@@ -703,6 +703,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#clkGo'); await page.waitForTimeout(60); ok(!/over 10 hours/.test(await text(page)) && await page.evaluate(() => !!clockRunning()), '"Yes, still going" keeps it running');
   await page.click('#clkChip'); await page.waitForSelector('#cjStop'); await page.click('#cjStop'); await page.waitForSelector('#cY'); await page.click('#cY'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => !clockRunning() && S.clock.filter(c => c.kind === 'owner').every(c => c.end)), 'Stop (after a check) stops it');
+  ok(/Off/.test(await page.textContent('#clkChip.off')), 'stopped, a red "⏱️ Off" shows top right to catch the eye');
   ok(await page.evaluate(() => { S.clock.push({ id: 'cb', kind: 'owner', who: SYNC.me(), code: 'brewing', date: nzDay(), start: Date.now() - 3600e3, end: Date.now(), mins: 60 }); return clockMinsFor('brewing', nzDay()) >= 60; }), 'clocked brewing time counts for the day (so the brew check-in is skipped)');
   // buying: suppliers, the order email (copied to the main owner), on order, arrived
   await page.evaluate(() => { window.opened = []; openLink = u => opened.push(u);

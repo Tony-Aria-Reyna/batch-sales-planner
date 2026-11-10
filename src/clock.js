@@ -127,7 +127,15 @@ function clockTile(){
   return r?`<button class="tile clock running" data-go="clock"><span class="ic">${CLOCK_IC[r.code]||'⏱️'}</span><span><h2>${esc(clockName(r.code))}</h2><p><span class="tick" data-clocktick="${r.id}">⏱️ ${hm2(clockMins(r))}</span> · tap to change or stop</p></span></button>`
     :`<button class="tile clock" data-go="clock"><span class="ic">⏱️</span><span><h2>Time clock</h2><p>Tap to start: brewing, orders, admin, buying</p></span></button>`;
 }
-function clockChip(){ const r=role()==='owner'&&!tillLock()?clockRunning():null; return r?`<button class="clockchip" id="clkChip" aria-label="Time clock: ${esc(clockName(r.code))}">${CLOCK_IC[r.code]||'⏱️'} <span data-clocktick="${r.id}">${hm2(clockMins(r))}</span></button>`:''; }
+// top right of every screen (owners): pulses while running; red and flashing when it's off, so it catches the eye
+function clockChip(){ if(role()!=='owner'||tillLock()||practice&&practice.role!=='owner') return ''; const r=clockRunning();
+  if(S.settings.clockNag===false&&!r) return '';
+  return r?`<button class="clockchip on" id="clkChip" aria-label="Time clock: ${esc(clockName(r.code))}">${CLOCK_IC[r.code]||'⏱️'} <span data-clocktick="${r.id}">${hm2(clockMins(r))}</span></button>`
+    :`<button class="clockchip off" id="clkChip" aria-label="Time clock is off: tap to start">⏱️ Off</button>`; }
+// on a laptop or desktop, opening the app with no clock running asks once
+function clockPromptOnOpen(){
+  try{ if(role()!=='owner'||tillLock()||practice||clockRunning()||S.settings.clockNag===false) return; if(!matchMedia('(pointer:fine)').matches) return;
+    if(sessionStorage.getItem('rs.clockAsked')) return; sessionStorage.setItem('rs.clockAsked','1'); if(cur()!=='home'||modalStack.length) return; clockSheet(); }catch(e){} }
 setInterval(()=>{ document.querySelectorAll('[data-clocktick]').forEach(el=>{ const c=clockList().find(x=>x.id===el.dataset.clocktick); if(c&&!c.end) el.textContent=(el.classList.contains('tick')?'⏱️ ':'')+hm2(clockMins(c)); }); },20e3);
 // the one window: the jobs, and Stop
 function clockSheet(){

@@ -242,6 +242,8 @@ textarea.txt.grow{resize:none;overflow:hidden;line-height:1.35;min-height:56px;d
 .tiles.owner8 .tile.clock,.tiles.owner8 .tile.wide{grid-column:span 2}
 .tile.clock{background:#f3eef6;border-color:#d9cbe2}.tile.clock.running{background:var(--lav);color:#fff;border-color:var(--lav)}.tile.clock.running p{color:#f1e9f6}
 .tile.clock .tick{font-size:15px;font-weight:800;opacity:.9}
+.clockchip.on{animation:clkpulse 2.4s ease-in-out infinite}@keyframes clkpulse{50%{box-shadow:0 0 0 6px rgba(255,255,255,.35)}}
+.clockchip.off{background:#d93025;color:#fff;animation:clkred 1.6s ease-in-out infinite}@keyframes clkred{50%{background:#8f1d16}}
 .clockchip{flex:none;background:#fff;color:var(--lav);font-weight:800;font-size:15px;border-radius:99px;padding:7px 12px;white-space:nowrap}
 .clockjobs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.clockjobs .btn{min-height:84px;font-size:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .clockjobs .btn small{font-size:13px;font-weight:700;opacity:.9}.clockjobs .btn .big{font-size:30px;line-height:1}
@@ -601,11 +603,11 @@ SCREENS.home={
       </section>
       ${voiceReady()&&!tillLock()?`<section class="vbar three"><button class="vtalk" id="hTalk"><span>🎙</span>Talk${pendingNotes().filter(n=>n.status==='ready').length?`<small>${pendingNotes().filter(n=>n.status==='ready').length} to check</small>`:''}</button><button class="vdrive" id="hType" aria-label="Type a note or question">⌨️<small class="vlbl">Type</small></button><button class="vdrive" id="hPhoto" aria-label="Photo">📷<small class="vlbl">Photo</small></button><button class="vdrive" id="hDrive">🚗<small class="vlbl">Drive</small></button></section>`:''}
       ${S.settings.vapidKey&&myDevices&&!pushOnHere()&&!tillLock()&&!lsGet('rs.pushNo','')?`<div class="card nudge"><div class="row" style="border:0;padding:0;min-height:0"><div class="grow"><b>🔔 Get reminders and alerts on this ${esc(deviceLabel())}</b><small>Markets, to-dos${canManage()?', new orders, low stock':''} and tills left open</small></div><button class="btn small" id="hPush">Set up</button><button class="btn alt small" id="hPushNo">Not now</button></div></div>`:''}
+      ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything… or ask “how do I…?”</span></button>'}
       <section class="tiles ${tiles.length===1?'one':tiles.length===2?'two':''} ${tiles.some(t=>t.id==='clock')?'owner8':''}">${tiles.map(t=>{ if(t.id==='clock') return clockTile();
         return `<button class="tile ${t.id==='sell'?'sell':''} ${t.id==='profit'||t.id==='setup'?'wide':''} ${t.lock&&anyPins()?'lock':''}" data-go="${t.id}">
         <span class="ic">${t.ic}</span><span><h2>${t.id==='sell'&&d?'Sell · open':t.h}</h2><p>${t.id==='sell'&&d?esc(d.name||'Tap to carry on'):t.p}</p>${t.phase?`<span class="soon">Coming soon</span>`:''}</span></button>`; }).join('')}</section>
       ${homeIdeasHtml()}
-      ${tillLock()?'':'<button class="homesearch" id="hFind">🔍 <span>Find anything… or ask “how do I…?”</span></button>'}
       ${role()==='helper'?`<p class="note" style="text-align:center;margin-top:18px">You're signed in as a helper (${esc(practice?practice.label:SYNC.me())}). You can sell; setup and reports are for the owner.</p><p style="text-align:center"><button class="btn alt small" id="hNotify">🔔 Notifications</button></p>`:''}`;
   },
   wire(){ const np=$('#nagPin'); if(np) np.onclick=()=>setPinFlow(()=>render()); wireClockBanner(); wireHomeIdeas(); syncProductCosts();
@@ -1005,7 +1007,7 @@ function rulesNotice(){ return missingCols.size?`<div class="card" style="border
 function syncChanged(what,err){
   if(what==='colerror'){ console.warn('refused:',err.col,err.err); if(!missingCols.has(err.col)){ missingCols.add(err.col); syncChanged(err.col); } return; }
   if(what==='error'){ console.error(err); if(err&&err.code==='permission-denied'){ SYNC.stop(); gate('error','This account no longer has access to the business. Signed in as '+SYNC.me()+'. Details: '+errText(err)); } else toast('Not saved: '+errText(err)); return; }
-  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); SYNC.getMyDevices().then(d=>{ myDevices=d; if(cur()==='home') render(); refreshPush(); }).catch(()=>{}); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; else deepLink(); }
+  clearTimeout(rT); rT=setTimeout(()=>{ if(firstRender){ firstRender=false; checkPinReset(); loadCart(); SYNC.getMyDevices().then(d=>{ myDevices=d; if(cur()==='home') render(); refreshPush(); }).catch(()=>{}); if(tillLock()||lsGet('rs.wasSelling','')===SYNC.businessId()) stack=['home','sell']; else { deepLink(); setTimeout(clockPromptOnOpen,1500); } }
     const typing=document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&$('#main').contains(document.activeElement);
     if(what==='orders'||what==='business') try{ settleOrders(); }catch(e){}
     if(!typing) render(); gate(null); },60);
