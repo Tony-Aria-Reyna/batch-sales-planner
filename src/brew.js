@@ -291,7 +291,7 @@ SCREENS.recipes={
 };
 function inputsHtml(){
   const l=S.inputs.slice().sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.name.localeCompare(b.name));
-  return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="addIn">＋ Add an ingredient or packaging</button></div>
+  return `<div class="card"><div class="mact" style="justify-content:flex-start;margin-top:0"><button class="btn" id="addIn">＋ Add an ingredient or packaging</button><button class="btn alt" id="inImp">📥 Import a price list</button></div>
     ${['ingredient','packaging'].map(c=>{ const g=l.filter(i=>(i.cat||'ingredient')===c); return g.length?`<h3 style="margin-top:14px">${c==='ingredient'?'Ingredients':'Packaging'}</h3>`+g.map(i=>{ const st=inputStock(i.id);
       return `<button class="row prow" data-in="${i.id}"><div class="grow">${esc(i.name)}${inputIssues(i).map(x=>`<small class="bad">⚠️ ${esc(x.t)}</small>`).join('')}<small>${i.free&&!(i.price>0)?'Free · packs of '+fmtQty(i.pack,i.unit):`${c2(i.price)} for ${fmtQty(i.pack,i.unit)}${i.unit==='each'?' each':''} · ${c2(inputCost(i)*(i.unit==='each'?1:(i.unit==='g'||i.unit==='ml'?100:1)))} per ${i.unit==='each'?'one':'100 '+i.unit}`}${st!=null?' · have '+fmtQty(st,i.unit):''}</small></div><span class="chev">›</span></button>`; }).join(''):''; }).join('')||'<p class="note">None yet.</p>'}</div>`;
 }

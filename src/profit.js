@@ -98,6 +98,7 @@ SCREENS.profit={
         <div class="mact" style="justify-content:flex-start"><button class="btn alt" id="pfClock">⏱️ Time clock</button></div></div>
       <div class="card" id="pfMk"><h3>Markets and places, best first</h3><p class="note">Profit after stock, fees, fuel and helpers, for each hour you spent there. Worth it is ${c2(hourTarget())} an hour or more (<button class="linkb" id="pfTgt">change</button>).</p>
         ${mk.length?mk.map(x=>{ const vv=verdict(x.net,x.ph); return `<div class="lrow"><div class="grow ltxt"><b>${vv[0]} ${esc(x.p.name)}</b><small>${vv[1]} · ${x.p.days} day${x.p.days===1?'':'s'} · ${c2(x.net)} profit${x.ph!=null?' · '+c2(x.ph)+' an hour':''} · ${c2(Math.round(x.net/x.p.days))} a day</small></div></div>`; }).join(''):'<p class="note">No selling days in this period.</p>'}</div>
+      ${weatherCard()}
       <div class="card"><h3>Products, best earners first</h3>
         ${pr.length?pr.slice(0,20).map(x=>{ const vv=x.m==null?['❓','No cost yet']:x.m>=0.55?['✅','Worth it']:x.m>=0.35?['🟡','Borderline']:['🔴','Low margin']; return `<div class="lrow"><div class="grow ltxt"><b>${vv[0]} ${esc(prodName(x.p))}</b><small>${vv[1]} · ${x.qty} sold · ${x.prof==null?'cost unknown':c2(x.prof)+' profit · '+Math.round(x.m*100)+'% margin'}</small></div></div>`; }).join(''):'<p class="note">Nothing sold in this period.</p>'}</div>
       <div class="card"><h3>The last six months</h3>${bars(months.map(([k,n])=>[k,Math.max(0,n)]),c2)}<p class="note">Real profit each month (a month that lost money shows empty).</p></div>`;

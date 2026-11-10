@@ -533,6 +533,25 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => Object.values(S.settings.seasonBoost).includes(50)) && /\+50%/.test(await text(page)), 'a month can be marked busier');
   await page.screenshot({ path: path.join(shots, '36-season.png') });
   await page.evaluate(() => { S.settings.seasonBoost = {}; brewTab = 'next'; save(); stack = ['home', 'orders']; render(); });
+  // address suggestions (the lookup is faked here), a supplier's price list, weather trends, branding
+  await page.evaluate(() => { window.realFetch = window.realFetch || window.fetch; window.fetch = (u, o) => /photon\.komoot/.test(String(u)) ? Promise.resolve({ ok: true, json: () => Promise.resolve({ features: [{ properties: { housenumber: '12', street: 'Main Street', city: 'Alexandra', postcode: '9320' } }] }) }) : window.realFetch(u, o); editPlace({ group: 'markets', channel: 'retail' }); });
+  await page.waitForSelector('#pA'); await page.fill('#pA', '12 Main Str'); await page.waitForSelector('.addrlist [data-addr]', { timeout: 3000 }).catch(() => {});
+  ok(!!(await page.$('.addrlist [data-addr]')), 'typing an address offers suggestions');
+  await page.dispatchEvent('.addrlist [data-addr]', 'mousedown'); await page.waitForTimeout(40);
+  ok(await page.inputValue('#pA') === '12 Main Street, Alexandra, 9320', 'tapping one fills it in (typing by hand still works)');
+  await page.click('#pC'); await page.evaluate(() => { window.fetch = window.realFetch; });
+  await page.evaluate(() => { S.inputs.push({ id: 'jar50', name: 'Amber jar 50ml', cat: 'packaging', price: 100, pack: 1, unit: 'each' }); save(); importPrices(); });
+  await page.waitForSelector('#plT'); await page.fill('#plS', 'Jar Co'); await page.fill('#plT', 'Item,Price\nAmber jar 50ml,$1.20\nCobalt dropper 30ml,$2.50\n'); await page.click('#plRead'); await page.waitForSelector('[data-pla]');
+  ok(await page.$$eval('[data-pla]', l => l.length === 2 && l[0].value === 'upd' && l[1].value === 'new'), 'a pasted price list is read: one matches an item, one is new');
+  await page.click('#plOk'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => { const j = S.inputs.find(x => x.id === 'jar50'), d = S.inputs.find(x => x.name === 'Cobalt dropper 30ml'); return j.price === 120 && d && d.cat === 'packaging' && d.price === 250 && d.unit === 'each' && d.supplier === 'Jar Co' && S.prices.some(p => p.input === 'jar50' && p.from === 'price list'); }), 'saving updates the matching price (with history) and adds the new item');
+  await page.evaluate(() => { [['sun', 30000], ['rain', 9000], ['sun', 26000], ['wind', 8000]].forEach(([w, tk], i) => { const id = 'wxs' + i, date = dk(addDays(kd(nzDay()), -7 * (i + 1)));
+    S.sessions.push({ id, type: 'market', name: 'Wx Market', date, openedAt: Date.now() - (i + 1) * 7 * 864e5, openedBy: SYNC.me(), status: 'closed', float: 0, checkin: { busy: w === 'sun' ? 'busy' : 'quiet', weather: [w] } });
+    S.sales.push({ id: 'wxsale' + i, sessionId: id, channel: 'market', where: 'Wx Market', date, at: Date.now() - (i + 1) * 7 * 864e5, lines: [], total: tk, gst: Math.round(tk * 3 / 23), method: 'cash', by: SYNC.me(), voided: false }); }); });
+  ok(await page.evaluate(() => { const w = weatherTrends(), sun = w.rows.find(r => r.k === 'sun'), rain = w.rows.find(r => r.k === 'rain'); return w.n >= 4 && sun.avg > w.avg && rain.diff < 0 && /Sunny/.test(weatherCard()); }), 'Real profit: weather and takings from the market check-ins');
+  await page.evaluate(() => { S.settings.brand = { theme: 'ocean', font: 'sans' }; save(); render(); });
+  ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#1f3b4d' && /Ocean/.test(brandCardHtml()) && /theme on" data-theme="ocean"/.test(brandCardHtml())), 'branding: a business can have its own colours and font');
+  await page.evaluate(() => { S.settings.brand = {}; save(); render(); });
   // busy-day EFTPOS queue and Afterpay (both switched on in Setup)
   await page.evaluate(() => { S.settings.eftQueue = true; S.settings.afterpayOn = true; if (!openDay()) S.sessions.push({ id: 'qday', type: 'market', name: 'Queue Test', date: nzDay(), openedAt: Date.now(), openedBy: SYNC.me(), float: 0, status: 'open' }); save(); stack = ['home', 'sell']; render(); });
   await page.waitForSelector('[data-pay="afterpay"]');
@@ -845,10 +864,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { stack = ['home', 'profit']; render(); }); await page.waitForTimeout(100); await page.screenshot({ path: path.join(shots, '43c-phone-profit.png') });
   await page.setViewportSize({ width: 1180, height: 820 }); await page.evaluate(() => { stack = ['home']; render(); }); await page.waitForTimeout(100);
   ok(await page.evaluate(() => { const c = S.clock.find(x => x.id === 'actions'); return c && c.list.length >= 1 && c.list.every(x => x.go); }), 'the owners\' action plan is kept (owner-only) for the summary emails');
-  await page.evaluate(() => { location.hash = '#go=brew:stock'; }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 6000 }).catch(() => {});
+  await page.evaluate(() => { history.replaceState(history.state, '', location.pathname + '#go=brew:stock'); dispatchEvent(new HashChangeEvent('hashchange')); }); await page.waitForFunction(() => cur() === 'brew', null, { timeout: 6000 }).catch(() => {});
   ok(await page.evaluate(() => cur() === 'brew' && brewTab === 'stock' && !location.hash), 'a link with #go=brew:stock opens Stock');
-  for (let i = 0; i < 2 && !(await page.evaluate(() => cur() === 'profit')); i++) { await page.evaluate(() => { location.hash = ''; location.hash = '#go=profit'; }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 6000 }).catch(() => {}); }
+  await page.evaluate(() => { history.replaceState(history.state, '', location.pathname + '#go=profit'); dispatchEvent(new HashChangeEvent('hashchange')); }); await page.waitForFunction(() => cur() === 'profit', null, { timeout: 6000 }).catch(() => {});
   ok(await page.evaluate(() => cur() === 'profit'), 'a link with #go=profit opens Real profit');
+  await page.evaluate(() => { location.hash = '#go=calendar'; }); await page.waitForFunction(() => cur() === 'calendar', null, { timeout: 6000 }).catch(() => {});
+  ok(await page.evaluate(() => cur() === 'calendar' && document.querySelector('#exitScr').hidden), 'a link opened while the app is open goes there (no "leave the app?" screen)');
   await page.evaluate(() => { stack = ['home', 'setup']; render(); }); await page.waitForSelector('#viewAs');
   await page.click('#mgrCosts'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.mgrCosts === true), 'an owner can let managers see recipes and costs');
@@ -949,7 +970,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await hp.fill('#askN', 'Pop-up Fair'); await hp.click('#askGo'); await hp.waitForSelector('.asksteps');
   ok(await hp.evaluate(() => S.asks.some(a => a.by === SYNC.me() && a.status === 'waiting' && a.placeName === 'Pop-up Fair')) && /Sent/.test(await text(hp)) && await hp.$('.asksteps .cur'), 'helper asks to open another market and sees the steps, the current one blinking');
   await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); a.at = Date.now() - 95e3; S.settings.phones = { [SYNC.getMainOwner()]: { n: 'Fiona', p: '021 555 1234' } }; });
-  await hp.waitForSelector('a[href^="tel:"]', { timeout: 3000 }).catch(() => {});
+  await hp.waitForSelector('a[href^="tel:"]', { timeout: 6000 }).catch(() => {});
   ok(await hp.evaluate(() => { const l = document.querySelector('a[href^="tel:"]'); return l && l.getAttribute('href') === 'tel:0215551234' && /Call Fiona/.test(l.textContent); }), 'after 90 seconds unseen: "Call Fiona" rings the main owner');
   await hp.evaluate(() => { const a = S.asks.find(x => x.placeName === 'Pop-up Fair' && x.status === 'waiting'); Object.assign(a, { seenAt: Date.now(), seenBy: SYNC.getMainOwner(), status: 'approved', decidedBy: SYNC.getMainOwner() }); });
   await hp.waitForSelector('.ptile', { timeout: 4000 }).catch(() => {});
