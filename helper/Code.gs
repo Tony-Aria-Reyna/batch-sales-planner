@@ -17,7 +17,7 @@
  * only for real sales, at most 3 receipts per sale, and builds every email itself (nothing typed into
  * the app becomes part of the email except the customer's address and name).
  */
-const HELPER_VERSION = 8;   // 8: what got done in the summaries, orders by email · 7: drive km and time to each place, market check-ins · 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
+const HELPER_VERSION = 9;   // 9: weekly backup email, logo on emails, assistant monthly limit · 8: what got done in the summaries, orders by email · 7: drive km and time to each place, market check-ins · 2: welcome line for new Loyalty programme members · 3: voice notes · 4: Shopify orders, voice orders · 5: notifications, market report email · 6: assistant v2 (words first, questions, follow-ups, photos, stock, costs, fuel, contacts, prices, recipes, lessons learnt), summaries
 const PROJECT_ID = 'batch-sales-planner';
 const BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
 const MAX_PER_SALE = 3;
@@ -696,9 +696,25 @@ function summariesTick(b, once) {
   if (cfg.weekly !== false && wd === Number(cfg.weekday || 1)) once('sum-w-' + day, () => { const to = addDay(day, -1), from = addDay(day, -7); mailOwners(b, periodSummary(b, 'Week', from, to, addDay(from, -7), addDay(from, -1))); });
   if (cfg.monthly !== false && dom === 1) once('sum-m-' + day.slice(0, 7), () => { const to = addDay(day, -1), from = to.slice(0, 8) + '01', pto = addDay(from, -1), pfrom = pto.slice(0, 8) + '01';
     mailOwners(b, periodSummary(b, 'Month', from, to, pfrom, pto)); });
+  if (st.backupOff !== true && wd === 0) once('backup-' + day, () => backupEmail(b));
   const fy = Number(st.fyStart || 4);
   if (cfg.yearly !== false && dom === 1 && mo === fy) once('sum-y-' + day.slice(0, 7), () => { const to = addDay(day, -1), y = Number(day.slice(0, 4)), from = (y - 1) + day.slice(4, 8) + '01',
     pfrom = (y - 2) + day.slice(4, 8) + '01', pto = addDay(from, -1); mailOwners(b, periodSummary(b, 'Year', from, to, pfrom, pto)); });
+}
+// Weekly backup (Sundays, with the morning emails): everything in the business as one zipped file, emailed to
+// the main owner. Nothing is deleted anywhere; this is a copy to keep, for a bad day or the accountant.
+const BACKUP_COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'audit', 'receipts', 'contacts', 'places', 'events',
+  'plans', 'ideas', 'costs', 'prices', 'fuel', 'stockmoves', 'shopping', 'pay', 'clock', 'asks'];
+function backupEmail(b) {
+  const out = { business: { id: b._id, name: b.name, settings: Object.assign({}, b.settings || {}, { brand: undefined }), owners: b.owners, members: b.members, roles: b.roles }, at: new Date().toISOString() };
+  let n = 0; BACKUP_COLS.forEach(c => { try { out[c] = listDocs('businesses/' + b._id + '/' + c); n += out[c].length; } catch (e) { out[c] = { error: String(e).slice(0, 100) }; } });
+  const day = today(), name = (b.name || 'business').replace(/[^\w]+/g, '-') + '-backup-' + day;
+  const zip = Utilities.zip([Utilities.newBlob(JSON.stringify(out), 'application/json', name + '.json')], name + '.zip');
+  const to = b.owner || (b.owners || [])[0]; if (!to) return;
+  MailApp.sendEmail({ to: to, subject: '🗄️ Weekly backup · ' + (b.name || '') + ' · ' + day, name: b.name || 'Rata & Smudge', attachments: [zip],
+    htmlBody: '<div style="font-family:Arial,sans-serif;max-width:560px;color:#2b2c22">' + logoHtml(b, true) + '<p>Attached is a full copy of ' + esc(b.name || 'the business') + ' as it was this morning: ' + n + ' records (sales, orders, stock, recipes, everything).</p><p>Keep this email. Nothing has been deleted from the app; this is a spare copy for a bad day, or for the accountant. It comes every Sunday; an owner can switch it off in Setup.</p></div>',
+    body: 'Attached is a full copy of ' + (b.name || 'the business') + ' (' + n + ' records). Keep this email; nothing has been deleted from the app.' });
+  patch('businesses/' + b._id, { backupHelper: { lastAt: Date.now(), records: n, version: HELPER_VERSION } });
 }
 function mailOwners(b, m) {
   const devs = (b.settings || {}).vapidKey ? devicesOf(b) : [];

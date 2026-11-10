@@ -518,8 +518,10 @@ function showDaySales(approver){
     m.innerHTML=`<h2>🧾 Sales so far · ${c2(t.total)}</h2><p class="note">Opened with ${esc(personName(approver))}'s PIN. ${t.count} sale${t.count===1?'':'s'}; cash ${c2(t.cash)}, EFTPOS ${c2(t.eftpos)}${t.other?', other '+c2(t.other):''}.</p>
       ${list.length?list.map(s=>`<div class="row ${s.voided?'voided':''}"><div class="grow"><b>${nzTime(s.at)} · ${c2(s.total)} ${PAY_TXT[s.method]||''}</b>
         <small>${esc(s.lines.map(l=>l.qty+'× '+l.name+(l.size?' '+l.size:'')).join(', '))}${s.manualDiscount?' · discount '+c2(s.manualDiscount.amount):''}${s.servedBy?' · '+esc(s.servedBy):''}${s.replaces?' · corrected sale':''}${s.voided?' · '+(s.voidReason==='corrected'?'CORRECTED':'VOIDED')+' by '+esc(personName(s.voidedBy)):''}${receiptNote(s)?'<br>'+esc(receiptNote(s)):''}</small></div>
-        ${s.voided?'':`<button class="btn alt small" data-mail="${s.id}" aria-label="Email a GST receipt">📧</button><button class="btn alt small" data-corr="${s.id}">Correct</button><button class="btn danger small" data-void="${s.id}">Void</button>`}</div>`).join(''):'<p class="note">No sales yet.</p>'}
-      <div class="mact"><button class="btn" id="dOk">Close</button></div>`;
+        ${s.voided?'':s.kind==='refund'?'<span class="pill">↩ Refund</span>':`<button class="btn alt small" data-mail="${s.id}" aria-label="Email a GST receipt">📧</button><button class="btn alt small" data-refund="${s.id}">Refund</button><button class="btn alt small" data-corr="${s.id}">Correct</button><button class="btn danger small" data-void="${s.id}">Void</button>`}</div>`).join(''):'<p class="note">No sales yet.</p>'}
+      <div class="mact"><button class="btn alt" id="dOld">↩ Refund a sale from an earlier day</button><button class="btn" id="dOk">Close</button></div>`;
+    m.querySelectorAll('[data-refund]').forEach(b=>b.onclick=()=>refundSale(S.sales.find(x=>x.id===b.dataset.refund),draw));
+    m.querySelector('#dOld').onclick=()=>pickOldSale(s=>refundSale(s,draw));
     m.querySelector('#dOk').onclick=close;
     m.querySelectorAll('[data-mail]').forEach(b=>b.onclick=()=>emailReceipt(S.sales.find(x=>x.id===b.dataset.mail)));
     m.querySelectorAll('[data-void]').forEach(b=>b.onclick=()=>{ const s=S.sales.find(x=>x.id===b.dataset.void);
@@ -534,6 +536,49 @@ function showDaySales(approver){
         toast('Change the items, then take payment again'); },c2(s.total)+' '+s.method+' sale from '+nzTime(s.at));
       if(cart.length&&!correcting) confirmBox('Put this sale aside?','There is a sale in progress. Correcting replaces it.','Correct anyway',go); else go(); });
   }; draw(); });
+}
+
+/* ---------- refunds: some or all of a sale, money back and (unless damaged) stock back ----------
+   A refund is saved as a sale with minus amounts on today's selling day, so the takings, the cash expected in the
+   tin, GST and stock all come out right, and the original sale is left as it was. Needs a PIN. */
+const refundedOf=(s,pid)=>S.sales.filter(r=>r.kind==='refund'&&r.refundOf===s.id&&!r.voided).reduce((n,r)=>n+(r.lines||[]).filter(l=>l.pid===pid).reduce((a,l)=>a-l.qty,0),0);
+function pickOldSale(done){
+  const from=dk(addDays(kd(nzDay()),-90)), l=S.sales.filter(s=>!s.voided&&s.kind!=='refund'&&s.date>=from&&s.date<nzDay()).sort((a,b)=>b.at-a.at).slice(0,60);
+  modal((m,close)=>{ const draw=q=>{ const k=String(q||'').toLowerCase(), f=l.filter(s=>!k||(s.lines||[]).some(x=>x.name.toLowerCase().includes(k))||c2(s.total).includes(k));
+      m.querySelector('#osL').innerHTML=f.length?f.map(s=>`<button class="row prow" data-os="${s.id}"><div class="grow"><b>${nzDate(kd(s.date),{weekday:'short',day:'numeric',month:'short'})} · ${c2(s.total)} ${PAY_TXT[s.method]||''}</b><small>${esc((s.lines||[]).map(x=>x.qty+'× '+x.name).join(', '))}${s.where?' · '+esc(s.where):''}</small></div></button>`).join(''):'<p class="note">No sale like that in the last 90 days.</p>';
+      m.querySelectorAll('[data-os]').forEach(b=>b.onclick=()=>{ close(); done(S.sales.find(x=>x.id===b.dataset.os)); }); };
+    m.innerHTML=`<h2>↩ Which sale?</h2><input class="txt" id="osQ" placeholder="Type a product or the amount"><div id="osL"></div><div class="mact"><button class="btn alt" id="osC">Cancel</button></div>`;
+    m.querySelector('#osQ').oninput=e=>draw(e.target.value); m.querySelector('#osC').onclick=close; draw(''); },{big:true});
+}
+function refundSale(s,after){
+  if(!s) return; const d=openDay();
+  if(!d){ toast('Start a selling day first: the refund comes out of today\'s takings'); return; }
+  const lines=(s.lines||[]).map(l=>Object.assign({},l,{left:l.qty-refundedOf(s,l.pid)})).filter(l=>l.left>0);
+  if(!lines.length){ toast('Everything in this sale has been refunded already'); return; }
+  const lineSum=(s.lines||[]).reduce((t,l)=>t+(l.amount!=null?l.amount:l.qty*l.unit),0), ratio=lineSum>0?s.total/lineSum:1;   // deals and discounts shared out
+  const each=l=>Math.round((l.amount!=null?l.amount:l.qty*l.unit)/l.qty*ratio);
+  modal((m,close)=>{ let method=s.method==='cash'?'cash':s.method, reason='', back=true; const q={}; lines.forEach(l=>q[l.pid]=lines.length===1&&l.left===1?1:0);
+    const draw=()=>{
+      const amt=lines.reduce((t,l)=>t+(q[l.pid]||0)*each(l),0);
+      m.innerHTML=`<h2>↩ Refund</h2><p class="note">${nzDate(kd(s.date),{weekday:'short',day:'numeric',month:'short'})} · ${c2(s.total)} ${PAY_TXT[s.method]||''}</p>
+        ${lines.map(l=>`<div class="oline"><div class="ltxt"><b>${esc(l.name)}</b><small>${c2(each(l))} each · ${l.left} can be refunded</small></div><input class="txt qty" type="number" min="0" max="${l.left}" data-rq="${l.pid}" value="${q[l.pid]}"></div>`).join('')}
+        <p class="note" style="margin-bottom:0"><b>Why?</b></p><div class="pastnames">${['Changed their mind','Faulty or damaged','Wrong item','Other'].map(r=>`<button class="chip big ${reason===r?'on':''}" data-rr="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+        <div class="row"><div class="grow"><b>Back into stock</b><small>${back?'Yes: it can be sold again':'No: it\'s written off (damaged)'}</small></div><div class="seg"><button data-rb="1" class="${back?'on':''}">Yes</button><button data-rb="0" class="${!back?'on':''}">No</button></div></div>
+        <p class="note" style="margin-bottom:0"><b>Give the money back by</b></p><div class="seg" style="width:100%">${payMethods().map(k=>`<button data-rm="${k}" class="${method===k?'on':''}" style="flex:1">${PAY_TXT[k]}</button>`).join('')}</div>
+        <p class="chkline">Refund <b>${c2(amt)}</b>${cardLike(method)?' on the terminal':method==='cash'?' in cash from the tin':''}</p>
+        <div class="mact"><button class="btn alt" id="rfC">Cancel</button><button class="btn" id="rfOk" ${amt>0?'':'disabled'}>Refund ${c2(amt)} 🔒</button></div>`;
+      m.querySelectorAll('[data-rq]').forEach(i=>i.onchange=()=>{ q[i.dataset.rq]=Math.max(0,Math.min(+i.max,Math.floor(+i.value||0))); draw(); });
+      m.querySelectorAll('[data-rr]').forEach(b=>b.onclick=()=>{ reason=b.dataset.rr; if(/damaged/i.test(reason)) back=false; draw(); });
+      m.querySelectorAll('[data-rb]').forEach(b=>b.onclick=()=>{ back=b.dataset.rb==='1'; draw(); });
+      m.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{ method=b.dataset.rm; draw(); });
+      m.querySelector('#rfC').onclick=close;
+      m.querySelector('#rfOk').onclick=()=>{ if(!reason){ toast('Tap why'); return; }
+        approve('give a refund',who=>{ const now=Date.now(), rl=lines.filter(l=>q[l.pid]>0).map(l=>({pid:l.pid,name:l.name,size:l.size||'',unit:each(l),qty:-q[l.pid],amount:-q[l.pid]*each(l)}));
+          S.sales.push({id:SYNC.newId('sales'),kind:'refund',refundOf:s.id,refundReason:reason,approvedBy:who,sessionId:d.id,channel:d.type,where:d.name||'',date:nzDay(new Date(now)),at:now,when:nzStamp(now),
+            lines:rl,deals:[],manualDiscount:null,subtotal:-amt,discount:0,total:-amt,gst:-Math.round(amt*3/23),method,by:SYNC.me(),servedBy:servedBy()||'',voided:false});
+          if(!back) rl.forEach(l=>{ if(l.pid&&!String(l.pid).startsWith('x-')) moveStock({kind:'writeoff',product:l.pid,qty:l.qty,reason,approvedBy:who}); });
+          save(); close(); if(after) after(); render(); toast('Refunded '+c2(amt)+' · approved by '+personName(who)); },c2(amt)+' from a '+c2(s.total)+' sale ('+reason+')'); };
+    }; draw(); },{big:true});
 }
 
 /* ---------- the cash float (with a PIN) ----------
@@ -603,7 +648,7 @@ function openQueue(){
 function dayTotals(d){
   const all=daySales(d), ok=all.filter(s=>!s.voided), by=k=>ok.filter(s=>s.method===k).reduce((n,s)=>n+s.total,0);
   const units={}; ok.forEach(s=>s.lines.forEach(l=>{ const k=l.name+(l.size?' · '+l.size:''); units[k]=(units[k]||0)+l.qty; }));
-  return {count:ok.length,total:ok.reduce((n,s)=>n+s.total,0),gst:ok.reduce((n,s)=>n+(s.gst||0),0),cash:by('cash'),eftpos:by('eftpos'),afterpay:by('afterpay'),other:by('other'),
+  return {refunds:ok.filter(s=>s.kind==='refund').reduce((n,s)=>n-s.total,0),count:ok.filter(s=>s.kind!=='refund').length,total:ok.reduce((n,s)=>n+s.total,0),gst:ok.reduce((n,s)=>n+(s.gst||0),0),cash:by('cash'),eftpos:by('eftpos'),afterpay:by('afterpay'),other:by('other'),
     discount:ok.reduce((n,s)=>n+(s.discount||0),0),units,voids:all.filter(s=>s.voided&&s.voidReason!=='corrected'),corrections:all.filter(s=>s.voidReason==='corrected').length};
 }
 function endDay(approver){

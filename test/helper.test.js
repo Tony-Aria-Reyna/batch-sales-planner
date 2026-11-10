@@ -116,4 +116,13 @@ ok(pm('m1') && pm('m1').route.km === 32.5 && pm('m1').route.mins === 36 && pm('m
 ok(pm('m2') && pm('m2').route.err && !pm('m3') && asked.indexOf('X') < 0, 'route: an address not found is noted; a place already worked out isn\'t asked again');
 ok(pm('m4') && pm('m4').route.km === 32.5 && pm('m4').km === undefined, 'route: km she typed herself is kept');
 ok(ctx.leaveAt({ time: '08:00', plan: { there: 35, setup: 45 } }) === '6:40am', 'the reminder works out when to leave home');
+// weekly backup: everything zipped and emailed to the main owner, with the logo
+{ const realList = ctx.listDocs; ctx.listDocs = p => /\/sales$/.test(p) ? [{ _id: 's1', total: 100 }, { _id: 's2', total: 200 }] : [];
+  ctx.Utilities.zip = (blobs, name) => ({ name, blobs }); ctx.Utilities.newBlob = (d, t, n) => ({ d, n }); mails.length = 0;
+  ctx.backupEmail({ _id: 'b1', name: 'Test Shop', owner: 'boss@example.com', owners: ['boss@example.com'], settings: {} });
+  const m = mails[0], j = m && JSON.parse(m.attachments[0].blobs[0].d);
+  ok(m && m.to === 'boss@example.com' && /Weekly backup/.test(m.subject) && j.sales.length === 2 && /brand-logo\.png/.test(m.htmlBody), 'weekly backup: every record zipped and emailed to the main owner, with the logo');
+  ctx.listDocs = realList; }
+// the assistant's monthly limit
+ok(ctx.overAiLimit({ settings: { aiLimit: 5 } }, { nzd: 5.2 }) && !ctx.overAiLimit({ settings: { aiLimit: 5 } }, { nzd: 1 }) && !ctx.overAiLimit({ settings: { aiLimit: 0 } }, { nzd: 50 }), 'the assistant stops at its monthly limit (0 = no limit)');
 console.log(fails ? fails + ' helper check(s) failed' : 'All helper checks passed'); process.exit(fails ? 1 : 0);

@@ -579,6 +579,12 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(/Afterpay/.test(await text(page)) && !(await page.$('#pQueue')), 'Afterpay: its own step (no queue)');
   await page.click('#pOk'); await page.click('#cYes'); await page.click('#apOk'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.sales[S.sales.length - 1].method === 'afterpay' && dayTotals(openDay()).afterpay > 0), 'an Afterpay sale is recorded and totalled separately');
+  // refund one item: money back from today's takings, stock back
+  const refStock = await page.evaluate(() => { const s = S.sales[S.sales.length - 1]; const st = stockOf(s.lines[0].pid); window.refSale = s; refundSale(s); return st ? st.total : null; });
+  await page.waitForSelector('[data-rr]'); await page.locator('[data-rr]').first().click(); await page.click('[data-rm="cash"]'); await page.click('#rfOk'); await page.waitForSelector('[data-k="2"]'); await pin(page, '2580'); await page.waitForTimeout(120);
+  ok(await page.evaluate(st => { const r = S.sales.find(x => x.kind === 'refund' && x.refundOf === refSale.id); const after = stockOf(refSale.lines[0].pid); return r && r.total === -Math.round(refSale.total / refSale.lines[0].qty) && r.method === 'cash' && r.approvedBy === SYNC.me() && (st == null || after.total === st + 1); }, refStock), 'refund one item: money back from today\'s cash, stock back, approved with a PIN');
+  ok(await page.evaluate(() => { refundSale(refSale); return true; }) && /refunded already|can be refunded/.test(await text(page)), 'a sale can\'t be refunded twice over');
+  await page.evaluate(() => { while (modalStack.length) closeModal(); });
   await page.evaluate(() => { const d = S.sessions.find(x => x.id === 'qday'); if (d) Object.assign(d, { status: 'closed', closedAt: Date.now() }); S.settings.eftQueue = false; S.settings.afterpayOn = false; save(); stack = ['home', 'orders']; render(); });
   // a helper asks to open a market: the owner's window pops up (never during a sale), approve with a PIN, or decline with a reason
   await page.evaluate(() => { S.asks.push({ id: 'askT1', by: 'helper@example.com', byName: 'Sam', at: Date.now(), date: nzDay(), status: 'waiting', placeName: 'Pop-up Fair', eventId: '', placeId: '' }); });

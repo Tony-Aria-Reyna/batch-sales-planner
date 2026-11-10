@@ -138,7 +138,7 @@ export function start(businessId, state, changed) {
     S.receiptHelper = d.receiptHelper || null;
     S.aiUsage = d.aiUsage || null;
     S.helperSeen = d.helperSeen || null;
-    S.shopifyHelper = d.shopifyHelper || null; S.emailHelper = d.emailHelper || null;     // written by the helper: last Shopify check                // written by the helper: voice notes worked out this month   // written by the Google helper script: last run, account, errors
+    S.shopifyHelper = d.shopifyHelper || null; S.emailHelper = d.emailHelper || null; S.backupHelper = d.backupHelper || null;     // written by the helper: last Shopify check                // written by the helper: voice notes worked out this month   // written by the Google helper script: last run, account, errors
     synced.biz = JSON.stringify(bizOf(S));
     onChange('business');
     if (first) { first = false; listenCols(); }                   // the role decides which collections we may read

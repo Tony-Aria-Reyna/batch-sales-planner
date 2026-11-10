@@ -652,7 +652,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=8;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=9;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';
@@ -752,6 +752,7 @@ SCREENS.setup={
 
     <div class="card"><h3>🛡️ Privacy and your data</h3>
       <p class="note">Everything is stored in Google Firebase (Sydney data centre). Only the people above can see it. <a href="privacy.html" target="_blank" rel="noopener">Read the privacy statement</a>.</p>
+      ${role()==='owner'?`<div class="row"><div class="grow"><b>Weekly backup by email</b><small>${S.settings.backupOff?'Off':'Every Sunday morning, a full copy is emailed to the main owner'+(S.backupHelper&&S.backupHelper.lastAt?' · last one '+agoText(S.backupHelper.lastAt)+' ('+S.backupHelper.records+' records)':' · waiting for the business helper (version 9)')}. Nothing is ever deleted from the app.</small></div><button class="switch ${S.settings.backupOff?'':'on'}" id="bkOn" role="switch" aria-checked="${!S.settings.backupOff}" aria-label="Weekly backup by email"><i></i></button></div>`:''}
       <div class="row"><div class="grow">Download everything as a file</div><button class="btn alt small" id="dl">⬇️ Download</button></div>
       ${SYNC.me()===SYNC.getMainOwner()?'<div class="row"><div class="grow"><b>Delete this business</b> and everything in it, for good</div><button class="btn danger small" id="del">Delete…</button></div>':'<p class="note">Only the main owner can delete the business.</p>'}</div>
 
@@ -768,6 +769,7 @@ SCREENS.setup={
     const mm=$('#minMarg'); if(mm) mm.onchange=()=>{ const v=Math.round(+mm.value); if(!(v>=0&&v<95)){ toast('Type a percentage, e.g. 20'); mm.value=minMargin(); return; } S.settings.minMargin=v; save(); toast('Saved'); };
     [['#swQueue','eftQueue'],['#swAfter','afterpayOn']].forEach(([id,k])=>{ const b=$(id); if(b) b.onclick=()=>{ S.settings[k]=!S.settings[k]; save(); render(); }; });
     const aiL=$('#aiLim'); if(aiL) aiL.onchange=()=>{ const v=+aiL.value.replace(/[^0-9.]/g,''); if(!(v>=0&&v<=200)){ toast('Type a monthly limit in dollars, e.g. 5'); aiL.value=aiLimit(); return; } S.settings.aiLimit=v; save(); toast('Saved'); };
+    const bko=$('#bkOn'); if(bko) bko.onclick=()=>{ S.settings.backupOff=!S.settings.backupOff; save(); render(); };
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
