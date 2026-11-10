@@ -196,7 +196,7 @@ body.practicing .top{background:#806092}
 #printSlip .slip{max-width:640px;margin:0 auto;color:#000;font-size:16px}#printSlip h1{margin:0;font-size:26px}#printSlip .sliplogo{display:block;max-width:300px;max-height:120px;margin:0 0 6px}#printSlip h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;margin:22px 0 4px;color:#555}
 #printSlip .to{font-size:20px;line-height:1.35;margin:0}#printSlip .sm{color:#555;font-size:14px}#printSlip table{width:100%;border-collapse:collapse;margin-top:18px}
 #printSlip th,#printSlip td{border-bottom:1px solid #ccc;padding:10px 6px;text-align:left}#printSlip td.q{font-size:20px;font-weight:700;width:60px}#printSlip td.tick{width:30px;font-size:20px}#printSlip .thanks{margin-top:24px;font-size:18px}
-#printSlip .mact{max-width:640px;margin:20px auto}
+#printSlip .mact{max-width:640px;margin:20px auto}.invhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.invmeta{text-align:right}.invmeta h1{font-size:24px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em}.invmeta p{margin:0;font-size:14px;color:#444}#printSlip td.r,#printSlip th.r{text-align:right}.invtot{display:grid;grid-template-columns:1fr auto;gap:6px 24px;max-width:340px;margin:16px 0 16px auto;font-size:16px}.invtot .big{font-size:19px;font-weight:700}
 @media print{body.printing>*:not(#printSlip){display:none!important}#printSlip{position:static;padding:0}#printSlip .noprint{display:none}}
 .rgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
 @media (max-width:760px){ .rgrid{grid-template-columns:1fr 1fr} }
@@ -689,6 +689,7 @@ SCREENS.setup={
     <div class="card"><h3>📧 GST receipts</h3>
       <p class="note">Customers can be emailed a GST receipt after paying. Receipts show the business name, GST number, date, receipt number, items, the amount excluding GST, the GST and the total, which covers IRD's requirements for sales up to $1,000. For sales over $1,000 the customer's name is asked for too.</p>
       <label class="note" for="gstNo">GST number</label><input class="txt" id="gstNo" inputmode="numeric" value="${esc(st.gstNumber||'')}" placeholder="123-456-789">
+      <label class="note" for="bankAcc">Bank account for invoices (shops pay into this)</label><input class="txt" id="bankAcc" inputmode="numeric" value="${esc(st.bankAccount||'')}" placeholder="02-1234-0123456-00">
       <label class="note" for="rcEmail">Business Gmail that sends the receipts</label><input class="txt" id="rcEmail" type="email" inputmode="email" autocapitalize="none" value="${esc(st.receiptEmail||'')}" placeholder="rataandsmudge@gmail.com">
       <label class="note" for="rcNote">A line at the bottom of each receipt (optional)</label><textarea class="txt grow" rows="1" id="rcNote" placeholder="Thank you! rataandsmudge.co.nz">${esc(st.receiptNote||'')}</textarea>
       <div class="row"><div class="grow"><b>Receipt helper</b><small>${helperStatus()}</small></div></div></div>
@@ -771,6 +772,7 @@ SCREENS.setup={
     const aiL=$('#aiLim'); if(aiL) aiL.onchange=()=>{ const v=+aiL.value.replace(/[^0-9.]/g,''); if(!(v>=0&&v<=200)){ toast('Type a monthly limit in dollars, e.g. 5'); aiL.value=aiLimit(); return; } S.settings.aiLimit=v; save(); toast('Saved'); };
     const bko=$('#bkOn'); if(bko) bko.onclick=()=>{ S.settings.backupOff=!S.settings.backupOff; save(); render(); };
     const df=$('#defFloat'); df.onchange=()=>{ const c=toCents(df.value); if(df.value.trim()&&!(c>=0)){ toast('Type an amount, e.g. 200'); df.value=''; return; } S.settings.defaultFloat=df.value.trim()?c:0; df.value=S.settings.defaultFloat?(c/100).toFixed(2):''; save(); toast('Saved'); };
+    const ba=$('#bankAcc'); if(ba) ba.onchange=()=>{ const v=ba.value.trim(); if(v&&!/^\d{2}[- ]?\d{4}[- ]?\d{7}[- ]?\d{2,3}$/.test(v)){ toast('A bank account looks like 02-1234-0123456-00'); ba.value=st.bankAccount||''; return; } S.settings.bankAccount=v; save(); toast('Saved'); };
     const gn=$('#gstNo'); gn.onchange=()=>{ const v=gn.value.replace(/[^0-9]/g,''); if(v&&(v.length<8||v.length>9)){ toast('A GST number has 8 or 9 digits'); gn.value=S.settings.gstNumber||''; return; }
       S.settings.gstNumber=v?(v.length===8?v.replace(/(\d{2})(\d{3})(\d{3})/,'$1-$2-$3'):v.replace(/(\d{3})(\d{3})(\d{3})/,'$1-$2-$3')):''; gn.value=S.settings.gstNumber; save(); toast('Saved'); };
     const oe=$('#oeMail'); if(oe) oe.onchange=()=>{ const v=oe.value.trim().toLowerCase(); if(v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ toast('That doesn\'t look like an email address'); oe.value=S.settings.orderEmail||''; return; } S.settings.orderEmail=v; save(); toast('Saved'); };

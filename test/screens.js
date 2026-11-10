@@ -492,6 +492,10 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.click('#slC');
   await page.click('#oConf'); await page.waitForTimeout(40);
   ok(await page.evaluate(() => S.orders.find(x => x.id === 'email-abc').status === 'new') && await oil() === before - 5, 'Confirm makes it a normal order, with stock untouched until packed');
+  await page.evaluate(() => { S.settings.gstNumber = S.settings.gstNumber || '123456789'; S.settings.bankAccount = '02-1234-0123456-00'; });
+  await page.click('#oInv'); await page.waitForSelector('#printSlip .inv');
+  ok(await page.evaluate(() => { const t = document.querySelector('#printSlip').innerText, o = S.orders.find(x => x.id === 'email-abc'); return /tax invoice/i.test(t) && /GST number/.test(t) && /Email Shop/.test(t) && /5 Mail Rd/.test(t) && /\$46\.00/.test(t) && /02-1234-0123456-00/.test(t) && /PO-7/.test(t) && o.invoiceNo && t.includes(o.invoiceNo); }), 'tax invoice: GST number, invoice number, buyer and address, items, GST, total, and the bank account to pay into');
+  await page.click('#ivC');
   await page.click('#oC');
   // shops: a consignment shop (drop off, a stock count, owed, paid), wholesale terms, and a friend's product sold here
   await page.evaluate(() => { S.places.push({ id: 'shopC', name: 'Gift Barn', group: 'shops', channel: 'wholesale', mode: 'consign', commission: 30, terms: 14, km: 50, address: '', float: 0 });
@@ -556,6 +560,9 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.evaluate(() => { S.settings.brand = { unlocked: true, kit: 'own', own: ['#123456', '#654321', '#aa5500', '#fafafa'] }; save(); render(); });
   ok(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--green').trim() === '#123456'), 'or type its own colours from its brand guidelines');
   await page.evaluate(() => { S.settings.brand = {}; save(); render(); });
+  // GST return helper: sales, purchases (bills, supplier invoices, fuel, stall fees), GST to pay
+  ok(await page.evaluate(() => { const [f, t] = periodRange('month'), R = crunch(f, t, 'all'); S.costs.push({ id: 'billT', kind: 'purchase', note: 'Jars', cents: 11500, gst: true, date: nzDay() }); const g = gstReturn(f, t, R);
+    S.costs.splice(S.costs.findIndex(c => c.id === 'billT'), 1); return g.b5 === R.revenue && g.b8 === Math.round(R.revenue * 3 / 23) && g.parts.bills >= 11500 && g.b12 === Math.round(g.b11 * 3 / 23) && g.b15 === g.b8 - g.b12; }), 'GST return helper: sales, purchases incl a bill, GST on each, and GST to pay (IRD boxes 5, 8, 11, 12, 15)');
   // getting started, the app health log, the assistant's monthly limit
   ok(await page.evaluate(() => { const l = readySteps(); return l.length === 6 && l.find(x => x.k === 'products').ok && l.find(x => x.k === 'sale').ok; }), 'getting started: six steps, ticked off from what is already set up');
   await page.evaluate(() => { logError('Test fault for the log', 'test'); });

@@ -69,7 +69,7 @@ function arrived(oid){
   modal((m,close)=>{ m.innerHTML=`<h2>📦 ${esc(supplierInfo(l[0].ordered.supplier).name)}: what arrived?</h2><p class="note">Untick anything that didn't come, and change any amount that's different. It goes into stock.</p>
       ${l.map(x=>`<div class="arrow"><label class="tickrow"><input type="checkbox" data-arr="${x.id}" checked><b>${esc(x.item)}</b></label>
         <div class="formrow"><div><label class="note">How many</label><input class="txt" data-aq="${x.id}" inputmode="decimal" value="${x.qty||1}"></div><div><label class="note">Size</label><input class="txt" data-as="${x.id}" value="${esc(x.size||'')}"></div></div>
-        ${canManage()?`<label class="note">Price paid, total (optional)</label><input class="txt" data-ap="${x.id}" inputmode="decimal" placeholder="e.g. 24.90">`:''}</div>`).join('')}
+        ${canManage()?`<label class="note">Price paid incl GST, total (optional, for the GST return)</label><input class="txt" data-ap="${x.id}" inputmode="decimal" placeholder="e.g. 24.90">`:''}</div>`).join('')}
       <div class="mact"><button class="btn alt" id="aC">Cancel</button><button class="btn" id="aOk">✓ Into stock</button></div>`;
     m.querySelector('#aC').onclick=close;
     m.querySelector('#aOk').onclick=()=>{ let n=0, bad=false;
@@ -78,7 +78,7 @@ function arrived(oid){
         Object.assign(x,{done:true,doneAt:Date.now(),doneBy:SYNC.me(),gotQty:q,gotSize:sz}); x.ordered.status='arrived'; n++;
         const inp=x.input?S.inputs.find(i=>i.id===x.input):S.inputs.find(i=>(i.name||'').toLowerCase()===(x.item||'').toLowerCase());
         if(inp&&inputStock(inp.id)!=null) moveStock({kind:'bought',input:inp.id,qty:q*(inp.pack||0)});
-        if(cents) S.prices.push({id:SYNC.newId('prices'),input:inp?inp.id:'',item:x.item,size:sz,qty:q,cents,at:Date.now(),date:nzDay(),by:SYNC.me(),from:'order'}); });
+        if(cents) S.prices.push({id:SYNC.newId('prices'),input:inp?inp.id:'',item:x.item,size:sz,qty:q,cents,gstIncl:true,supplier:x.ordered&&x.ordered.supplier||'',at:Date.now(),date:nzDay(),by:SYNC.me(),from:'order'}); });
       if(bad){ toast('Type the price, e.g. 24.90'); return; }
       save(); close(); render(); toast(n?n+' item'+(n===1?'':'s')+' into stock':'Nothing ticked'); }; },{big:true});
 }

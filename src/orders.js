@@ -57,7 +57,7 @@ function openOrder(o){
       ${o.note?`<p class="note">📝 ${esc(o.note)}</p>`:''}
       ${unmatched.length&&o.status!=='sent'?'<p class="note">Link each line to a till product so stock comes off when it\'s packed.</p>':''}
       ${o.status==='check'?`<button class="btn bigyes" id="oConf">✅ Confirm order</button>`:''}
-      <div class="mact">${o.source!=='shopify'&&o.source!=='consign'?'<button class="btn alt" id="oEd">Change</button>':''}${o.status!=='cancelled'?'<button class="btn alt" id="oSlip">🖨️ Packing slip</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
+      <div class="mact">${o.source!=='shopify'&&o.source!=='consign'?'<button class="btn alt" id="oEd">Change</button>':''}${o.status!=='cancelled'?'<button class="btn alt" id="oSlip">🖨️ Packing slip</button>':''}${o.status!=='cancelled'&&o.source!=='shopify'&&o.status!=='check'?'<button class="btn alt" id="oInv">🧾 Tax invoice</button>':''}<button class="btn alt" id="oPaid">${o.paid?'Mark not paid':'💰 Mark paid'}</button>
         ${o.status==='new'?'<button class="btn" id="oPack">📦 Packed</button>':''}${o.status==='packed'?'<button class="btn" id="oSend">🚚 Sent</button>':''}
         ${o.status!=='cancelled'&&o.status!=='sent'?`<button class="btn danger" id="oX">${o.status==='check'?'Not an order':'Cancel order'}</button>`:''}<button class="btn alt" id="oC">Close</button></div>`;
     const set=ch=>{ Object.assign(o,ch,{changed:Date.now(),changedBy:SYNC.me()}); orderStock(o); save(); draw(); render(); };
@@ -67,6 +67,7 @@ function openOrder(o){
     const sd=m.querySelector('#oSend'); if(sd) sd.onclick=()=>set({status:'sent',sentAt:Date.now(),sentBy:SYNC.me()});
     const cf=m.querySelector('#oConf'); if(cf) cf.onclick=()=>{ if(!(o.lines||[]).length){ toast('Add what they ordered first (Change)'); return; } set({status:'new',confirmedAt:Date.now(),confirmedBy:SYNC.me()}); toast('Order confirmed'); };
     const sl=m.querySelector('#oSlip'); if(sl) sl.onclick=()=>packingSlip(o);
+    const iv=m.querySelector('#oInv'); if(iv) iv.onclick=()=>taxInvoice(o);
     const x=m.querySelector('#oX'); if(x&&o.status==='check') x.onclick=()=>confirmBox('Not an order?','It\'s taken off the list. The email stays in Gmail.','Not an order',()=>{ set({status:'cancelled',cancelledAt:Date.now(),notOrder:true}); },true);
     else if(x) x.onclick=()=>confirmBox('Cancel this order?',o.source==='shopify'?'This only changes it here. Cancel or refund it in Shopify too.':'It stays in the list as cancelled.','Cancel order',()=>{ set({status:'cancelled',cancelledAt:Date.now()}); },true);
     const ed=m.querySelector('#oEd'); if(ed) ed.onclick=()=>{ close(); editOrder(o); };
@@ -158,4 +159,32 @@ function orderIdeas(){
   const od=overdueOrders(); if(od.length) l.push({score:80,t:'💰 '+od.length+' unpaid order'+(od.length===1?'':'s')+' past the shop\'s terms',d:od.slice(0,3).map(o=>((o.customer&&o.customer.name)||'Customer')+' '+c2(o.total!=null?o.total:orderTotal(o))).join(', '),lbl:'Open',go:'orders',act:()=>openOrder(od[0])});
   if(rest.length) l.push({score:55,t:'📦 '+rest.length+' order'+(rest.length===1?'':'s')+' not packed yet',d:rest.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).slice(0,3).map(o=>((o.customer&&o.customer.name)||'Customer')+' · '+dueLabel(o)).join(', '),lbl:'Open',go:'orders',act:()=>go('orders')});
   return l;
+}
+
+/* ---------- tax invoice for a shop or custom order: print it or save it as a PDF, then send it ----------
+   Carries what IRD asks of a tax invoice: "Tax invoice", the business name and GST number, the date, an invoice
+   number, the buyer's name and address, what was supplied with prices, the GST and the total; plus when it's due
+   and the bank account to pay into. */
+const invoiceNo=o=>o.invoiceNo||('INV-'+String(o.date||nzDay()).replace(/-/g,'').slice(2)+'-'+String(o.id).slice(-4).toUpperCase());
+function taxInvoice(o){
+  const st=S.settings||{}, c=o.customer||{}, total=o.total!=null?o.total:orderTotal(o), gst=Math.round(total*3/23), due=payDue(o)||'', old=document.getElementById('printSlip'); if(old) old.remove();
+  if(!st.gstNumber){ toast('Add the GST number first (Setup → GST receipts)'); return; }
+  if(!o.invoiceNo){ o.invoiceNo=invoiceNo(o); o.invoicedAt=Date.now(); save(); }
+  const d=document.createElement('div'); d.id='printSlip';
+  const lines=(o.lines||[]).filter(l=>+l.qty>0);
+  d.innerHTML=`<div class="slip inv"><div class="invhead"><img class="sliplogo" src="${esc(typeof brandLogo==='function'?brandLogo():'brand-logo.webp')}" alt="${esc(S.name||'')}" onerror="this.outerHTML='<h1>${esc(S.name||'')}</h1>'"><div class="invmeta"><h1>Tax invoice</h1><p>${esc(o.invoiceNo)}<br>${nzDate(new Date(o.invoicedAt||Date.now()),{day:'numeric',month:'long',year:'numeric'})}<br>GST number ${esc(st.gstNumber)}</p></div></div>
+    <p class="sm"><b>${esc(S.name||'')}</b>${st.homeAddress?'<br>'+esc(st.homeAddress):''}</p>
+    <h2>Bill to</h2><p class="to"><b>${esc(c.name||'')}</b>${c.address?'<br>'+esc(c.address).replace(/, /g,'<br>'):''}${c.email?'<br>'+esc(c.email):''}</p>
+    ${o.fromEmail&&o.fromEmail.ref?`<p class="sm">Your reference: ${esc(o.fromEmail.ref)}</p>`:''}
+    <table><thead><tr><th>Qty</th><th>Item</th><th class="r">Each</th><th class="r">Amount</th></tr></thead><tbody>${lines.map(l=>`<tr><td class="q">${+l.qty}</td><td>${esc(l.name)}</td><td class="r">${c2(l.unit)}</td><td class="r">${c2(l.qty*l.unit)}</td></tr>`).join('')}
+      ${o.discount?`<tr><td></td><td>${o.source==='consign'?'Commission':'Discount'}</td><td></td><td class="r">−${c2(o.discount)}</td></tr>`:''}${o.shipping?`<tr><td></td><td>Freight</td><td></td><td class="r">${c2(o.shipping)}</td></tr>`:''}</tbody></table>
+    <div class="invtot"><span>Total excluding GST</span><b>${c2(total-gst)}</b><span>GST (15%)</span><b>${c2(gst)}</b><span class="big">Total including GST</span><b class="big">${c2(total)}</b></div>
+    <p>${o.paid?'<b>Paid, thank you.</b>':`<b>Please pay${due?' by '+nzDate(kd(due),{weekday:'long',day:'numeric',month:'long'}):''}</b>${st.bankAccount?' into '+esc(st.bankAccount)+', with '+esc(o.invoiceNo)+' as the reference.':'.'}`}</p>
+    <p class="thanks">Thank you 🌿</p></div>
+    <div class="noprint mact"><button class="btn" id="ivP">🖨️ Print or save as PDF</button>${c.email?'<button class="btn alt" id="ivM">✉️ Email it</button>':''}<button class="btn alt" id="ivC">Close</button></div>`;
+  document.body.appendChild(d); document.body.classList.add('printing');
+  const done=()=>{ d.remove(); document.body.classList.remove('printing'); };
+  d.querySelector('#ivC').onclick=done; d.querySelector('#ivP').onclick=()=>{ const t=document.title; document.title=S.name+' '+o.invoiceNo; window.print(); document.title=t; };
+  const mm=d.querySelector('#ivM'); if(mm) mm.onclick=()=>{ const body=`Kia ora ${c.name||''},\n\nPlease find our tax invoice ${o.invoiceNo} attached, for ${c2(total)} including GST${due&&!o.paid?', due '+nzDate(kd(due),{day:'numeric',month:'long'}):''}.${st.bankAccount&&!o.paid?'\n\nBank account: '+st.bankAccount+' (reference '+o.invoiceNo+')':''}\n\nThank you,\n${S.name||''}`;
+    location.href='mailto:'+encodeURIComponent(c.email)+'?subject='+encodeURIComponent(S.name+' tax invoice '+o.invoiceNo)+'&body='+encodeURIComponent(body); toast('Save the invoice as a PDF first (Print → Save as PDF), then attach it'); };
 }

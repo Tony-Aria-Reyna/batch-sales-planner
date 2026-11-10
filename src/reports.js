@@ -93,7 +93,7 @@ SCREENS.reports={
         <div><label class="note" for="rCh">Channel or place</label><select class="txt" id="rCh">${chOpts.map(([k,v])=>`<option value="${k}" ${repChan===k?'selected':''}>${esc(v)}</option>`).join('')}</select></div></div>
         ${repPeriod==='custom'?`<div class="formrow"><div><label class="note" for="rF">From</label><input class="txt" id="rF" type="date" value="${from}"></div><div><label class="note" for="rT">To</label><input class="txt" id="rT" type="date" value="${to}"></div></div>`:`<p class="note">${esc(nzDate(kd(from),{day:'numeric',month:'short',year:'numeric'}))} – ${esc(nzDate(kd(to),{day:'numeric',month:'short',year:'numeric'}))}</p>`}</div>
       <div class="ctabs">${tabs.map(([k,v])=>`<button class="chip big ${repTab===k?'on':''}" data-rtab="${k}">${v}</button>`).join('')}</div>`
-      +(repTab==='places'?placesRep(R):repTab==='products'?productsRep(R):repTab==='when'?whenRep(R):repTab==='costs'?costsRep(R):summaryRep(R,from,to));
+      +(repTab==='places'?placesRep(R):repTab==='products'?productsRep(R):repTab==='when'?whenRep(R):repTab==='costs'?costsRep(R):summaryRep(R,from,to)+gstCard(from,to,R));
   },
   wire(){
     if(!$('#rP')) return;
@@ -107,12 +107,45 @@ SCREENS.reports={
     const pr=$('#rPay'); if(pr) pr.onclick=editPay; wireHelperHours(); const rpf=$('#rProf'); if(rpf) rpf.onclick=()=>go('profit');
     const vh=$('#rVeh'); if(vh) vh.onclick=()=>go('vehicle');
     const fy=$('#rFy'); if(fy) fy.onchange=()=>{ S.settings.fyStart=+fy.value; save(); render(); };
+    const rb=$('#rBill'); if(rb) rb.onclick=addBill;
     const gm=$('#rGm'); if(gm) gm.onchange=()=>{ S.settings.gstMonths=+gm.value; save(); render(); };
   }
 };
 const neg=v=>v?'−'+c2(v):c2(0);
 const stat=(label,v,sub)=>`<div class="rstat"><span>${label}</span><b>${v}</b>${sub?`<small>${sub}</small>`:''}</div>`;
 function bars(entries,fmt){ const max=Math.max(1,...entries.map(e=>e[1])); return `<div class="rbars">${entries.map(([k,v])=>`<div class="rbar"><span class="rl">${esc(k)}</span><span class="rt"><i style="width:${(v/max*100).toFixed(1)}%"></i></span><span class="rv">${fmt(v)}</span></div>`).join('')}</div>`; }
+/* ---------- GST return helper ----------
+   The figures for IRD's GST return (GST101A) for the period chosen: sales and income incl GST (till sales less
+   refunds, plus orders), and purchases and expenses incl GST that the app knows about (stall fees, other costs,
+   fuel, supplier bills from "Arrived" or added here). An estimate to check against the bank statement before filing. */
+function gstReturn(from,to,R){
+  const inR=d=>d>=from&&d<=to;
+  const bills=S.costs.filter(c=>(c.kind==='other'||c.kind==='purchase')&&c.gst!==false&&inR(c.date||'')).reduce((t,c)=>t+(c.cents||0),0);
+  const buys=S.prices.filter(p=>p.gstIncl&&inR(p.date||'')).reduce((t,p)=>t+(p.cents||0),0);
+  const fuel=S.fuel.filter(f=>inR(f.date||'')).reduce((t,f)=>t+(f.cents||0),0);
+  const fees=Math.round(R.fees*1.15);
+  const b5=R.revenue, b8=Math.round(b5*3/23), b11=bills+buys+fuel+fees, b12=Math.round(b11*3/23);
+  return {b5,b8,b11,b12,b15:b8-b12,parts:{bills,buys,fuel,fees}};
+}
+function gstCard(from,to,R){
+  if(repChan!=='all') return '';
+  const g=gstReturn(from,to,R), row=(box,t,v,b)=>`<span>${box?'<small class="pill">Box '+box+'</small> ':''}${b?'<b>'+t+'</b>':t}</span><b>${v}</b>`;
+  return `<div class="card"><h3>🧾 GST return helper</h3><p class="note">For ${esc(nzDate(kd(from),{day:'numeric',month:'short'}))} to ${esc(nzDate(kd(to),{day:'numeric',month:'short',year:'numeric'}))}. Choose "This GST period" above for your return. The box numbers are IRD's GST return (GST101A).</p>
+    <div class="ptable">${row(5,'Total sales and income (incl GST)',c2(g.b5))}${row(8,'GST on sales',c2(g.b8))}
+      ${row(11,'Purchases and expenses (incl GST)',c2(g.b11))}<span class="note" style="grid-column:1/-1;margin:-4px 0 4px">Stall fees ${c2(g.parts.fees)} · supplier bills ${c2(g.parts.buys)} · other costs ${c2(g.parts.bills)} · fuel ${c2(g.parts.fuel)}</span>
+      ${row(12,'GST on purchases',c2(g.b12))}${row(15,g.b15>=0?'GST to pay':'GST refund due',c2(Math.abs(g.b15)),true)}</div>
+    <p class="note">Only what's recorded in the app is counted. Add any bill that's missing (packaging, equipment, the accountant), then check against the bank statement before filing. Not tax advice.</p>
+    <div class="mact" style="justify-content:flex-start"><button class="btn alt" id="rBill">＋ Add a bill</button></div></div>`;
+}
+function addBill(){
+  modal((m,close)=>{ m.innerHTML=`<h2>＋ Add a bill</h2><label class="note" for="blW">What and who from</label><textarea class="txt grow" rows="1" id="blW" placeholder="e.g. Jars, Pacific Packaging"></textarea>
+      <div class="formrow"><div><label class="note" for="blA">Amount incl GST ($)</label><input class="txt" id="blA" inputmode="decimal"></div><div><label class="note" for="blD">Date</label><input class="txt" id="blD" type="date" value="${nzDay()}"></div></div>
+      <label class="tickrow"><input type="checkbox" id="blG" checked><span>It includes GST (a GST-registered supplier)</span></label>
+      <div class="mact"><button class="btn alt" id="blC">Cancel</button><button class="btn" id="blOk">Save</button></div>`;
+    m.querySelector('#blC').onclick=close;
+    m.querySelector('#blOk').onclick=()=>{ const w=m.querySelector('#blW').value.trim(), c=toCents(m.querySelector('#blA').value); if(!w){ toast('Say what it was'); return; } if(!(c>0)){ toast('Type the amount, e.g. 120'); return; }
+      S.costs.push({id:SYNC.newId('costs'),kind:'purchase',note:w.slice(0,120),cents:c,gst:m.querySelector('#blG').checked,date:m.querySelector('#blD').value||nzDay(),by:SYNC.me(),at:Date.now()}); save(); close(); render(); toast('Saved'); }; });
+}
 function summaryRep(R,from,to){
   const days=Object.keys(R.byDay).sort(), long=Math.round((kd(to)-kd(from))/864e5)>62;
   const series=long?Object.entries(days.reduce((m,d)=>{ const k=d.slice(0,7); m[k]=(m[k]||0)+R.byDay[d]; return m; },{})).map(([k,v])=>[nzDate(kd(k+'-01'),{month:'short',year:'2-digit'}),v])
