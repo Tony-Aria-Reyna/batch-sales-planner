@@ -7,6 +7,25 @@ import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signI
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator, doc, collection,
   onSnapshot, query, where, getDocs, addDoc, writeBatch, serverTimestamp, updateDoc, arrayUnion, arrayRemove, deleteField, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { getAI, GoogleAIBackend, getGenerativeModel } from 'firebase/ai';
+
+/* ---------- the assistant, straight from this device (Firebase AI Logic) ----------
+   Gemini is called through Firebase, so the key stays on Google's side and nothing goes through the Apps Script.
+   Needs "AI Logic" switched on once in the Firebase console (Build → AI Logic → Gemini Developer API; free plan).
+   Until then the call fails and the app falls back to the business helper. */
+let aiModels = {};
+export async function askGemini(parts, opts = {}) {
+  if (window.mockGemini) return window.mockGemini(parts, opts);
+  const name = opts.model || 'gemini-2.5-flash-lite';
+  if (!aiModels[name]) {
+    const ai = getAI(app, { backend: new GoogleAIBackend() });
+    const gc = { temperature: 0.2 }; if (opts.json) gc.responseMimeType = 'application/json';
+    aiModels[name] = getGenerativeModel(ai, { model: name, generationConfig: gc });
+  }
+  const r = await aiModels[name].generateContent({ contents: [{ role: 'user', parts }] });
+  const res = r.response, usage = (res && res.usageMetadata) || {};
+  return { text: res.text(), usage: { promptTokenCount: usage.promptTokenCount || 0, candidatesTokenCount: usage.candidatesTokenCount || 0 } };
+}
 
 // every sub-collection the rules allow, and which ones each role may read
 export const COLS = ['inputs', 'recipes', 'products', 'deals', 'sessions', 'sales', 'batches', 'orders', 'todos', 'pins', 'audit', 'receipts', 'contacts',
@@ -112,6 +131,7 @@ function peopleWith(email, role) {
   return { owners: o, roles: r };
 }
 export const addMember = (email, role) => { if (readOnly) return Promise.resolve(); const e = email.trim().toLowerCase(); return updateDoc(doc(db, 'businesses', bid), Object.assign({ members: arrayUnion(e) }, peopleWith(e, role))); };
+export const saveBusinessField = (k, v) => readOnly || !bid ? Promise.resolve() : updateDoc(doc(db, 'businesses', bid), { [k]: v }).catch(() => {});
 export const setRole = (email, role) => readOnly ? Promise.resolve() : updateDoc(doc(db, 'businesses', bid), peopleWith(email, role));
 // Hand the main owner role to the co-owner. Only the main owner can do this (the rules enforce it);
 // afterwards the old main owner is co-owner and the new main owner can never be removed by anyone else.

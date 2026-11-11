@@ -300,6 +300,19 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   ok(await page.evaluate(() => { sendNote({ audio: 'A'.repeat(1300000), mime: 'audio/mp4', secs: 5 }, {}); const n = S.voicenotes.find(x => x.kind === 'note'); return S.voicenotes.filter(x => x.kind === 'chunk' && x.note === n.id).length === 3 && n.chunks === 3 && n.status === 'new'; }), 'a recording is saved in pieces under 1 MB each, waiting for the helper');
   await page.click('#vL'); await page.waitForTimeout(80);
   await page.evaluate(() => { S.voicenotes.length = 0; save(); });
+  ok(await page.evaluate(() => { const n = window.lastCtxNote = null; return true; }) && await page.evaluate(() => { sendNote({ text: 'ctx check' }, {}); const n = S.voicenotes.find(x => x.kind === 'note'); return n.context && Array.isArray(n.context.products) && n.context.products.some(p => /Test Oil/.test(p)) && Array.isArray(n.context.markets_and_places) && Array.isArray(n.context.ingredients_and_packaging); }), 'a note carries the names the assistant must match (products, places, ingredients), so the helper reads nothing');
+  await page.click('#vL'); await page.waitForTimeout(80); await page.evaluate(() => { S.voicenotes.length = 0; save(); });
+  // the fast assistant: worked out on this device in one call (Gemini is faked here), with the same tidy-up as the helper
+  await page.evaluate(() => { S.settings.aiDirect = true; window.mockGemini = async (parts, o) => { window.lastParts = parts; return { text: JSON.stringify({ heard: 'buy beeswax and label jars tomorrow', say: 'Drafted two things.', drafts: [{ kind: 'shopping', shopping: { item: 'Beeswax', qty: 2 } }, { kind: 'todo', todo: { text: 'Label jars', due: dk(addDays(kd(nzDay()), 1)) } }, { kind: 'recipe', recipe: { name: 'x' } }] }), usage: { promptTokenCount: 1200, candidatesTokenCount: 80 } }; };
+    sendNote({ audio: 'A'.repeat(2000), mime: 'audio/mp4', secs: 3 }, {}); });
+  await page.waitForSelector('#cYes1, .chkline', { timeout: 5000 });
+  ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.kind === 'note'); return n && n.direct && n.status === 'ready' && n.heard === 'buy beeswax and label jars tomorrow' && n.drafts.length === 3 && !S.voicenotes.some(x => x.kind === 'chunk') && lastParts.some(p => p.inlineData && p.inlineData.mimeType === 'audio/m4a') && /First write down exactly/.test(lastParts[0].text) && /Test Oil/.test(lastParts[0].text); }), 'fast assistant: one call with the recording and the context, no pieces saved, ready in moments');
+  ok(await page.evaluate(() => S.aiUsage && S.aiUsage.notes >= 1 && S.aiUsage.inTok >= 1200), 'its usage is counted towards the monthly limit');
+  await page.evaluate(() => { while (modalStack.length) closeModal(); S.voicenotes.length = 0; window.mockGemini = async () => { throw new Error('AI Logic not enabled'); }; sendNote({ text: 'fallback check' }, {}); });
+  await page.waitForTimeout(300);
+  ok(await page.evaluate(() => { const n = S.voicenotes.find(x => x.kind === 'note'); return n && n.status === 'new' && /not enabled/.test(n.directError || ''); }), 'if the direct route fails, the note goes to the helper instead (nothing lost)');
+  await page.click('#vL'); await page.waitForTimeout(80);
+  await page.evaluate(() => { S.settings.aiDirect = false; delete window.mockGemini; S.voicenotes.length = 0; S.aiUsage = null; save(); });
   await page.click('#hTalk'); await page.waitForSelector('#vType, #vTx');
   if (await page.$('#vType')) { await page.click('#vType'); }
   await page.waitForSelector('#vTx'); await page.fill('#vTx', 'Village market next week 8 till 1, label jars tomorrow, buy beeswax, idea rose balm'); await page.click('#vOk');
@@ -627,8 +640,11 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await page.screenshot({ path: path.join(shots, '28b-voice-steps.png') });
   await page.click('#vL'); await page.waitForTimeout(100);
   ok(await page.evaluate(() => S.voicenotes.find(x => x.id === 'vstep1').notify === true), '"Carry on, tell me when it\'s ready" asks for a notification');
-  await page.evaluate(() => { Object.assign(S.voicenotes.find(x => x.id === 'vstep1'), { status: 'ready', drafts: [] }); save(); }); await page.waitForSelector('.notebanner', { timeout: 4000 });
-  ok(true, 'a banner says when it\'s ready'); await page.evaluate(() => document.querySelector('.notebanner').remove());
+  await page.evaluate(() => { Object.assign(S.voicenotes.find(x => x.id === 'vstep1'), { status: 'ready', drafts: [], say: 'Nothing to draft.' }); save(); }); await page.waitForSelector('#rDone, #cYes1, #rNo', { timeout: 4000 });
+  ok(true, 'when it\'s ready and she\'s free, the result opens itself'); await page.evaluate(() => { while (modalStack.length) closeModal(); });
+  await page.evaluate(() => { S.voicenotes.push({ id: 'vstep2', kind: 'note', by: SYNC.me(), at: Date.now(), status: 'working', text: 'x' }); watchNote('vstep2', {}); cart = [{ pid: S.products[0].id, qty: 1 }]; Object.assign(S.voicenotes.find(x => x.id === 'vstep2'), { status: 'ready', drafts: [], say: 'Later.' }); });
+  await page.waitForSelector('.notebanner', { timeout: 4000 });
+  ok(!(await page.$('#rDone')), 'in the middle of a sale it waits as a banner instead'); await page.evaluate(() => { document.querySelector('.notebanner').remove(); cart = []; S.voicenotes = S.voicenotes.filter(x => x.id !== 'vstep2'); });
   await page.evaluate(() => typedText('how many test oil have we got?')); await page.waitForSelector('#aOk');
   ok(/Test Oil · 50ml: \d+ in stock/.test(await text(page)), 'a typed question is answered at once from the app (stock)'); await page.click('#aOk');
   await page.evaluate(() => typedText("what's on tomorrow?")); await page.waitForSelector('#aOk');

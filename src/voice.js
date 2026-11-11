@@ -100,10 +100,14 @@ function pickPhoto(opts){
 function sendNote(n,opts={}){
   const id=SYNC.newId('voicenotes'), at=Date.now(), pieces=[], media=n.audio||n.image||'';
   for(let i=0;i*CHUNK<media.length;i++) pieces.push(media.slice(i*CHUNK,(i+1)*CHUNK));
-  pieces.forEach((d,i)=>S.voicenotes.push({id:id+'-'+i,kind:'chunk',note:id,i,data:d,by:SYNC.me(),at}));
-  S.voicenotes.push(Object.assign({id,kind:'note',by:SYNC.me(),at,status:'new',mime:n.mime||'',secs:n.secs||0,chunks:pieces.length,text:n.text||'',drive:!!opts.drive,helpTopics:helpFor().map(h=>h.id+': '+h.t)},
-    opts.prev?{prev:opts.prev,parent:opts.parent||''}:{}));
-  save(); pingHelper(id);
+  const note=Object.assign({id,kind:'note',by:SYNC.me(),at,status:'new',mime:n.mime||'',secs:n.secs||0,chunks:pieces.length,text:n.text||'',drive:!!opts.drive,helpTopics:helpFor().map(h=>h.id+': '+h.t),context:typeof aiContext==='function'?aiContext():undefined},
+    opts.prev?{prev:opts.prev,parent:opts.parent||''}:{});
+  const toHelper=()=>{ pieces.forEach((d,i)=>S.voicenotes.push({id:id+'-'+i,kind:'chunk',note:id,i,data:d,by:SYNC.me(),at})); Object.assign(note,{status:'new',stage:''}); save(); pingHelper(id); };
+  // the fast way: worked out on this device through Firebase (Setup → Fast assistant); the helper if that fails
+  if(typeof aiDirectOn==='function'&&aiDirectOn()&&navigator.onLine&&!aiOverLimit()){
+    Object.assign(note,{status:'working',workingAt:at,stage:/^image\//.test(note.mime||'')?'looking':'thinking',chunks:0}); S.voicenotes.push(note); save();
+    aiDirect(note,media).then(()=>{ save(); }).catch(e=>{ note.directError=String(e&&e.message||e).slice(0,160); if(typeof logError==='function') logError('Fast assistant: '+note.directError,'ai'); toHelper(); });
+  } else { S.voicenotes.push(note); toHelper(); }
   waitForNote(id,opts);
 }
 // Setup → Test the link: the helper notes when it hears the app, so we can show whether the instant link works
@@ -127,7 +131,9 @@ function waitForNote(id,opts={}){
     const quit=()=>{ clearInterval(voiceWatch); close(); };
     const draw=()=>{ const n=S.voicenotes.find(x=>x.id===id)||{}, photo=/^image\//.test(n.mime||''), typed=!!n.text&&!n.chunks, off=!navigator.onLine;
       const st=n.status==='working'||n.status==='ready'?n.stage||'thinking':'', secs=Math.round((Date.now()-t0)/1000);
-      const steps=[['saved','Saved on this '+deviceLabel(),true],['sent','Picked up by the assistant',!!st,!st&&!off]]
+      const direct=n.status==='working'&&!n.chunks&&!n.directError&&typeof aiDirectOn==='function'&&aiDirectOn();
+      const steps=direct?[[photo?'looking':'listening',photo?'Reading the photo':'Listening and working it out',n.status==='ready',n.status!=='ready'],['ready','Ready to check',n.status==='ready']]
+        :[['saved','Saved on this '+deviceLabel(),true],['sent','Picked up by the assistant',!!st,!st&&!off]]
         .concat(photo?[['looking','Reading the photo',st==='thinking'||st==='ready',st==='looking']]:typed?[]:[['listening','Listening to your note',!!n.heard,st==='listening']])
         .concat([['thinking','Working out what to do',st==='ready',st==='thinking'],['ready','Ready to check',n.status==='ready']]);
       m.querySelector('#vH').textContent=off?'Waiting for signal':'Working it out… '+secs+' s';
@@ -151,7 +157,9 @@ function waitForNote(id,opts={}){
 const watching=new Map();
 function watchNote(id,opts){ watching.set(id,opts||{}); }
 setInterval(()=>{ for(const [id,opts] of watching){ const n=S.voicenotes.find(x=>x.id===id); if(!n||!['new','working'].includes(n.status)){ watching.delete(id);
-  if(n&&n.status==='ready'){ const b=document.createElement('button'); b.className='notebanner'; b.textContent='🎙 Your note is ready to check · tap to see it'; b.onclick=()=>{ b.remove(); noteReady(n,opts); }; document.body.appendChild(b); setTimeout(()=>b.remove(),30000); } } } },1500);
+  if(n&&n.status==='ready'){ const busy=modalStack.length||(typeof cart!=='undefined'&&cart.length)||cur()==='sell'||tillLock();
+    if(!busy){ noteReady(n,opts); return; }
+    const b=document.createElement('button'); b.className='notebanner'; b.textContent='🎙 Your note is ready to check · tap to see it'; b.onclick=()=>{ b.remove(); noteReady(n,opts); }; document.body.appendChild(b); } } } },1500);
 function noteReady(n,opts={}){
   if(opts.onDrafts){ settleNote(n,'done'); opts.onDrafts(n); return; }
   if(opts.parentApi){ if(n.command){ settleNote(n,'done'); opts.parentApi.command(n.command); } else opts.parentApi.replace(n); return; }
