@@ -6,11 +6,11 @@
 function readySteps(){
   const st=S.settings||{};
   return [
-    {k:'gst',t:'Add the GST number',d:'Printed on every receipt and invoice',ok:!!st.gstNumber,go:()=>openSetupArea('setup',()=>setTimeout(()=>{ const g=$('#gstNo'); if(g){ g.scrollIntoView({block:'center'}); g.focus(); } },200))},
+    {k:'gst',t:'Add the GST number',d:'Printed on every receipt and invoice',ok:!!st.gstNumber,go:()=>openSetupArea('setup:business',()=>setTimeout(()=>{ const g=$('#gstNo'); if(g){ g.scrollIntoView({block:'center'}); g.focus(); } },200))},
     {k:'products',t:'Add your products and prices',d:'What the till sells, prices including GST',ok:S.products.some(p=>p.active!==false&&p.price>0),go:()=>openSetupArea('products')},
     {k:'pin',t:'Choose your PIN',d:'For approvals, discounts and opening Setup',ok:typeof myPin==='function'&&!!myPin(),go:()=>setPinFlow(()=>render())},
-    {k:'float',t:'Set your usual cash float',d:'Filled in when a selling day starts',ok:!!st.defaultFloat,go:()=>openSetupArea('setup',()=>setTimeout(()=>{ const f=$('#defFloat'); if(f){ f.scrollIntoView({block:'center'}); f.focus(); } },200))},
-    {k:'people',t:'Add a helper or co-owner (optional)',d:'They sign in with their own Google account',ok:(SYNC.getMembers?SYNC.getMembers().length:1)>1||!!st.readySkipPeople,go:()=>openSetupArea('setup'),skip:true},
+    {k:'float',t:'Set your usual cash float',d:'Filled in when a selling day starts',ok:!!st.defaultFloat,go:()=>openSetupArea('setup:till',()=>setTimeout(()=>{ const f=$('#defFloat'); if(f){ f.scrollIntoView({block:'center'}); f.focus(); } },200))},
+    {k:'people',t:'Add a helper or co-owner (optional)',d:'They sign in with their own Google account',ok:(SYNC.getMembers?SYNC.getMembers().length:1)>1||!!st.readySkipPeople,go:()=>openSetupArea('setup:people'),skip:true},
     {k:'sale',t:'Try a sale',d:'Start selling, tap a product, pay. Undo it straight after if it was a test',ok:S.sales.length>0,go:()=>go('sell')}];
 }
 function readyCardHtml(){

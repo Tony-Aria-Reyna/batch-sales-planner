@@ -27,18 +27,18 @@ const HELP=[
   {t:'Vehicle and fuel (mileage, road user charges)',w:'vehicle fuel petrol diesel mileage ruc road user charges car van km',who:'owner',go:()=>go('vehicle')},
   {t:'Helpers\' pay rates',w:'pay rate rates wages staff hourly day',who:'owner',go:()=>{ repTab='costs'; go('reports'); }},
   {t:'Start selling (the till)',w:'sell till sale start day market farm gate',who:'all',go:()=>go('sell')},
-  {t:'People: add a helper or manager',w:'people person add helper manager owner staff account invite role',who:'manage',go:()=>openSetupArea('setup')},
-  {t:'My PIN',w:'pin code password approve change my pin forgot',who:'manage',go:()=>openSetupArea('setup')},
+  {t:'People: add a helper or manager',w:'people person add helper manager owner staff account invite role',who:'manage',go:()=>openSetupArea('setup:people')},
+  {t:'My PIN',w:'pin code password approve change my pin forgot',who:'manage',go:()=>openSetupArea('setup:pins')},
   {t:'Approvals log',w:'approvals log audit who approved discount void',who:'manage',go:()=>openSetupArea('audit')},
-  {t:'View as a helper or manager (practice mode)',w:'view as practice test pretend helper see what',who:'owner',go:()=>openSetupArea('setup',()=>viewAsPicker())},
+  {t:'View as a helper or manager (practice mode)',w:'view as practice test pretend helper see what',who:'owner',go:()=>openSetupArea('setup:people',()=>viewAsPicker())},
   {t:'Notifications on this device',w:'notification notifications alerts reminders push',who:'all',go:()=>go('notify')},
-  {t:'GST receipts and GST number',w:'gst receipt receipts number email ird',who:'manage',go:()=>openSetupArea('setup')},
-  {t:'Voice assistant',w:'voice assistant talk speak gemini ai notes',who:'owner',go:()=>openSetupArea('setup')},
-  {t:'Shopify',w:'shopify online store shop',who:'owner',go:()=>openSetupArea('setup')},
+  {t:'GST receipts and GST number',w:'gst receipt receipts number email ird',who:'manage',go:()=>openSetupArea('setup:business')},
+  {t:'Voice assistant',w:'voice assistant talk speak gemini ai notes',who:'owner',go:()=>openSetupArea('setup:assistant')},
+  {t:'Shopify',w:'shopify online store shop',who:'owner',go:()=>openSetupArea('setup:shopify')},
   {t:'Customer contacts and loyalty programme',w:'contacts customers loyalty email list newsletter',who:'manage',go:()=>openSetupArea('contacts')},
 ];
 // Setup areas are behind the PIN (so a helper in till mode can't wander in)
-function openSetupArea(id,then){ requirePin(()=>{ if(id==='setup'){ go('setup'); } else { if(cur()!=='setup') stack.push('setup'); go(id); } if(then) then(); }); }
+function openSetupArea(id,then){ requirePin(()=>{ if(id.startsWith('setup')){ SETUP_TOOL=id.split(':')[1]||null; if(cur()==='setup') render(); else go('setup'); } else { if(cur()!=='setup') stack.push('setup'); go(id); } if(then) then(); }); }
 const allowed=who=>who==='all'||(who==='manage'&&canManage())||(who==='costs'&&seesCosts())||(who==='owner'&&role()==='owner');
 
 function searchAll(q){
@@ -59,7 +59,7 @@ function searchAll(q){
   S.todos.filter(t=>!t.done).forEach(t=>add('To-dos',t.text,t.due?nzDate(kd(t.due),{day:'numeric',month:'short'}):'',t.text,()=>{ listTab='todo'; go('lists'); setTimeout(()=>{ if(t.setup&&typeof finishSetup==='function') finishSetup(t.setup); else openTodo(t); },60); }));
   S.shopping.filter(x=>!x.done).forEach(x=>add('Shopping list',x.item,x.size||'',x.item,()=>{ listTab='shop'; go('lists'); }));
   if(role()==='owner'&&!locked&&typeof contactList==='function') contactList().forEach(c=>add('Customer contacts',c.name||c.email,c.email,(c.name||'')+' '+c.email,()=>openSetupArea('contacts')));
-  if(role()==='owner'&&!locked) SYNC.getMembers().forEach(e=>add('People',personName(e),e,personName(e)+' '+e,()=>openSetupArea('setup')));
+  if(role()==='owner'&&!locked) SYNC.getMembers().forEach(e=>add('People',personName(e),e,personName(e)+' '+e,()=>openSetupArea('setup:people')));
   const order=['Screens and settings','Products','Calendar','Orders','To-dos','Shopping list','Ideas','Markets and places','Ingredients and packaging','Recipes','Customer contacts','People'];
   return out.sort((a,b)=>order.indexOf(a.group)-order.indexOf(b.group)||b.sc-a.sc);
 }
