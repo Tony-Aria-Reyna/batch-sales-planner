@@ -51,7 +51,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await pin(page, '2580'); await page.waitForTimeout(100); await pin(page, '2580'); await page.waitForTimeout(200);
   await pin(page, '2580'); await page.waitForSelector('[data-tool]');
   ok(!!(await page.$('#bk')), 'Setup has a visible Back button');
-  ok((await page.$$('[data-tool]')).length >= 12, 'Setup is a list of setting tools');
+  ok((await page.$$('[data-tool]')).length >= 12 && (await page.$$('.tgroup')).length >= 6, 'Setup is a list of setting tools, in groups');
   await tool(page, 'business'); await page.waitForSelector('#bizName');
   ok(await page.evaluate(() => S.pins.length === 1 && S.pins[0].id === 'admin@example.com' && S.pins[0].hash.length === 64 && !JSON.stringify(S.pins).includes('2580')), 'personal PIN saved (as a hash, never the PIN itself)');
   ok(await page.evaluate(() => !S.audit.some(a => a.action === 'open Setup')), 'an owner opening Setup on their own is not logged');
@@ -302,7 +302,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   await bk(page); await page.waitForSelector('.tiles');
   ok(!(await page.$('#hTalk')), 'voice assistant is off until an owner switches it on');
   await page.click('[data-go="setup"]'); await pin(page, '2580'); await tool(page, 'assistant'); await page.waitForSelector('#aiOn'); await page.click('#aiOn'); await page.waitForTimeout(60);
-  await page.fill('#vUrl', 'https://example.com/x'); await page.dispatchEvent('#vUrl', 'change'); await page.waitForTimeout(60);
+  await page.click('#allTools'); await tool(page, 'tech'); await page.fill('#vUrl', 'https://example.com/x'); await page.dispatchEvent('#vUrl', 'change'); await page.waitForTimeout(60);
   ok(await page.evaluate(() => S.settings.voiceOn === true && !S.settings.voiceUrl), 'voice switched on; a wrong helper address is refused');
   await bk(page); await page.waitForSelector('#hTalk'); await page.screenshot({ path: path.join(shots, '28a-home-voice.png') });
   ok(await page.evaluate(() => { sendNote({ audio: 'A'.repeat(1300000), mime: 'audio/mp4', secs: 5 }, {}); const n = S.voicenotes.find(x => x.kind === 'note'); return S.voicenotes.filter(x => x.kind === 'chunk' && x.note === n.id).length === 3 && n.chunks === 3 && n.status === 'new'; }), 'a recording is saved in pieces under 1 MB each, waiting for the helper');
