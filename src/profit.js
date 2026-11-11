@@ -88,6 +88,7 @@ SCREENS.profit={
     const pr=Object.entries(R.byProduct).map(([pid,x])=>{ const p=S.products.find(y=>y.id===pid), u=p?unitCost(p):null, ex=Math.round(x.total/1.15); return {p,qty:x.qty,ex,prof:u==null?null:Math.round(ex-u*x.qty),m:u==null||!ex?null:1-u*x.qty/ex}; }).filter(x=>x.p).sort((a,b)=>(b.prof==null?-1e12:b.prof)-(a.prof==null?-1e12:a.prof));
     const months=[...Array(6)].map((_,i)=>{ const t=kd(nzDay()), a=new Date(t.getFullYear(),t.getMonth()-5+i,1), b=new Date(t.getFullYear(),t.getMonth()-4+i,0), r=crunch(dk(a),dk(b)>nzDay()?nzDay():dk(b),'all'); return [nzDate(a,{month:'short'}),r.net]; });
     return `<button class="homesearch" id="pfRep">📈 <span><b>Reports</b>: takings by day, place and product, GST, costs, CSV</span> ›</button><div class="ctabs">${Object.entries(PROF_PERIODS).map(([k,t])=>`<button class="chip big ${profPeriod===k?'on':''}" data-pp="${k}">${t}</button>`).join('')}</div>
+      ${typeof goalsCardHtml==='function'?goalsCardHtml():''}
       <div class="card profhead ${v[2]}"><span>${esc(PROF_PERIODS[profPeriod])}: real profit</span><b class="${R.net<0?'neg':''}">${c2(R.net)}</b>
         <small>${H.total?`${ph!=null?c2(ph)+' an hour':''} for your ${hmTxt(H.total)} · ${v[0]} ${v[1]}`:'Your hours aren\'t recorded yet: use the time clock and the check-ins.'}</small>
         <small>From ${c2(R.ex)} sales ex GST, less ${c2(R.cogs)} stock, ${c2(R.fees)} stall fees, ${c2(R.mileage)} fuel and car, ${c2(R.staff)} helpers, ${c2(R.otherCosts)} other costs.</small></div>

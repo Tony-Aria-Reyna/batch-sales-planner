@@ -13,6 +13,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const browser = await chromium.launch();
   const ipad = await browser.newContext({ viewport: { width: 1180, height: 820 }, userAgent: IPAD_UA, hasTouch: true, deviceScaleFactor: 1 });
   await ipad.addInitScript(() => { Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' }); Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5 }); });
+  for (const c of [ipad]) await c.addInitScript(() => { const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date()); if (!localStorage.getItem('rs.morning')) localStorage.setItem('rs.morning', JSON.stringify(d)); });
   const page = await ipad.newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 300)); });
   const signIn = (p, email) => p.evaluate(e => SYNC.testSignIn(e), email);
   const text = p => p.evaluate(() => document.body.innerText);
@@ -585,6 +586,25 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
   const stBefore = await page.evaluate(() => { const p = S.products.find(x => x.name === 'Test Oil'); return stockOf(p.id).total; });
   await page.evaluate(() => { monthlyCarry.done = ''; monthlyCarry(); });
   ok(await page.evaluate(st => { const p = S.products.find(x => x.name === 'Test Oil'); return S.stockmoves.some(m => m.kind === 'carry' && m.product === p.id && m.month === nzDay().slice(0, 7)) && stockOf(p.id).total === st; }, stBefore), 'once a month each product\'s stock is carried forward, so stock never needs sales older than 13 months');
+  // Today, first: markets, to-dos, jars, orders; tick a to-do off right there. The morning pop-up with Done / Later.
+  await page.evaluate(() => { S.todos.push({ id: 'tdToday', text: 'Ring the market organiser', who: SYNC.me(), due: nzDay(), time: '10:00', done: false, at: Date.now() }); S.todos.push({ id: 'tdLate', text: 'Order labels', who: SYNC.me(), due: dk(addDays(kd(nzDay()), -2)), done: false, at: Date.now() }); save(); stack = ['home']; render(); });
+  await page.waitForSelector('.todaycard');
+  ok(await page.evaluate(() => { const t = document.querySelector('.todaycard').innerText; const i = todayItems(); return /Ring the market organiser/.test(t) && /Was due/.test(t) && i.findIndex(x => x.k === 'td:tdLate') < i.findIndex(x => x.k === 'td:tdToday') && document.querySelector('.todaycard') === document.querySelector('.brand').nextElementSibling; }), 'Today card at the top of the home screen: overdue first, then today\'s, each with what and when');
+  await page.click('[data-ttick="td:tdLate"]'); await page.waitForTimeout(80);
+  ok(await page.evaluate(() => S.todos.find(x => x.id === 'tdLate').done === true), 'a tick on the Today card finishes the to-do');
+  await page.evaluate(() => { localStorage.removeItem('rs.morning'); morningSheet(); }); await page.waitForSelector('#mLater');
+  ok(/Good (morning|afternoon|evening)/.test(await text(page)) && /Ring the market organiser/.test(await text(page)), 'the morning pop-up lists what\'s on today');
+  await page.click('#mLater'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => +JSON.parse(localStorage.getItem('rs.morningLater')) > Date.now() + 3000e3) && !(await page.$('#mLater')), '"Later" brings it back in an hour');
+  await page.evaluate(() => { localStorage.setItem('rs.morningLater', '0'); morningSheet(true); }); await page.waitForSelector('#mOk'); await page.click('#mOk'); await page.waitForTimeout(60);
+  ok(await page.evaluate(() => JSON.parse(localStorage.getItem('rs.morning')) === nzDay()), '"Got it" puts it away for the day');
+  // goals: a monthly target shows progress on the home screen and the year in Real profit
+  await page.evaluate(() => { S.settings.goalMonth = 100000; S.settings.goalHours = 30; save(); render(); }); await page.waitForSelector('.goal');
+  await page.screenshot({ path: path.join(shots, '38-home-today-goal.png'), fullPage: true });
+  ok(await page.evaluate(() => { const g = monthProgress(); return g.goal === 100000 && g.taken > 0 && /of \$1,000\.00/.test(document.querySelector('.goal').innerText) && document.querySelector('.gbar i').style.width !== '' && !!document.querySelector('.wchart'); }), 'the goal bar shows the month against the target, and the 8-week chart is on the home screen');
+  await page.click('[data-go="profit"]'); await page.waitForSelector('.profhead');
+  ok(await page.evaluate(() => !!document.querySelector('.wchart.tall .goalline') && /Where you're heading/.test(document.body.innerText) && /ceiling/.test(document.body.innerText)), 'Real profit: 12 months against the goal line, and hours against the ceiling');
+  await page.evaluate(() => { S.settings.goalMonth = 0; S.settings.goalHours = 0; S.todos = S.todos.filter(x => !/^td(Today|Late)$/.test(x.id)); save(); stack = ['home']; render(); });
   // getting started, the app health log, the assistant's monthly limit
   ok(await page.evaluate(() => { const l = readySteps(); return l.length === 6 && l.find(x => x.k === 'products').ok && l.find(x => x.k === 'sale').ok; }), 'getting started: six steps, ticked off from what is already set up');
   await page.evaluate(() => { logError('Test fault for the log', 'test'); });
@@ -981,6 +1001,7 @@ const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605
 
   console.log('Android phone: helper, stranger, and a second business');
   const phone = await browser.newContext({ ...devices['Pixel 7'] });
+  await phone.addInitScript(() => { const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Auckland' }).format(new Date()); if (!localStorage.getItem('rs.morning')) localStorage.setItem('rs.morning', JSON.stringify(d)); });
   // share the fake database between the iPad and the phone (it lives in localStorage)
   const db = await page.evaluate(() => localStorage.getItem('mockdb'));
   await phone.addInitScript(d => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('mockdb', d); sessionStorage.setItem('seeded', '1'); } }, db);

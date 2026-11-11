@@ -10,7 +10,7 @@ const config = fs.existsSync(cfgFile) ? JSON.stringify(JSON.parse(fs.readFileSyn
 const version = 'rs-' + Date.now().toString(36);
 const html = fs.readFileSync('src/app.html', 'utf8')
   .replace('/*@SYNC@*/', () => sync)
-  .replace('/*@MODULES@*/', () => ['../helper/shared.js', 'catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'voice.js', 'brew.js', 'health.js', 'search.js', 'help.js', 'orders.js', 'reports.js', 'notify.js', 'contacts.js', 'checkin.js', 'clock.js', 'profit.js', 'buying.js', 'asks.js', 'consign.js', 'infuse.js', 'extras.js', 'ready.js', 'ai.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
+  .replace('/*@MODULES@*/', () => ['../helper/shared.js', 'catalogue.js', 'till.js', 'calendar.js', 'places.js', 'lists.js', 'voice.js', 'brew.js', 'health.js', 'search.js', 'help.js', 'orders.js', 'reports.js', 'notify.js', 'contacts.js', 'checkin.js', 'clock.js', 'profit.js', 'buying.js', 'asks.js', 'consign.js', 'infuse.js', 'extras.js', 'ready.js', 'ai.js', 'today.js'].map(f => fs.readFileSync(path.join('src', f), 'utf8')).join('\n'))
   .replace('/*@CONFIG@*/null', () => MOCK ? JSON.stringify({ projectId: 'mock', apiKey: 'mock', authDomain: 'mock' }) : config)
   .replace('/*@VERSION@*/', version);
 fs.writeFileSync(path.join(out, 'index.html'), html);
