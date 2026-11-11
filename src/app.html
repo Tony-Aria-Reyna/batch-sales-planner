@@ -659,7 +659,7 @@ for(const [id,c] of Object.entries(COMING)) SCREENS[id]={
 /* ================= Setup (behind the PIN) ================= */
 const ROLE_TXT={owner:'Owner',manager:'Manager',helper:'Helper'};
 // what the Google helper script last reported (it writes receiptHelper on the business every 5 minutes)
-const LATEST_HELPER=9;   // helper/Code.gs HELPER_VERSION
+const LATEST_HELPER=10;   // helper/Code.gs HELPER_VERSION
 function helperStatus(){
   const h=S.receiptHelper, st=S.settings;
   if(!st.gstNumber||!st.receiptEmail) return 'Add the GST number and the business Gmail above, then set up the helper (see the setup steps).';

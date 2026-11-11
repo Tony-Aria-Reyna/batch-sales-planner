@@ -6,7 +6,7 @@
    after tapping the button here to allow them. */
 const NOTE_KINDS=()=>[
   ['reminders','📅 Calendar reminders',canManage()?'Markets and other entries, at the times set on each one':'Markets you\'re rostered on'],
-  ['todos','✅ Morning list','At 7:30 am: today\'s markets and your to-dos'],
+  ['todos','✅ Morning list and to-do reminders','At 7:30 am: today\'s markets and your to-dos; a to-do booked for a time is called at that time, and a “did it get done?” at 6 pm'],
   ['tills','💵 Till still open','When a till is left open well after the market finished']]
   .concat(canManage()?[['asks','🙋 A helper asks to open a till','Straight away, so they\'re not left waiting'],['orders','📦 New orders','When a Shopify order or an order email comes in'],['lowstock','🧺 Low stock before a market','The evening before, anything that has run out']]:[])
   .concat(role()==='owner'?[['report','📧 Market report email','When the last till at a market closes, a one-page summary by email']]:[]);

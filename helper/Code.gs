@@ -626,6 +626,17 @@ function notifyTick(b) {
         if (lines.length) once('am-' + today + '-' + d._id, () => pushTo(b, [d._id], 'todos', 'Today', lines.join('\n') + (td.length > 5 ? '\n…and ' + (td.length - 5) + ' more' : ''), 'morning'));
       }
     }
+    // v10: a to-do booked for a time is called at that time ("⏰ Ring the organiser"); and at 6 pm, the ones booked for
+    // today that aren't ticked off get "Did this get done?" (both go to the person it's for)
+    if (nz.mins >= 420 && nz.mins < 1260) {
+      const todos = listDocs('businesses/' + b._id + '/todos').filter(t => !t.done && !t.cleared && t.due === today);
+      for (const t of todos) {
+        if (!t.who || devs.every(d => d._id !== t.who)) continue;
+        if (t.time) { const m = Number(t.time.slice(0, 2)) * 60 + Number(t.time.slice(3)), left = m - nz.mins;
+          if (left <= 10 && left > -60) once('tr-' + t._id + '-' + today, () => pushTo(b, [t.who], 'todos', '⏰ ' + str(t.text, 80), 'Booked for ' + t12(t.time) + ' today', 'todo-' + t._id)); }
+        if (nz.mins >= 1080) once('tq-' + t._id + '-' + today, () => pushTo(b, [t.who], 'todos', 'Did this get done? ' + str(t.text, 70), 'Tap to tick it off or move it', 'todo-' + t._id));
+      }
+    }
     // a till left open: 2 hours after the market's finish time, or 10 hours after it opened
     const sessions = listDocs('businesses/' + b._id + '/sessions');
     for (const s of sessions.filter(x => x.status === 'open')) {

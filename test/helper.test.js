@@ -32,6 +32,13 @@ db['businesses/b1/todos'] = [{ _id: 't1', text: 'Label jars', who: 'sam@example.
 ctx.notifyTick(b); ok(to('T2').some(x => /in 50 min \| Village Market at 8am/.test(x)), 'an hour before: "Market in 50 min"');
 clock = { day: tomorrow, mins: 7 * 60 + 40 }; b.notified = patches.filter(p => p[0] === 'businesses/b1').pop()[1].notified; sentPush.length = 0;
 ctx.notifyTick(b); ok(to('T2').some(x => /^Today \| 🧺 Village Market 8am\n✅ Label jars/.test(x)), 'morning list: their market and their to-do');
+// a to-do booked for 2 pm: called at 1:55; at 6 pm, "did this get done?"
+db['businesses/b1/todos'] = [{ _id: 't2', text: 'Ring the organiser', who: 'sam@example.com', due: tomorrow, time: '14:00', done: false }];
+clock = { day: tomorrow, mins: 13 * 60 + 55 }; b.notified = patches.filter(p => p[0] === 'businesses/b1').pop()[1].notified; sentPush.length = 0;
+ctx.notifyTick(b); ok(to('T2').some(x => /^⏰ Ring the organiser \| Booked for 2pm today/.test(x)), 'a to-do booked for a time is called at that time');
+clock = { day: tomorrow, mins: 18 * 60 + 5 }; b.notified = patches.filter(p => p[0] === 'businesses/b1').pop()[1].notified; sentPush.length = 0;
+ctx.notifyTick(b); ok(to('T2').some(x => /^Did this get done\? Ring the organiser/.test(x)), 'at 6 pm, one still not ticked off gets "did this get done?"');
+db['businesses/b1/todos'] = [];
 // till left open 2 hours after the market's finish; then the report email once it's closed
 clock = { day: tomorrow, mins: 15 * 60 + 30 }; b.notified = patches.filter(p => p[0] === 'businesses/b1').pop()[1].notified; sentPush.length = 0;
 db['businesses/b1/sessions'] = [{ _id: 's1', name: 'Village Market', date: tomorrow, status: 'open', eventId: 'e1', openedBy: 'sam@example.com', openedAt: Date.now() - 3600e3 }];
